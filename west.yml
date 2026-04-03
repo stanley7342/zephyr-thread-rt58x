@@ -5,6 +5,7 @@ manifest:
     - name: zephyr
       url: https://github.com/zephyrproject-rtos/zephyr
       revision: v4.1.0
+      west-commands: scripts/west_commands  # makes "west build/flash/debug" available
       # No 'import: true' — we don't use external HAL modules.
       # If a future feature needs a Zephyr module, add it here explicitly.
 
