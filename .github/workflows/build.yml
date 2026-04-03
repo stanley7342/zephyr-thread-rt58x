@@ -37,9 +37,9 @@ jobs:
         run: pip install west==1.5.0
 
       # ── Zephyr workspace ──────────────────────────────────────────────────
-      # Cache zephyr/ and any west modules (not zephyr-thread — that's our app).
-      # Key uses west.yml hash so a manifest change invalidates the cache.
-      - name: Cache Zephyr workspace
+      # Cache only the zephyr/ directory (biggest chunk, ~200 MB unpacked).
+      # .west/config is cheap to recreate via "west init -l".
+      - name: Cache Zephyr
         id: cache-zephyr
         uses: actions/cache@v4
         with:
@@ -47,25 +47,14 @@ jobs:
           key: zephyr-v4.1.0-${{ hashFiles('zephyr-thread/west.yml') }}
 
       - name: west init
-        if: steps.cache-zephyr.outputs.cache-hit != 'true'
         run: west init -l zephyr-thread
 
       - name: west update
         if: steps.cache-zephyr.outputs.cache-hit != 'true'
         run: west update --narrow --fetch-opt=--depth=1
 
-      # Always run even on cache hit — registers cmake package in this runner.
-      - name: west zephyr-export
-        run: |
-          # Ensure .west/config exists when restoring from cache
-          if [ ! -f .west/config ]; then
-            west init -l zephyr-thread
-          fi
-          west zephyr-export
-
       - name: Install Zephyr Python requirements
-        run: |
-          pip install -r zephyr/scripts/requirements-base.txt
+        run: pip install -r zephyr/scripts/requirements-base.txt
 
       # ── Zephyr SDK (ARM toolchain) ────────────────────────────────────────
       - name: Cache Zephyr SDK
@@ -83,16 +72,19 @@ jobs:
           wget -q "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/${FILE}"
           mkdir -p ~/zephyr-sdk
           tar xf "${FILE}" -C ~/zephyr-sdk --strip-components=1
-          # -t: install ARM toolchain only  -c: register cmake package
           ~/zephyr-sdk/setup.sh -t arm-zephyr-eabi -c
 
-      # Re-register on cache hit (cmake package path is runner-specific).
-      - name: Register Zephyr SDK cmake package
+      # Re-register cmake package on every run (path is runner-specific).
+      - name: Register Zephyr SDK
         run: ~/zephyr-sdk/setup.sh -c
 
       # ── Build ─────────────────────────────────────────────────────────────
+      # Set ZEPHYR_BASE explicitly — avoids depending on "west zephyr-export"
+      # which needs cmake package registry and is fragile in CI.
       - name: Build rt582_evb
         working-directory: zephyr-thread
+        env:
+          ZEPHYR_BASE: ${{ github.workspace }}/zephyr
         run: west build -p always -b rt582_evb -d build .
 
       # ── Upload binary ─────────────────────────────────────────────────────
