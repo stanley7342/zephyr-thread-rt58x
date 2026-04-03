@@ -5,9 +5,8 @@ OT CLI commands are entered directly over UART0 (no shell prefix needed).
 
 | Item | Value |
 |------|-------|
-| SoC | Rafael Microelectronics RT582 (ARM Cortex-M3, 48 MHz) |
+| SoC | Rafael Microelectronics RT582 (ARM Cortex-M3, **64 MHz** BBPLL) |
 | Zephyr version | 4.1.0 |
-| Toolchain | Arm GNU Toolchain 14.2.1 (bundled with Rafael IoT SDK) |
 | OpenThread | FTD (Full Thread Device) |
 | Console | UART0 — TX: GPIO16, RX: GPIO17, **115200 8N1** |
 | Flash usage | ~576 KB / 1 MB |
@@ -30,76 +29,77 @@ Terminal settings: **115200 baud, 8N1, no flow control**.
 
 ## Prerequisites
 
-### 1. Rafael IoT SDK
+### 1. Git LFS
 
-Must be present at:
+The prebuilt Rafael SDK libraries in `sdk/lib/*.a` are stored in Git LFS.  
+Install Git LFS before cloning:
+
+```bash
+# macOS
+brew install git-lfs
+
+# Ubuntu / Debian
+sudo apt-get install git-lfs
+
+# Windows — download from https://git-lfs.com
+git lfs install
 ```
-C:\Users\Stanley\Rafael-IoT-SDK-Internal\
-```
-Override with `RAFAEL_SDK_BASE` environment variable.
+
+Then clone normally — LFS files are downloaded automatically.
 
 ### 2. Zephyr RTOS 4.1.0
 
-Must be present at `C:\Users\Stanley\zephyrproject\`.
-
 ```bash
-pip install west
-west init C:/Users/Stanley/zephyrproject --mr v4.1.0
-cd C:/Users/Stanley/zephyrproject
-west update
-pip install -r zephyr/scripts/requirements.txt
+pip install west==1.5.0
+west init -l zephyr-thread          # uses west.yml in this repo
+west update --narrow
+pip install -r zephyr/scripts/requirements-base.txt
+west zephyr-export
 ```
+
+> `west init -l zephyr-thread` should be run from the **parent** of this repo,
+> so the workspace layout becomes:
+> ```
+> workspace/
+> ├── zephyr-thread/   ← this repo
+> ├── zephyr/          ← fetched by west
+> └── .west/
+> ```
 
 ### 3. ARM Toolchain
 
-Uses the toolchain bundled with the Rafael IoT SDK:
-```
-C:\Users\Stanley\Rafael-IoT-SDK-Internal\toolchain\arm\Windows\
-```
+Install the **Zephyr SDK** (recommended) or any `arm-none-eabi-gcc` ≥ 12.
 
----
-
-## Environment Setup
-
-Run once per shell session before building:
+**Zephyr SDK (minimal ARM only):**
 
 ```bash
-export ZEPHYR_BASE=C:/Users/Stanley/zephyrproject/zephyr
-export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
-export GNUARMEMB_TOOLCHAIN_PATH=C:/Users/Stanley/Rafael-IoT-SDK-Internal/toolchain/arm/Windows
-
-# Optional — defaults to ../Rafael-IoT-SDK-Internal
-export RAFAEL_SDK_BASE=C:/Users/Stanley/Rafael-IoT-SDK-Internal
+SDK_VER=0.16.8
+wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/zephyr-sdk-${SDK_VER}_linux-x86_64_minimal.tar.xz
+tar xf zephyr-sdk-${SDK_VER}_linux-x86_64_minimal.tar.xz
+zephyr-sdk-${SDK_VER}/setup.sh -t arm-zephyr-eabi -c
 ```
 
-> Save these in `env.sh` at the repo root and `source env.sh` at the start of each session.
+**Rafael IoT SDK toolchain (Windows):**
+
+```bash
+export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
+export GNUARMEMB_TOOLCHAIN_PATH=C:/Users/Stanley/Rafael-IoT-SDK-Internal/toolchain/arm/Windows
+```
 
 ---
 
 ## Build
 
-### First build
-
 ```bash
-cd C:/Users/Stanley/zephyr-thread
-
-cmake -B build -DBOARD=rt582_evb -GNinja .
-cd build && ninja
+# From the workspace root (parent of zephyr-thread/)
+west build -p always -b rt582_evb -d zephyr-thread/build zephyr-thread/
 ```
 
-### Incremental build
+Or from inside the repo:
 
 ```bash
-cd C:/Users/Stanley/zephyr-thread/build && ninja
-```
-
-### Clean build
-
-```bash
-cd C:/Users/Stanley/zephyr-thread
-rm -rf build
-cmake -B build -DBOARD=rt582_evb -GNinja .
-cd build && ninja
+cd zephyr-thread
+west build -p always -b rt582_evb -d build .
 ```
 
 ### Output
@@ -112,6 +112,11 @@ cd build && ninja
 ---
 
 ## Flashing
+
+> **Important:** Flash the binary at address **`0x00000000`** (the start of flash).
+> The binary contains its own vector table at 0x0 and boots directly — no external
+> bootloader is required.  Flashing at 0x8000 will produce no output unless a
+> compatible bootloader is present at 0x0.
 
 ### OpenOCD (CMSIS-DAP / DAPLink)
 
@@ -130,13 +135,13 @@ OPENOCD=C:/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
 
 ```bash
 OPENOCD=C:/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
-ELF=C:/Users/Stanley/zephyr-thread/build/zephyr/zephyr.elf
+BIN=zephyr-thread/build/zephyr/zephyr.bin
 
 "$OPENOCD/bin/win/openocd.exe" \
   -s "$OPENOCD/script" \
   -f interface/cmsis-dap.cfg \
   -f target/rt58x.cfg \
-  -c "program \"$ELF\" verify reset exit"
+  -c "init; halt; flash write_image erase $BIN 0x0; reset run; exit"
 ```
 
 ---
@@ -154,10 +159,9 @@ After reset, the boot log appears:
 [RF] lmac15p4_init done
 [RF] PIB set done
 OpenThread FTD task started.
-Type OT commands directly, e.g.: state
 ```
 
-Then the watchdog prints RF/COMM subsystem diagnostics every second:
+Watchdog prints RF/COMM subsystem diagnostics every second:
 
 ```
 [WDG] t=1s IRQ=3 TX=0x00000100 ... MCU=0x01
@@ -178,9 +182,6 @@ Done
 Done
 > state
 leader
-> ipaddr
-fd11:22::/64
-Done
 ```
 
 ---
@@ -192,106 +193,56 @@ zephyr-thread/
 ├── CMakeLists.txt                   # Top-level build
 ├── Kconfig                          # Root Kconfig
 ├── prj.conf                         # Project Kconfig fragments
+├── west.yml                         # West manifest (Zephyr v4.1.0)
+│
+├── sdk/                             # Vendored Rafael IoT SDK
+│   ├── lib/                         # Prebuilt .a libraries (Git LFS)
+│   └── components/                  # Headers + selected source files
 │
 ├── src/
 │   └── main.c                       # RF init, OT task start, watchdog
 │
 ├── drivers/serial/
-│   ├── uart_rt582.c                 # Zephyr UART driver (HOSAL wrapper)
-│   ├── Kconfig                      # CONFIG_UART_RT582
-│   └── CMakeLists.txt
+│   └── uart_rt582.c                 # Zephyr UART driver (HOSAL wrapper)
 │
-├── boards/arm/rt582_evb/
-│   ├── rt582_evb.dts                # Board DTS (chosen console = uart0)
-│   └── rt582_evb_defconfig          # Board default Kconfig
-│
-├── dts/
-│   ├── arm/rafael/rt582.dtsi        # SoC DTS (flash, SRAM, uart0/1)
-│   └── bindings/serial/
-│       └── rafael,rt582-uart.yaml   # UART driver DTS binding
+├── boards/arm/rt582_evb/            # Board definition
+├── dts/arm/rafael/rt582.dtsi        # SoC DTS (flash@0x0, SRAM, UART0/1)
 │
 ├── soc/arm/rafael_micro/rt582/
-│   ├── soc.c                        # SystemInit + CommSubsystem IRQ_CONNECT
-│   └── soc.h                        # Includes Rafael mcu.h (CMSIS)
+│   ├── soc.c                        # SystemInit (BBPLL 64 MHz) + CommSubsystem IRQ
+│   └── soc.h
 │
 └── subsys/openthread/
     ├── CMakeLists.txt               # Links Rafael SDK static libs
     └── platform/
-        ├── openthread_port.h        # FreeRTOS → Zephyr primitive mapping
         ├── ot_zephyr.c              # OT thread, semaphore, mutex
-        ├── ot_uart.c                # UART RX → otCliInputLine (direct CLI)
+        ├── ot_uart.c                # UART RX → otCliInputLine
         ├── ot_radio.c               # 802.15.4 radio platform (lmac15p4)
-        ├── ot_alarm.c               # Millisecond / microsecond alarms
-        ├── ot_entropy.c             # RNG entropy source
-        ├── hosal_rf_zephyr.c        # RF MCU event thread (FreeRTOS → Zephyr)
-        └── freertos_shim.c          # FreeRTOS API stubs (unused SDK paths)
+        ├── ot_alarm.c               # ms / µs alarms
+        ├── ot_entropy.c             # RNG entropy
+        ├── hosal_rf_zephyr.c        # RF MCU event thread
+        └── freertos_shim.c          # FreeRTOS API stubs
 ```
 
 ---
 
-## Architecture
+## CI
 
-```
-main()
-  ├── hosal_rf_init()          RF MCU firmware load + event thread start
-  ├── lmac15p4_init()          802.15.4 MAC init
-  └── otrStart()               Spawns OT thread (priority 5)
+GitHub Actions builds `rt582_evb` on every push and pull request.  
+See [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
-OT thread (otrStackTask)
-  ├── ot_entropy_init()
-  ├── ot_alarmInit()
-  ├── ot_radioInit()           lmac15p4 callbacks, channel, ACK settings
-  ├── otInstanceInitSingle()
-  └── otrInitUser()
-        └── otAppCliInit()
-              ├── otPlatUartEnable()   Installs UART RX interrupt callback
-              └── otCliInit()          Registers CLI output → uart_poll_out
-
-UART RX ISR
-  └── ot_uart_irq_cb()         Accumulates chars → on CR/LF signals OT thread
-
-OT thread event loop
-  └── ot_uartTask()
-        └── otCliInputLine()   Parses command, produces output via cli_output_cb
-
-RF event thread (hosal-rf, priority 2)
-  └── Handles CommSubsystem IRQ callbacks (RX done, TX done, ACK, etc.)
-```
-
----
-
-## Key Design Notes
-
-### UART driver (`uart_rt582.c`)
-- Wraps the Rafael HOSAL UART (`hosal_uart.c`) as a Zephyr driver
-- `IRQ_CONNECT` registers the UART ISR in Zephyr's dispatch table (required — raw `NVIC_EnableIRQ` alone causes `z_irq_spurious` panic)
-- `hosal_uart_init()` returns `uart->RBR & 0xFF` (RX flush), **not** an error code — the init function always returns `0` to prevent Zephyr from marking the device not-ready
-- `hosal_uart_ioctl(HOSAL_UART_MODE_SET, ...)` treats `p_arg` as the **value** cast to `void*`, not a pointer — pass `(void*)(uintptr_t)HOSAL_UART_MODE_INT_RX`, not `&mode`
-- **No `printk` anywhere in the driver** — calling `printk` from an ISR while the main thread holds the printk spinlock causes a single-core deadlock
-
-### Watchdog timer (`main.c`)
-- Timer expiry runs in SysTick ISR context — **never call `printk` directly**
-- Uses `k_work_submit()` to defer printing to the system workqueue (thread context)
-
-### OT thread (`ot_zephyr.c`)
-- FreeRTOS `ulTaskNotifyTake` → `k_sem_take(&ot_task_sem, K_MSEC(10))`
-- FreeRTOS `vTaskNotifyGiveFromISR` → `k_sem_give(&ot_task_sem)` (ISR-safe in Zephyr)
-- `OT_THREAD_SAFE(...)` macro wraps calls with `k_mutex_lock(&ot_ext_lock)`
-
-### RF platform (`hosal_rf_zephyr.c`)
-- `rf_common_init_by_fw()` requires `CommSubsystem_IRQn` (IRQ 20) to be connected **before** it is called — done in `soc.c` at `PRE_KERNEL_1` priority 0
-- `CONFIG_RF_FW_INCLUDE_PCI=TRUE` must be defined to include the RUCI firmware blob
+The built `zephyr.bin` and `zephyr.elf` are uploaded as workflow artifacts.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| No UART output at all | `uart_rt582_init` returns non-zero → device not ready → printk hook not installed | Verify init function returns `0`, not `hosal_uart_init()` return value |
-| No UART output after a few seconds | `printk` called from ISR (timer callback, UART ISR) deadlocks with main thread | Never call `printk` from ISR context; use `k_work_submit` |
-| UART RX interrupt never fires | HOSAL ioctl bug: passing `&mode` instead of `(void*)(uintptr_t)mode` | Check `uart_rt582_irq_rx_enable` — must use cast, not address |
-| OT task hangs at `ot_radioInit` | `flash_read_sec_register` or `lmac15p4_*` blocking | See `[OT-RADIO]` debug prints in `ot_radio.c` to identify exact hang point |
-| `rf_common_init_by_fw` returns false | Missing RUCI firmware blob | Add `CONFIG_RF_FW_INCLUDE_PCI=TRUE` to compile definitions |
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| No UART output at all | Binary flashed at wrong address | Flash at **0x0**, not 0x8000 |
+| No UART output after a few seconds | `printk` called from ISR deadlocks | Never call `printk` from ISR; use `k_work_submit` |
+| UART RX interrupt never fires | `hosal_uart_ioctl` called with `&mode` instead of `(void*)(uintptr_t)mode` | Check `uart_rt582_irq_rx_enable` — must cast value, not pass address |
+| OT task hangs at `ot_radioInit` | RF MCU init blocking | Check `[OT-RADIO]` debug prints in `ot_radio.c` for exact hang point |
+| `rf_common_init_by_fw` returns false | Missing RUCI firmware define | Add `-DCONFIG_RF_FW_INCLUDE_PCI=TRUE` to compile definitions |
 | OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP not detected | Install WinUSB driver via Zadig |
-| Linker: `z_irq_spurious` at runtime | UART IRQ enabled but no `IRQ_CONNECT` | Ensure `IRQ_CONNECT` is called in the per-instance init function |
+| `sdk/lib/*.a` are 134-byte pointer files | Git LFS not installed | Run `git lfs install` then `git lfs pull` |
