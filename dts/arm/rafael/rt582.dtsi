@@ -1,0 +1,94 @@
+/*
+ * RT582 SoC device tree include (ARM Cortex-M3)
+ *
+ * Memory map sourced from:
+ *   components/platform/soc/rt582/rt582_driver/Inc/mcu.h
+ *   components/platform/soc/rt582/rt582_evb/evb/ld/rt582.ld
+ *
+ * PERIPH_BASE  = 0x40000000
+ * PERIPH_BASE2 = 0xA0000000  (UART, COMM_SUBSYSTEM)
+ *
+ * IRQ numbers (from mcu.h IRQn_Type enum):
+ *   Uart0_IRQn = 4
+ *   Uart1_IRQn = 7
+ *   Uart2_IRQn = 19
+ */
+
+#include <arm/armv7-m.dtsi>
+
+/ {
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        cpu0: cpu@0 {
+            compatible = "arm,cortex-m3";
+            reg = <0>;
+        };
+    };
+
+    /*
+     * RT582 flash layout (from rt582.ld LMA regions):
+     *   0x00000000  BOOT  32 KB   (bootloader)
+     *   0x00008000  CORE  928 KB  (main application)
+     *   0x000F0000  USER  32 KB
+     *   0x000F0800  MP    32 KB
+     *
+     * For a standalone Zephyr image we occupy the full 1 MB.
+     */
+    flash0: flash@0 {
+        compatible = "soc-nv-flash";
+        /* 1 MB = 0x100000 */
+        reg = <0x00008000 0x100000>;
+    };
+
+    sram0: memory@20000000 {
+        compatible = "mmio-sram";
+        /* 144 KB = 0x24000 (from VMA_DATA + VMA_STACK in rt582.ld) */
+        reg = <0x20000000 0x24000>;
+    };
+
+    soc {
+        /*
+         * UART0 – stdio console
+         *   Base : PERIPH_BASE2        = 0xA0000000
+         *   IRQ  : Uart0_IRQn         = 4
+         *   Pins : TX=GPIO16, RX=GPIO17 (from default-rt582-evb.config)
+         *   Baud : 115200
+         */
+        uart0: uart@a0000000 {
+            compatible = "rafael,rt582-uart";
+            reg = <0xa0000000 0x1000>;
+            interrupts = <4 1>;
+            uart-id = <0>;
+            current-speed = <115200>;
+            tx-pin = <16>;
+            rx-pin = <17>;
+            status = "okay";
+        };
+
+        /*
+         * UART1
+         *   Base : PERIPH_BASE2 + 0x500000 = 0xA0500000
+         *   IRQ  : Uart1_IRQn = 7
+         */
+        uart1: uart@a0500000 {
+            compatible = "rafael,rt582-uart";
+            reg = <0xa0500000 0x1000>;
+            interrupts = <7 1>;
+            uart-id = <1>;
+            current-speed = <115200>;
+            status = "disabled";
+        };
+    };
+};
+
+/* RT582 Cortex-M3 NVIC: 3 priority bits (__NVIC_PRIO_BITS = 3 in mcu.h) */
+&nvic {
+    arm,num-irq-priority-bits = <3>;
+};
+
+/* Point the Zephyr console at UART0. */
+&uart0 {
+    status = "okay";
+};

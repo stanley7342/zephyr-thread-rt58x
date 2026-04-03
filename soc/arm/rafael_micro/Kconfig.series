@@ -1,0 +1,5 @@
+config SOC_SERIES_RT582
+    bool "Rafael Microelectronics RT582 series"
+    select CPU_CORTEX_M3
+    help
+      RT582/RT581/RT583 SoCs based on ARM Cortex-M3.

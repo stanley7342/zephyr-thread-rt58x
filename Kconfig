@@ -1,0 +1,10 @@
+# Top-level Kconfig for rt582-zephyr-helloworld.
+# Zephyr's Kconfig tree is sourced first, then we add our custom driver.
+
+osource "$(ZEPHYR_BASE)/Kconfig"
+
+# Include the RT582 UART driver Kconfig so CONFIG_UART_RT582 is visible.
+rsource "drivers/serial/Kconfig"
+
+# OpenThread subsystem
+rsource "subsys/openthread/Kconfig"

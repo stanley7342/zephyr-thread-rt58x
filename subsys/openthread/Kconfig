@@ -1,0 +1,8 @@
+config OPENTHREAD_RT582
+    bool "OpenThread for Rafael RT582"
+    depends on SOC_RT582
+    help
+      Enables the OpenThread stack on the RT582 SoC.
+      Links the pre-built Rafael SDK OpenThread FTD library and the
+      RT582-specific Zephyr platform layer (replaces FreeRTOS with
+      Zephyr kernel primitives).

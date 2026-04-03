@@ -1,0 +1,30 @@
+description: Rafael RT582 UART controller
+
+compatible: "rafael,rt582-uart"
+
+include: [uart-controller.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  current-speed:
+    required: true
+
+  uart-id:
+    type: int
+    required: true
+    description: |
+      Hardware UART index (0 = UART0, 1 = UART1, 2 = UART2).
+      Matches hosal_uart_id_t in the Rafael SDK.
+
+  tx-pin:
+    type: int
+    description: GPIO pin number used for UART TX
+
+  rx-pin:
+    type: int
+    description: GPIO pin number used for UART RX
