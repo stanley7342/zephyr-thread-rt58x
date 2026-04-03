@@ -34,7 +34,14 @@ extern void otPlatUartSendDone(void);
 
 static const struct device *ot_uart_dev;
 
-/* ── Receive buffer (fed by Zephyr shell 'ot' command handler) ───────────── */
+/* ── RX byte counter — exported for watchdog diagnostics ────────────────── */
+volatile uint32_t ot_uart_rx_byte_count;
+
+/* ── Poll-mode RX line buffer ────────────────────────────────────────────── */
+static uint8_t rx_poll_buf[OT_UART_RX_BUFFSIZE];
+static uint32_t rx_poll_len;
+
+/* ── Receive buffer (fed by ot_uartRecieved inject path) ────────────────── */
 typedef struct {
     uint8_t buf[OT_UART_RX_BUFFSIZE];
 } otUart_t;
@@ -78,12 +85,30 @@ otError otPlatUartFlush(void)
     return OT_ERROR_NONE;
 }
 
-/* ── ot_uartTask — process buffered RX line ──────────────────────────────── */
+/* ── ot_uartTask — poll UART RX and process complete lines ──────────────── *
+ * Called every OT task loop iteration (≤10 ms interval).                   *
+ * Uses uart_poll_in — no CONFIG_UART_INTERRUPT_DRIVEN needed.               *
+ * ot_uart_rx_byte_count is exported so the watchdog can show RX activity.  */
 void ot_uartTask(ot_system_event_t sevent)
 {
-    if (!(OT_SYSETM_EVENT_UART_ALL_MASK & sevent)) {
-        return;
+    /* ── Poll-mode RX: drain UART FIFO ─────────────────────────────────── */
+    if (ot_uart_dev && device_is_ready(ot_uart_dev)) {
+        uint8_t c;
+        while (uart_poll_in(ot_uart_dev, &c) == 0) {
+            ot_uart_rx_byte_count++;
+            if (c == '\n' || c == '\r') {
+                if (rx_poll_len > 0) {
+                    rx_poll_buf[rx_poll_len] = '\0';
+                    otCliInputLine((char *)rx_poll_buf);
+                    rx_poll_len = 0;
+                }
+            } else if (rx_poll_len < sizeof(rx_poll_buf) - 1) {
+                rx_poll_buf[rx_poll_len++] = c;
+            }
+        }
     }
+
+    /* ── Inject path (ot_uartRecieved) ─────────────────────────────────── */
     if (OT_SYSTEM_EVENT_UART_RXD & sevent) {
         otCliInputLine((char *)otUart_var.buf);
     }

@@ -18,6 +18,7 @@
 #include "lmac15p4.h"
 
 extern volatile uint32_t rt582_comm_irq_count;
+extern volatile uint32_t ot_uart_rx_byte_count;
 
 /* ── Watchdog: ISR sets tick, workqueue thread prints ────────────────────── */
 static struct k_work wdog_work;
@@ -37,8 +38,8 @@ static void wdog_work_handler(struct k_work *w)
     uint32_t bp;
     __asm__ volatile ("mrs %0, basepri" : "=r"(bp));
 
-    printk("[WDG] t=%us IRQ=%u TX=0x%08x RX=0x%08x IE=0x%08x INFO=0x%08x MCU=0x%02x\n",
-           wdog_tick, rt582_comm_irq_count,
+    printk("[WDG] t=%us IRQ=%u UART_RX=%u TX=0x%08x RX=0x%08x IE=0x%08x INFO=0x%08x MCU=0x%02x\n",
+           wdog_tick, rt582_comm_irq_count, ot_uart_rx_byte_count,
            *tx_info, *rx_info, *intr_en, *comm_info, mcu);
     printk("[WDG] INTR_STAT=0x%08x ISPR=0x%08x IABR=0x%08x IPR20=0x%02x BASEPRI=0x%02x\n",
            *intr_stat, *nvic_ispr, *nvic_iabr, (uint32_t)*nvic_ipr20, bp);

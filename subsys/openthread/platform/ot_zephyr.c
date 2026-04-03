@@ -25,6 +25,9 @@
 
 #include "openthread_port.h"
 
+/* Forward declaration — defined in ot_uart.c */
+extern otError otPlatUartEnable(void);
+
 /* ── Globals shared with openthread_port.h macros ───────────────────────── */
 ot_system_event_t ot_system_event_var = OT_SYSTEM_EVENT_NONE;
 
@@ -102,6 +105,8 @@ static void otrStackTask(void *p1, void *p2, void *p3)
 
     printk("[OT] task started\n");
     OT_THREAD_SAFE(
+        otPlatUartEnable();
+        printk("[OT] uart enable done\n");
         ot_entropy_init();
         printk("[OT] entropy init done\n");
         ot_alarmInit();
