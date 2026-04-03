@@ -19,38 +19,29 @@
 
 extern volatile uint32_t rt582_comm_irq_count;
 extern volatile uint32_t ot_uart_rx_byte_count;
+extern volatile uint32_t ot_uart_isr_count;
+extern volatile uint32_t ot_uart_line_count;
 
-/* ── Watchdog: ISR sets tick, workqueue thread prints ────────────────────── */
-static struct k_work wdog_work;
-static uint32_t      wdog_tick;
+/* ── Watchdog: dedicated thread (independent of system workqueue) ────────── *
+ * k_msleep-based — does not rely on k_timer/k_work/system workqueue.        *
+ * If this prints but k_work version does not → workqueue stack overflow.    *
+ * If this does not print → scheduler not running (IRQs blocked).            */
+#define WDOG_STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(wdog_stack, WDOG_STACK_SIZE);
+static struct k_thread wdog_thread_data;
+static uint32_t        wdog_tick;
 
-static void wdog_work_handler(struct k_work *w)
+static void wdog_thread_fn(void *p1, void *p2, void *p3)
 {
-    volatile uint32_t *tx_info   = (volatile uint32_t *)(0xA0400000UL + 0x20UL);
-    volatile uint32_t *rx_info   = (volatile uint32_t *)(0xA0400000UL + 0x1CUL);
-    volatile uint32_t *comm_info = (volatile uint32_t *)(0xA0400000UL + 0x24UL);
-    volatile uint32_t *intr_en   = (volatile uint32_t *)(0xA0400000UL + 0x10UL);
-    volatile uint32_t *intr_stat = (volatile uint32_t *)(0xA0400000UL + 0x18UL);
-    volatile uint32_t *nvic_ispr = (volatile uint32_t *)(0xE000E200UL);
-    volatile uint32_t *nvic_iabr = (volatile uint32_t *)(0xE000E300UL);
-    volatile uint8_t  *nvic_ipr20= (volatile uint8_t  *)(0xE000E414UL);
-    uint32_t mcu = (*tx_info & 0xFF00U) >> 8;
-    uint32_t bp;
-    __asm__ volatile ("mrs %0, basepri" : "=r"(bp));
-
-    printk("[WDG] t=%us IRQ=%u UART_RX=%u TX=0x%08x RX=0x%08x IE=0x%08x INFO=0x%08x MCU=0x%02x\n",
-           wdog_tick, rt582_comm_irq_count, ot_uart_rx_byte_count,
-           *tx_info, *rx_info, *intr_en, *comm_info, mcu);
-    printk("[WDG] INTR_STAT=0x%08x ISPR=0x%08x IABR=0x%08x IPR20=0x%02x BASEPRI=0x%02x\n",
-           *intr_stat, *nvic_ispr, *nvic_iabr, (uint32_t)*nvic_ipr20, bp);
+    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+    while (1) {
+        k_msleep(200);
+        wdog_tick++;
+        printk("[WDG] t=%u*200ms COMM_IRQ=%u UART_ISR=%u BYTES=%u LINES=%u\n",
+               wdog_tick, rt582_comm_irq_count,
+               ot_uart_isr_count, ot_uart_rx_byte_count, ot_uart_line_count);
+    }
 }
-
-static void wdog_expiry(struct k_timer *t)
-{
-    wdog_tick++;
-    k_work_submit(&wdog_work);  /* defer printk to workqueue thread */
-}
-K_TIMER_DEFINE(wdog_timer, wdog_expiry, NULL);
 
 /* PIB values */
 #define PHY_PIB_TURNAROUND_TIMER          192
@@ -76,16 +67,12 @@ int main(void)
     printk("  RT582-EVB  Zephyr + OpenThread CLI  \n");
     printk("======================================\n");
 
-    k_work_init(&wdog_work, wdog_work_handler);
-    k_timer_start(&wdog_timer, K_SECONDS(1), K_SECONDS(1));
+    k_thread_create(&wdog_thread_data, wdog_stack, K_THREAD_STACK_SIZEOF(wdog_stack),
+                    wdog_thread_fn, NULL, NULL, NULL,
+                    2, 0, K_NO_WAIT);
+    k_thread_name_set(&wdog_thread_data, "wdog");
 
-    {
-        volatile uint32_t *comm_info = (volatile uint32_t *)(0xA0400000UL + 0x24UL);
-        volatile uint32_t *comm_host = (volatile uint32_t *)(0xA0400000UL + 0x0CUL);
-        volatile uint32_t *comm_base = (volatile uint32_t *)(0xA0400000UL + 0x00UL);
-        printk("[RF] COMM_BASE=0x%08x COMM_HOST=0x%08x COMM_INFO=0x%08x\n",
-               *comm_base, *comm_host, *comm_info);
-    }
+    printk("[MAIN] wdog started\n");
 
     printk("[RF] hosal_rf_init...\n");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);

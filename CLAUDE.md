@@ -60,11 +60,17 @@ zephyr-thread/
 ├── soc/arm/rafael_micro/rt582/
 │   ├── soc.c               # PRE_KERNEL_1 prio 0: calls SystemInit(), wires COMM_SUBSYSTEM IRQ
 │   └── CMakeLists.txt      # Links librt582_system.a + librt582_driver.a (always)
-├── drivers/serial/
-│   └── uart_rt582.c        # Zephyr UART driver using hosal_uart_*
-├── sdk/                    # Vendored Rafael IoT SDK
-│   ├── lib/                # Pre-built .a libraries
-│   └── components/         # Headers and selected source files
+├── drivers/
+│   ├── serial/
+│   │   └── uart_rt582.c        # Zephyr UART driver using hosal_uart_*
+│   ├── hosal/rt582_hosal/      # HOSAL platform layer (moved from sdk/components/platform/hosal/)
+│   │   ├── Inc/                # hosal_uart.h, hosal_trng.h, etc.
+│   │   └── Src/                # hosal_uart.c, hosal_trng.c
+│   └── soc/rt582/rt582_driver/ # SOC register/clock driver (moved from sdk/components/platform/soc/)
+│       ├── Inc/                # mcu.h, sysctrl.h, uart_drv.h, etc.
+│       └── Src/                # sysctrl.c
+├── sdk/                    # Vendored Rafael IoT SDK (source only — no pre-built libs)
+│   └── components/         # Network stack sources (OT, RF, RUCI, utility, log)
 └── subsys/openthread/
     ├── CMakeLists.txt      # OT platform sources, SDK library links, compile flags
     └── platform/           # ot_zephyr.c, ot_radio.c, ot_uart.c, hosal_rf_zephyr.c, …

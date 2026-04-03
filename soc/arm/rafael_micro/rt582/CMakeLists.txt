@@ -5,11 +5,8 @@ set(SOC_LINKER_SCRIPT
 
 zephyr_sources(soc.c)
 
-# Rafael IoT SDK vendored into sdk/ inside the application root.
-set(RAFAEL_SDK ${CMAKE_SOURCE_DIR}/sdk)
-
-# soc.h includes mcu.h; expose the Rafael SDK include paths globally.
+# Platform drivers are compiled from source under drivers/ (no pre-built .a needed).
 zephyr_include_directories(
-    ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_driver/Inc
-    ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_system/Include
+    ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_driver/Inc
+    ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_system/Include
 )
