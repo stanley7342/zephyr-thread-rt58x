@@ -86,7 +86,11 @@ jobs:
         working-directory: zephyr-thread
         env:
           ZEPHYR_BASE: ${{ github.workspace }}/zephyr
-        run: west build -p always -b rt582_evb -d build .
+        run: |
+          # Pass Zephyr_DIR so cmake finds ZephyrConfig.cmake without needing
+          # "west zephyr-export" (which registers the path in cmake's user registry).
+          west build -p always -b rt582_evb -d build . \
+            -- -DZephyr_DIR="$ZEPHYR_BASE/share/zephyr-package/cmake"
 
       # ── Upload binary ─────────────────────────────────────────────────────
       - name: Upload build artifacts
