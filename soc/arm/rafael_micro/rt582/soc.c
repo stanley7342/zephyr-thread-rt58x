@@ -1,60 +1,49 @@
 /*
  * RT582 SoC initialisation for Zephyr.
  *
- * Calls the Rafael SDK SystemInit() which configures:
- *   - PMU (XTAL, LDO/DCDC settings)
- *   - Flash QSPI mode
- *   - MP sector (trim/calibration data)
- *   - AHB system clock (48 MHz default)
- *   - RCO 40 kHz analog calibration
- *
- * Also wires CommSubsystem_IRQn (IRQ #20) → RfMcu_IsrHandler() so that
- * rf_common_init_by_fw() can complete after the RF co-processor sets SYS_RDY.
- *
  * Must run at PRE_KERNEL_1 priority 0 so the COMM_SUBSYSTEM_AHB is ready
  * before any driver (UART, RF) accesses it.
+ *
+ * RULE: Never call printk here. UART driver runs at PRE_KERNEL_1 priority 50
+ * (after this function). hosal_uart_send polls LSR.THRE which spins forever
+ * if the UART clock has not been enabled yet.
  */
 
 #include <zephyr/init.h>
 #include <zephyr/irq.h>
-#include <zephyr/sys/printk.h>
 
-/* Declared in librt582_system.a (system_mcu.c) */
 extern void SystemInit(void);
 
-/* Declared in librt569-rf.a (rf_mcu.c) */
-extern void RfMcu_IsrHandler(void);
-
-/* CommSubsystem_IRQn = 20 on RT582 (CMSIS peripheral IRQ number) */
 #define RT582_COMM_SUBSYSTEM_IRQN   20
 #define RT582_COMM_SUBSYSTEM_IRQPRI 2
 
-/* Count how many times the CommSubsystem IRQ fires — readable from main.c */
+#ifdef CONFIG_OPENTHREAD_RT582
+extern void RfMcu_IsrHandler(void);
+
 volatile uint32_t rt582_comm_irq_count;
 
-/* Wrapper — keep lean: no printk inside, DMA-done IRQs are time-critical */
 static void comm_subsystem_isr(const void *arg)
 {
     ARG_UNUSED(arg);
     rt582_comm_irq_count++;
     RfMcu_IsrHandler();
 }
+#endif /* CONFIG_OPENTHREAD_RT582 */
 
 static int rt582_soc_init(void)
 {
-    SystemInit();
+    SystemInit(); /* Required: configures BBPLL to 64 MHz (from librt582_system.a).
+                   * Without this the UART peripheral has no clock and
+                   * hosal_uart_send_complete spins on LSR.TEMT forever. */
 
-    /* Connect and enable the RF co-processor interrupt.
-     * rf_common_init_by_fw() calls __NVIC_EnableIRQ(CommSubsystem_IRQn)
-     * internally, but IRQ_CONNECT must happen at compile-time before that. */
+#ifdef CONFIG_OPENTHREAD_RT582
     IRQ_CONNECT(RT582_COMM_SUBSYSTEM_IRQN,
                 RT582_COMM_SUBSYSTEM_IRQPRI,
                 comm_subsystem_isr,
                 NULL, 0);
     irq_enable(RT582_COMM_SUBSYSTEM_IRQN);
+#endif /* CONFIG_OPENTHREAD_RT582 */
 
-    printk("[SOC] SystemInit done, CommSubsystem IRQ %d enabled\n",
-           RT582_COMM_SUBSYSTEM_IRQN);
     return 0;
 }
 

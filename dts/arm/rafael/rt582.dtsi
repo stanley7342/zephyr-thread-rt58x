@@ -38,8 +38,14 @@
      */
     flash0: flash@0 {
         compatible = "soc-nv-flash";
-        /* 1 MB = 0x100000 */
-        reg = <0x00008000 0x100000>;
+        /*
+         * Place Zephyr at 0x00000000 so it runs without a bootloader.
+         * The bootloader lives at 0x0–0x7FFF; placing Zephyr here
+         * overwrites it (intentional for bare-metal debugging).
+         * Restore to <0x00008000 0x100000> once a proper flashing
+         * workflow (that preserves the bootloader) is established.
+         */
+        reg = <0x00000000 0x100000>;
     };
 
     sram0: memory@20000000 {

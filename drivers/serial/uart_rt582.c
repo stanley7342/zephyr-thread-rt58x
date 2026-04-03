@@ -1,14 +1,16 @@
 /*
  * Zephyr UART driver for Rafael RT582
  *
- * Supports polling TX/RX and interrupt-driven RX/TX.
- *
- * TX interrupt simulation: uart_irq_tx_enable() submits a k_work item that
- * calls the registered IRQ callback from the system workqueue.  The callback
- * drains the shell's TX ring-buffer via uart_fifo_fill(), then disables TX IRQ.
- *
- * RX interrupts: the HOSAL rx_cb fires when bytes arrive; we buffer them in a
- * small ring buffer and call the IRQ callback so the shell wakes up.
+ * RULES (learned the hard way):
+ * 1. Never call printk from this driver — ISR context causes spinlock deadlock.
+ * 2. uart_rt582_init must return 0 (not hosal_uart_init return value).
+ *    hosal_uart_init returns uart->RBR & 0xFF to flush the RX FIFO — that is
+ *    NOT an error code. A non-zero return makes Zephyr mark the device
+ *    not-ready and uart_console_init silently skips the printk hook.
+ * 3. hosal_uart_ioctl(MODE_SET) treats p_arg as the mode VALUE cast to void*,
+ *    NOT a pointer. Pass (void*)(uintptr_t)mode, not &mode.
+ * 4. IRQ_CONNECT must be called (not just NVIC_EnableIRQ) so Zephyr's ISR
+ *    dispatch table is populated. Without it, z_irq_spurious fires on RX.
  */
 
 #define DT_DRV_COMPAT rafael_rt582_uart
@@ -17,11 +19,8 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
 
 #include "hosal_uart.h"
-
-#define UART_DBG(fmt, ...) printk("[UART] " fmt "\n", ##__VA_ARGS__)
 
 /* ── Small RX ring buffer ────────────────────────────────────────────────── */
 #define RX_BUF_SIZE 64
@@ -43,9 +42,7 @@ static inline void rx_ring_put(rx_ring_t *r, uint8_t c)
 
 static inline int rx_ring_get(rx_ring_t *r, uint8_t *c)
 {
-    if (r->head == r->tail) {
-        return -1;
-    }
+    if (r->head == r->tail) return -1;
     *c = r->buf[r->head];
     r->head = (uint8_t)((r->head + 1U) % RX_BUF_SIZE);
     return 0;
@@ -84,11 +81,8 @@ struct uart_rt582_cfg {
 static int uart_rt582_poll_in(const struct device *dev, unsigned char *c)
 {
     struct uart_rt582_data *data = dev->data;
-
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-    if (data->rx_irq_enabled) {
-        return rx_ring_get(&data->rx_ring, c);
-    }
+    if (data->rx_irq_enabled) return rx_ring_get(&data->rx_ring, c);
 #endif
     return (hosal_uart_receive(&data->hosal_dev, c, 1) == 1) ? 0 : -1;
 }
@@ -96,44 +90,36 @@ static int uart_rt582_poll_in(const struct device *dev, unsigned char *c)
 static void uart_rt582_poll_out(const struct device *dev, unsigned char c)
 {
     struct uart_rt582_data *data = dev->data;
+    /* hosal_uart_send already polls LSR.THRE before each byte.
+     * hosal_uart_send_complete polls LSR.TEMT (shift register empty) which
+     * can hang if the UART peripheral clock is unstable. Skip it. */
     hosal_uart_send(&data->hosal_dev, &c, 1);
-    hosal_uart_send_complete(&data->hosal_dev);
 }
 
 /* ── Interrupt-driven API ────────────────────────────────────────────────── */
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 
-/* Called from HOSAL ISR when RX bytes arrive */
 static int hosal_rx_callback(void *p_arg)
 {
     const struct device    *dev  = (const struct device *)p_arg;
     struct uart_rt582_data *data = dev->data;
     uint8_t c;
-    int count = 0;
 
-    while (hosal_uart_receive(&data->hosal_dev, &c, 1) == 1) {
+    while (hosal_uart_receive(&data->hosal_dev, &c, 1) == 1)
         rx_ring_put(&data->rx_ring, c);
-        count++;
-    }
-    UART_DBG("RX ISR: %d bytes", count);
 
-    if (data->irq_cb) {
+    if (data->irq_cb)
         data->irq_cb(dev, data->irq_cb_data);
-    }
     return 0;
 }
 
-/* TX work handler — runs in system workqueue, simulates TX-ready IRQ */
 static void tx_work_handler(struct k_work *work)
 {
     struct uart_rt582_data *data =
         CONTAINER_OF(work, struct uart_rt582_data, tx_work);
-
-    UART_DBG("TX work: irq_cb=%p tx_en=%d", data->irq_cb, data->tx_irq_enabled);
-    if (data->tx_irq_enabled && data->irq_cb) {
+    if (data->tx_irq_enabled && data->irq_cb)
         data->irq_cb(data->self, data->irq_cb_data);
-    }
 }
 
 static int uart_rt582_fifo_fill(const struct device *dev,
@@ -141,7 +127,6 @@ static int uart_rt582_fifo_fill(const struct device *dev,
 {
     struct uart_rt582_data *data = dev->data;
     hosal_uart_send(&data->hosal_dev, tx_data, len);
-    hosal_uart_send_complete(&data->hosal_dev);
     return len;
 }
 
@@ -150,17 +135,14 @@ static int uart_rt582_fifo_read(const struct device *dev,
 {
     struct uart_rt582_data *data = dev->data;
     int read = 0;
-
-    while (read < size && rx_ring_get(&data->rx_ring, &rx_data[read]) == 0) {
+    while (read < size && rx_ring_get(&data->rx_ring, &rx_data[read]) == 0)
         read++;
-    }
     return read;
 }
 
 static void uart_rt582_irq_tx_enable(const struct device *dev)
 {
     struct uart_rt582_data *data = dev->data;
-    UART_DBG("TX enable");
     data->tx_irq_enabled = true;
     k_work_submit(&data->tx_work);
 }
@@ -179,21 +161,18 @@ static int uart_rt582_irq_tx_ready(const struct device *dev)
 
 static int uart_rt582_irq_tx_complete(const struct device *dev)
 {
-    (void)dev;
-    return 1;
+    (void)dev; return 1;
 }
 
 static void uart_rt582_irq_rx_enable(const struct device *dev)
 {
     struct uart_rt582_data *data = dev->data;
-    UART_DBG("RX enable (already=%d)", data->rx_irq_enabled);
     if (!data->rx_irq_enabled) {
-        hosal_uart_mode_t mode = HOSAL_UART_MODE_INT_RX;
-        int rc = hosal_uart_ioctl(&data->hosal_dev, HOSAL_UART_MODE_SET, &mode);
-        UART_DBG("  ioctl MODE_SET rc=%d", rc);
-        rc = hosal_uart_callback_set(&data->hosal_dev, HOSAL_UART_RX_CALLBACK,
-                                     hosal_rx_callback, (void *)dev);
-        UART_DBG("  callback_set rc=%d", rc);
+        /* Pass mode as VALUE cast to void*, not a pointer — see rule 3 */
+        hosal_uart_ioctl(&data->hosal_dev, HOSAL_UART_MODE_SET,
+                         (void *)(uintptr_t)HOSAL_UART_MODE_INT_RX);
+        hosal_uart_callback_set(&data->hosal_dev, HOSAL_UART_RX_CALLBACK,
+                                hosal_rx_callback, (void *)dev);
         data->rx_irq_enabled = true;
     }
 }
@@ -204,8 +183,8 @@ static void uart_rt582_irq_rx_disable(const struct device *dev)
     if (data->rx_irq_enabled) {
         hosal_uart_callback_set(&data->hosal_dev, HOSAL_UART_RX_CALLBACK,
                                 NULL, NULL);
-        hosal_uart_mode_t mode = HOSAL_UART_MODE_POLL;
-        hosal_uart_ioctl(&data->hosal_dev, HOSAL_UART_MODE_SET, &mode);
+        hosal_uart_ioctl(&data->hosal_dev, HOSAL_UART_MODE_SET,
+                         (void *)(uintptr_t)HOSAL_UART_MODE_POLL);
         data->rx_irq_enabled = false;
     }
 }
@@ -223,8 +202,7 @@ static int uart_rt582_irq_is_pending(const struct device *dev)
 
 static int uart_rt582_irq_update(const struct device *dev)
 {
-    (void)dev;
-    return 1;
+    (void)dev; return 1;
 }
 
 static void uart_rt582_irq_callback_set(const struct device *dev,
@@ -232,7 +210,6 @@ static void uart_rt582_irq_callback_set(const struct device *dev,
                                         void *user_data)
 {
     struct uart_rt582_data *data = dev->data;
-    UART_DBG("IRQ callback set: cb=%p", cb);
     data->irq_cb      = cb;
     data->irq_cb_data = user_data;
 }
@@ -260,7 +237,7 @@ static const struct uart_driver_api uart_rt582_api = {
 #endif
 };
 
-/* ── Driver initialisation ───────────────────────────────────────────────── */
+/* ── Baud rate helper ────────────────────────────────────────────────────── */
 
 static hosal_uart_baudrate_t baud_to_hosal(uint32_t baud)
 {
@@ -277,37 +254,25 @@ static hosal_uart_baudrate_t baud_to_hosal(uint32_t baud)
     }
 }
 
-static int uart_rt582_init(const struct device *dev)
+/* ── HOSAL ISR wrappers ───────────────────────────────────────────────────── */
+
+extern void uart0_handler(void);
+extern void uart1_handler(void);
+
+/* Zephyr ISR dispatcher — see rule 4 for why IRQ_CONNECT is required.
+ * NEVER call printk here (rule 1). */
+static void uart_rt582_isr(const void *arg)
 {
-    const struct uart_rt582_cfg *cfg  = dev->config;
-    struct uart_rt582_data      *data = dev->data;
-
-    data->hosal_dev.port              = cfg->uart_id;
-    data->hosal_dev.config.uart_id    = cfg->uart_id;
-    data->hosal_dev.config.tx_pin     = cfg->tx_pin;
-    data->hosal_dev.config.rx_pin     = cfg->rx_pin;
-    data->hosal_dev.config.cts_pin    = 255;
-    data->hosal_dev.config.rts_pin    = 255;
-    data->hosal_dev.config.baud_rate  = baud_to_hosal(cfg->baud_rate);
-    data->hosal_dev.config.data_width = UART_DATA_BITS_8;
-    data->hosal_dev.config.parity     = UART_PARITY_NONE;
-    data->hosal_dev.config.stop_bits  = UART_STOPBIT_ONE;
-    data->hosal_dev.tx_cb             = NULL;
-    data->hosal_dev.rx_cb             = NULL;
-
-#ifdef CONFIG_UART_INTERRUPT_DRIVEN
-    data->self           = dev;
-    data->rx_irq_enabled = false;
-    data->tx_irq_enabled = false;
-    k_work_init(&data->tx_work, tx_work_handler);
-#endif
-
-    int rc = hosal_uart_init(&data->hosal_dev);
-    UART_DBG("init uart_id=%d rc=%d", cfg->uart_id, rc);
-    return rc;
+    const struct device *dev = arg;
+    const struct uart_rt582_cfg *cfg = dev->config;
+    switch (cfg->uart_id) {
+    case 0: uart0_handler(); break;
+    case 1: uart1_handler(); break;
+    default: break;
+    }
 }
 
-/* ── DTS instance expansion ──────────────────────────────────────────────── */
+/* ── Per-instance init + device registration ─────────────────────────────── */
 
 #define UART_RT582_DEVICE(inst)                                              \
     static struct uart_rt582_data uart_rt582_data_##inst;                    \
@@ -320,8 +285,43 @@ static int uart_rt582_init(const struct device *dev)
         .rx_pin    = DT_INST_PROP_OR(inst, rx_pin, 255),                     \
     };                                                                       \
                                                                              \
+    static int uart_rt582_init_##inst(const struct device *dev)              \
+    {                                                                        \
+        const struct uart_rt582_cfg *cfg  = dev->config;                     \
+        struct uart_rt582_data      *data = dev->data;                       \
+                                                                             \
+        data->hosal_dev.port              = cfg->uart_id;                    \
+        data->hosal_dev.config.uart_id    = cfg->uart_id;                   \
+        data->hosal_dev.config.tx_pin     = cfg->tx_pin;                    \
+        data->hosal_dev.config.rx_pin     = cfg->rx_pin;                    \
+        data->hosal_dev.config.cts_pin    = 255;                            \
+        data->hosal_dev.config.rts_pin    = 255;                            \
+        data->hosal_dev.config.baud_rate  = baud_to_hosal(cfg->baud_rate);  \
+        data->hosal_dev.config.data_width = UART_DATA_BITS_8;               \
+        data->hosal_dev.config.parity     = UART_PARITY_NONE;               \
+        data->hosal_dev.config.stop_bits  = UART_STOPBIT_ONE;               \
+        data->hosal_dev.tx_cb             = NULL;                           \
+        data->hosal_dev.rx_cb             = NULL;                           \
+                                                                             \
+        IF_ENABLED(CONFIG_UART_INTERRUPT_DRIVEN, (                          \
+            data->self           = dev;                                     \
+            data->rx_irq_enabled = false;                                   \
+            data->tx_irq_enabled = false;                                   \
+            k_work_init(&data->tx_work, tx_work_handler);                   \
+        ))                                                                   \
+                                                                             \
+        hosal_uart_init(&data->hosal_dev); /* return value is RBR flush,   \
+                                              NOT an error code — rule 2 */ \
+                                                                             \
+        IRQ_CONNECT(DT_INST_IRQN(inst),                                      \
+                    DT_INST_IRQ(inst, priority),                             \
+                    uart_rt582_isr,                                          \
+                    DEVICE_DT_INST_GET(inst), 0);                            \
+        return 0;                                                            \
+    }                                                                        \
+                                                                             \
     DEVICE_DT_INST_DEFINE(inst,                                              \
-                          uart_rt582_init,                                   \
+                          uart_rt582_init_##inst,                            \
                           NULL,                                              \
                           &uart_rt582_data_##inst,                           \
                           &uart_rt582_cfg_##inst,                            \

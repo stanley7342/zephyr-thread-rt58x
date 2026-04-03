@@ -1,0 +1,3 @@
+sdk_add_static_library(log)
+sdk_add_compile_options( -DLOG_LEVEL=${CONFIG_LOG_LEVEL} )
+sdk_add_include_directories( . )

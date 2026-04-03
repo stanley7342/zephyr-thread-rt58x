@@ -8,17 +8,28 @@ set(KCONFIG_ROOT ${CMAKE_CURRENT_LIST_DIR}/Kconfig)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt582_helloworld VERSION 1.0.0)
 
-# Locate the Rafael IoT SDK
-set(RAFAEL_SDK $ENV{RAFAEL_SDK_BASE})
-if(NOT RAFAEL_SDK)
-    set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/../Rafael-IoT-SDK-Internal)
-endif()
+# Rafael IoT SDK vendored into sdk/ — no external dependency needed
+set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/sdk)
 
 # Application source
 target_sources(app PRIVATE src/main.c)
 
 # ── OpenThread subsystem ─────────────────────────────────────────────────────
-add_subdirectory(subsys/openthread)
+# Guard so a pristine bare-UART build (CONFIG_OPENTHREAD_RT582=n) compiles
+# without pulling in the OT CMakeLists which references SDK libraries.
+if(CONFIG_OPENTHREAD_RT582)
+    add_subdirectory(subsys/openthread)
+endif()
+
+# ── RT582 system library (always needed — provides SystemInit for soc.c) ─────
+# librt582_system.a contains SystemInit (BBPLL → 64 MHz) and is referenced by
+# soc/arm/rafael_micro/rt582/soc.c regardless of whether OT is enabled.
+zephyr_link_libraries(
+    -Wl,--start-group
+    ${RAFAEL_SDK}/lib/librt582_system.a
+    ${RAFAEL_SDK}/lib/librt582_driver.a
+    -Wl,--end-group
+)
 
 # ── RT582 UART driver ────────────────────────────────────────────────────────
 # Add the driver directly to the 'app' library so it is included in the

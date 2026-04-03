@@ -1,13 +1,13 @@
 if(CONFIG_OPENTHREAD_RT582)
 
 # ── Paths ─────────────────────────────────────────────────────────────────
-get_filename_component(RAFAEL_SDK
-    "${CMAKE_SOURCE_DIR}/../Rafael-IoT-SDK-Internal" ABSOLUTE)
+# Rafael IoT SDK vendored into sdk/ — no external RAFAEL_SDK_BASE needed
+set(RAFAEL_SDK ${CMAKE_SOURCE_DIR}/sdk)
 
 set(OT_PORT_INC   ${RAFAEL_SDK}/components/network/thread/openthread_port/include)
 set(OT_PORT_UTILS ${RAFAEL_SDK}/components/network/thread/openthread_port/utils)
 set(OT_ROOT       ${RAFAEL_SDK}/components/network/thread/openthread)
-set(SDK_LIBS      ${RAFAEL_SDK}/build/lib)
+set(SDK_LIBS      ${RAFAEL_SDK}/lib)
 
 set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt582)
 set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt582)
