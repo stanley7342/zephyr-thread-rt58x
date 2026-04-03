@@ -13,10 +13,7 @@
 extern "C" {
 #endif
 
-#if defined(CONFIG_FREERTOS)
-#include <FreeRTOS.h>
-#include <task.h>
-#endif
+#include <zephyr/kernel.h>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -83,9 +80,7 @@ extern log_setting_t log_set;
     do {                                                                       \
         if (lowlevel >= log_set.level) {                                       \
             log_printk("[%10u][%s: %s:%4d] " M "\r\n",                         \
-                       (xPortIsInsideInterrupt())                              \
-                           ? (xTaskGetTickCountFromISR())                      \
-                           : (xTaskGetTickCount()),                            \
+                       (uint32_t)k_uptime_ticks(),                             \
                        N, __FILE_NAME__, __LINE__, ##__VA_ARGS__);             \
         }                                                                      \
     } while (0 == 1)
@@ -94,9 +89,7 @@ extern log_setting_t log_set;
     do {                                                                       \
         if (lowlevel >= log_set.level) {                                       \
             log_printk("[%10u][%s: %s:%4d] %s:\r\n",                           \
-                       (xPortIsInsideInterrupt())                              \
-                           ? (xTaskGetTickCountFromISR())                      \
-                           : (xTaskGetTickCount()),                            \
+                       (uint32_t)k_uptime_ticks(),                             \
                        logo, __FILE_NAME__, __LINE__, name);                   \
             log_hexdump_out(name, 16, buf, size);                              \
         }                                                                      \
