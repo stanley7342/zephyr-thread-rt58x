@@ -37,9 +37,6 @@ static void wdog_thread_fn(void *p1, void *p2, void *p3)
     while (1) {
         k_msleep(200);
         wdog_tick++;
-        printk("[WDG] t=%u*200ms COMM_IRQ=%u UART_ISR=%u BYTES=%u LINES=%u\n",
-               wdog_tick, rt582_comm_irq_count,
-               ot_uart_isr_count, ot_uart_rx_byte_count, ot_uart_line_count);
     }
 }
 

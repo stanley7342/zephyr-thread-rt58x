@@ -851,22 +851,16 @@ void ot_radioInit(void)
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
 
-    printk("[OT-RADIO] radioInit start (mode=%d)\n", sMacAddrReadMode);
-
     if (sMacAddrReadMode == 1) {
-        printk("[OT-RADIO] reading OTP MAC addr\n");
         rafael_otp_mac_addr(sIEEE_EUI64Addr);
         if (!memcmp(ff, sIEEE_EUI64Addr, OT_EXT_ADDRESS_SIZE)) {
-            printk("[OT-RADIO] OTP all-FF, fallback to flash unique ID\n");
             flash_get_unique_id((uint32_t)(uintptr_t)sIEEE_EUI64Addr,
                                 OT_EXT_ADDRESS_SIZE);
         }
     } else {
-        printk("[OT-RADIO] reading flash unique ID\n");
         flash_get_unique_id((uint32_t)(uintptr_t)sIEEE_EUI64Addr,
                             OT_EXT_ADDRESS_SIZE);
     }
-    printk("[OT-RADIO] MAC addr read done\n");
 
     memset(&otRadio_var, 0, offsetof(otRadio_t, buffPool));
 
@@ -887,28 +881,16 @@ void ot_radioInit(void)
     }
     otRadio_var.dbgFrameNum = OTRADIO_RX_FRAME_BUFFER_NUM;
     OT_EXIT_CRITICAL();
-    printk("[OT-RADIO] frame pool init done\n");
 
     mac_cb.rx_cb = _RxDoneEvent;
     mac_cb.tx_cb = _TxDoneEvent;
     lmac15p4_cb_set(0, &mac_cb);
-    printk("[OT-RADIO] cb_set done\n");
 
-    printk("[OT-RADIO] channel_set ch=%d...\n", sCurrentChannel);
     lmac15p4_channel_set((lmac154_channel_t)(sCurrentChannel - kMinChannel));
-    printk("[OT-RADIO] channel_set done\n");
-
     lmac15p4_auto_ack_set(true);
-    printk("[OT-RADIO] auto_ack_set done\n");
-
     lmac15p4_auto_state_set(sAuto_State_Set);
-    printk("[OT-RADIO] auto_state_set done\n");
-
     lmac15p4_src_match_ctrl(0, true);
-    printk("[OT-RADIO] src_match_ctrl done\n");
-
     lmac15p4_src_match_short_entry(CLEAR_ALL, NULL);
-    printk("[OT-RADIO] radioInit complete\n");
 }
 
 /* ── Address control helpers (public) ────────────────────────────────────── */

@@ -8,8 +8,8 @@ Zephyr RTOS + OpenThread FTD for the **RT582-EVB** (Rafael Microelectronics RT58
 | Zephyr | 4.1.0 |
 | OpenThread | FTD (Full Thread Device) |
 | Console | UART0 — TX: GPIO16, RX: GPIO17, **115200 8N1** |
-| Flash usage | ~576 KB / 1 MB |
-| RAM usage | ~127 KB / 144 KB |
+| Flash usage | ~373 KB / 1 MB |
+| RAM usage | ~90 KB / 144 KB |
 
 ---
 
@@ -71,7 +71,7 @@ zephyr-sdk-${SDK_VER}/setup.sh -t arm-zephyr-eabi -c
 
 ```bash
 export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
-export GNUARMEMB_TOOLCHAIN_PATH=C:/Users/Stanley/Rafael-IoT-SDK-Internal/toolchain/arm/Windows
+export GNUARMEMB_TOOLCHAIN_PATH=<path-to-Rafael-IoT-SDK>/toolchain/arm/Windows
 ```
 
 ---
@@ -79,9 +79,9 @@ export GNUARMEMB_TOOLCHAIN_PATH=C:/Users/Stanley/Rafael-IoT-SDK-Internal/toolcha
 ## Step 4 — Set Environment Variables
 
 ```bash
-export ZEPHYR_BASE=/c/Users/Stanley/zephyrproject/zephyr
+export ZEPHYR_BASE=<zephyr-workspace>/zephyr
 export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
-export GNUARMEMB_TOOLCHAIN_PATH=/c/Users/Stanley/Rafael-IoT-SDK-Internal/toolchain/arm/Windows
+export GNUARMEMB_TOOLCHAIN_PATH=<path-to-Rafael-IoT-SDK>/toolchain/arm/Windows
 ```
 
 ---
@@ -130,7 +130,7 @@ GND          ───── GND
 **1. Start OpenOCD server:**
 
 ```bash
-OPENOCD=C:/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
+OPENOCD=<path-to-Rafael-IoT-SDK>/tools/Debugger/OpenOCD
 
 "$OPENOCD/bin/win/openocd.exe" \
   -s "$OPENOCD/script" \
@@ -141,7 +141,7 @@ OPENOCD=C:/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
 **2. Flash (new terminal):**
 
 ```bash
-OPENOCD=C:/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
+OPENOCD=<path-to-Rafael-IoT-SDK>/tools/Debugger/OpenOCD
 BIN=zephyr-thread/build/zephyr/zephyr.bin
 
 "$OPENOCD/bin/win/openocd.exe" \
@@ -162,27 +162,29 @@ After reset you should see:
 ======================================
   RT582-EVB  Zephyr + OpenThread CLI
 ======================================
-[RF] hosal_rf_init...
-[RF] hosal_rf_init done
-[RF] lmac15p4_init done
-[RF] PIB set done
+[MAIN] wdog started
+[UART] RX interrupt enabled
 OpenThread FTD task started.
+[UART] otPlatUartEnable: dev=...
+[CLI] otAppCliInit called, ...
+[CLI] otCliInit done
+>
 ```
 
-Type OpenThread CLI commands **directly** (no `ot ` prefix):
+Type OpenThread CLI commands with or without the `ot` prefix:
 
 ```
-> state
+> ot state
 disabled
-> dataset init new
+> ot dataset init new
 Done
-> dataset commit active
+> ot dataset commit active
 Done
-> ifconfig up
+> ot ifconfig up
 Done
-> thread start
+> ot thread start
 Done
-> state
+> ot state
 leader
 ```
 
@@ -205,8 +207,9 @@ Built artifacts (`zephyr.bin`, `zephyr.elf`) are uploaded per run.
 | No UART output at all | Binary flashed at wrong address | Flash at **0x0**, not `0x8000` |
 | No UART output after a few seconds | `printk` called from ISR deadlocks | Never call `printk` from ISR; use `k_work_submit` |
 | UART RX interrupt never fires | `hosal_uart_ioctl` called with `&mode` instead of `(void*)(uintptr_t)mode` | Check `uart_rt582_irq_rx_enable` |
-| OT task hangs at `ot_radioInit` | RF MCU init blocking | Check `[OT-RADIO]` debug prints in `ot_radio.c` |
+| OT task hangs after RF init | RF MCU init blocking | Check `RF TRAP` or `init fw fail` output; verify `CONFIG_RF_FW_INCLUDE_PCI=TRUE` |
 | `rf_common_init_by_fw` returns false | Missing RUCI firmware define | Add `-DCONFIG_RF_FW_INCLUDE_PCI=TRUE` to compile definitions |
+| CLI `>` prompt never appears | `otCliInit` called with NULL callback | Ensure `cli_output_cb` is passed to `otCliInit` |
 | OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP not detected | Install WinUSB driver via Zadig |
 
 ---
@@ -215,36 +218,39 @@ Built artifacts (`zephyr.bin`, `zephyr.elf`) are uploaded per run.
 
 ```
 zephyr-thread/
-├── CMakeLists.txt                   # Top-level build
-├── Kconfig                          # Root Kconfig
+├── CMakeLists.txt                   # Top-level build (OT platform inlined)
+├── Kconfig                          # Root Kconfig (CONFIG_OPENTHREAD_RT582)
 ├── prj.conf                         # Project Kconfig fragments
 ├── west.yml                         # West manifest (Zephyr v4.1.0)
 │
 ├── sdk/                             # Vendored Rafael IoT SDK
 │   ├── lib/                         # Prebuilt .a libraries (Git LFS)
-│   └── components/                  # Headers + selected source files
+│   └── components/network/
+│       ├── thread/openthread_port/  # OT platform: ot_zephyr.c, ot_uart.c, ot_radio.c, …
+│       ├── lmac15p4/Src/            # lmac15p4.c (Zephyr k_sem wrapper)
+│       ├── rt569-rf/                # RF MCU headers
+│       ├── rt569-fw/                # RF firmware headers
+│       └── ruci/                    # RUCI command/event headers
 │
 ├── src/
-│   └── main.c                       # RF init, OT task start, watchdog
+│   └── main.c                       # RF init, OT task start, watchdog thread
 │
-├── drivers/serial/
-│   └── uart_rt582.c                 # Zephyr UART driver (HOSAL wrapper)
+├── drivers/
+│   ├── serial/
+│   │   └── uart_rt582.c             # Zephyr UART driver (HOSAL wrapper)
+│   ├── hosal/rt582_hosal/
+│   │   ├── Inc/                     # hosal_uart.h, hosal_rf.h, …
+│   │   └── Src/
+│   │       ├── hosal_uart.c         # HOSAL UART implementation
+│   │       └── hosal_rf.c           # RF MCU event thread (Zephyr k_thread)
+│   └── soc/rt582/rt582_driver/      # SoC register/clock driver
+│       ├── Inc/                     # mcu.h, sysctrl.h, uart_drv.h, …
+│       └── Src/                     # sysctrl.c
 │
 ├── boards/arm/rt582_evb/            # Board definition
 ├── dts/arm/rafael/rt582.dtsi        # SoC DTS (flash@0x0, SRAM, UART0/1)
 │
-├── soc/arm/rafael_micro/rt582/
-│   ├── soc.c                        # SystemInit (BBPLL 64 MHz) + CommSubsystem IRQ
-│   └── soc.h
-│
-└── subsys/openthread/
-    ├── CMakeLists.txt               # Links Rafael SDK static libs
-    └── platform/
-        ├── ot_zephyr.c              # OT thread, semaphore, mutex
-        ├── ot_uart.c                # UART RX → otCliInputLine
-        ├── ot_radio.c               # 802.15.4 radio platform (lmac15p4)
-        ├── ot_alarm.c               # ms / µs alarms
-        ├── ot_entropy.c             # RNG entropy
-        ├── hosal_rf_zephyr.c        # RF MCU event thread
-        └── freertos_shim.c          # FreeRTOS API stubs
+└── soc/arm/rafael_micro/rt582/
+    ├── soc.c                        # SystemInit (BBPLL 64 MHz) + CommSubsystem IRQ
+    └── soc.h
 ```

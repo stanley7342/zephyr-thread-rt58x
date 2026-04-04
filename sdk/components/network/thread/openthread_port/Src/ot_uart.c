@@ -26,9 +26,10 @@
 #include <openthread/platform/logging.h>
 #include <openthread/cli.h>
 
-/* otPlatUartSendDone is declared in openthread/platform/uart.h in some SDK
- * versions; forward-declare it here to avoid a missing-header error. */
-extern void otPlatUartSendDone(void);
+/* otPlatUartSendDone — TX-done callback required by OT UART platform API.
+ * Our otPlatUartSend is synchronous (poll_out), so TX is already complete
+ * when the function returns; this callback is a no-op. */
+void otPlatUartSendDone(void) {}
 
 #include "openthread_port.h"
 
@@ -72,8 +73,10 @@ static void uart_rx_irq_cb(const struct device *dev, void *user_data)
         ot_uart_rx_byte_count++;
 
         if (c == '\r' || c == '\n') {
-            if (rx_work_len > 0 && !rx_line_ready) {
-                /* Publish completed line to task */
+            uart_poll_out(dev, '\r');
+            uart_poll_out(dev, '\n');
+            if (!rx_line_ready) {
+                /* Publish line to task (empty line re-triggers the > prompt) */
                 memcpy(rx_ready_buf, rx_work_buf, rx_work_len);
                 rx_ready_buf[rx_work_len] = '\0';
                 rx_work_len = 0;
@@ -81,8 +84,17 @@ static void uart_rx_irq_cb(const struct device *dev, void *user_data)
                 ot_uart_line_count++;
                 OT_NOTIFY_ISR(OT_SYSTEM_EVENT_UART_RXD);
             }
+        } else if (c == '\b' || c == 0x7f) {
+            /* backspace: erase last char */
+            if (rx_work_len > 0) {
+                rx_work_len--;
+                uart_poll_out(dev, '\b');
+                uart_poll_out(dev, ' ');
+                uart_poll_out(dev, '\b');
+            }
         } else if (rx_work_len < RX_LINE_MAXLEN - 1) {
             rx_work_buf[rx_work_len++] = c;
+            uart_poll_out(dev, c);  /* echo */
         }
     }
 }
@@ -140,9 +152,14 @@ otError otPlatUartFlush(void)
 void ot_uartTask(ot_system_event_t sevent)
 {
     if ((OT_SYSTEM_EVENT_UART_RXD & sevent) && rx_line_ready) {
-        printk("[UART] RX line: '%s'\n", rx_ready_buf);
+        char *line = (char *)rx_ready_buf;
+        /* Accept both "ot <cmd>" and "<cmd>" */
+        if (line[0] == 'o' && line[1] == 't' &&
+            (line[2] == ' ' || line[2] == '\0')) {
+            line += (line[2] == ' ') ? 3 : 2;
+        }
         rx_line_ready = false;
-        otCliInputLine((char *)rx_ready_buf);
+        otCliInputLine(line);
     }
 }
 
@@ -158,11 +175,21 @@ void ot_uartRecieved(uint8_t *rxbuf, uint32_t rxlen)
     }
 }
 
+/* ── CLI output callback — routes OT CLI output through otPlatUartSend ─── */
+static int cli_output_cb(void *aContext, const char *aFormat, va_list aArguments)
+{
+    (void)aContext;
+    char buf[256];
+    int len = vsnprintf(buf, sizeof(buf), aFormat, aArguments);
+    otPlatUartSend((const uint8_t *)buf, (uint16_t)strlen(buf));
+    return len;
+}
+
 /* ── otAppCliInit — app-level CLI initialisation ─────────────────────────── */
 void otAppCliInit(otInstance *aInstance)
 {
     printk("[CLI] otAppCliInit called, instance=%p\n", aInstance);
-    otCliInit(aInstance, NULL, NULL);
+    otCliInit(aInstance, cli_output_cb, NULL);
     printk("[CLI] otCliInit done\n");
 }
 

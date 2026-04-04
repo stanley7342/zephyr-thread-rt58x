@@ -191,8 +191,6 @@ __STATIC_FORCEINLINE void handle_event_status(void) {
     uint8_t *evt_ptr   = NULL;
 
     event_len = RfMcu_EvtQueueRead(g_event_buffer, &rxCmdError);
-    printk("[RF] evt type=0x%02x err=%d len=%u\n",
-           g_event_buffer[0], rxCmdError, event_len);
     if (rxCmdError == RF_MCU_RX_CMDQ_GET_SUCCESS) {
         switch (g_event_buffer[0]) {
         case HOSAL_RF_HCI_EVENT:
@@ -934,10 +932,8 @@ static hosal_rf_status_t __rf_15p4_op_pan_idx_set(uint32_t pan_idx) {
 int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     /* Release FreeRTOS irq_lock before blocking so __rf_proc can run. */
     uint32_t nest = _crit_unlock();
-    printk("[RF] write_cmd nest=%u sem=%u\n", nest, g_rf_cmd_sem.count);
     k_sem_take(&g_rf_cmd_sem, K_FOREVER);
     _crit_relock(nest);
-    printk("[RF] write_cmd got_sem\n");
     RfMcu_HostWakeUpMcu();
     if (RfMcu_PowerStateCheck() != 0x03) {
         k_sem_give(&g_rf_cmd_sem);
@@ -968,7 +964,6 @@ int hosal_rf_write_tx_data(uint8_t *tx_data_ptr, uint32_t tx_data_len) {
     RfMcu_MemoryGet(0x0048, (uint8_t *)&reg_val, 4);
     if (!reg_val) {
         /* TX queue register is zero — unexpected hardware state */
-        printk("[RF] write_tx_data: reg_val=0!\n");
         return HOSAL_RF_STATUS_NO_MEMORY;
     }
 
@@ -996,13 +991,11 @@ uint32_t hosal_rf_read_event(uint8_t *event_data_ptr) {
     uint8_t *pdata     = NULL;
     uint32_t event_len = 0;
 
-    printk("[RF] read_evt waiting\n");
     /* Release FreeRTOS irq_lock before blocking so COMM_SUBSYSTEM IRQ can
      * fire → __rf_proc runs → puts event in g_rf_evt_msgq → we unblock.   */
     uint32_t nest = _crit_unlock();
     int rc = k_msgq_get(&g_rf_evt_msgq, (void *)&pdata, K_FOREVER);
     _crit_relock(nest);
-    printk("[RF] read_evt got rc=%d\n", rc);
 
     if (rc != 0) {
         log_error("RF evt queue get failed\n");
