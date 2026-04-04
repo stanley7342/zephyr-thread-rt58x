@@ -13,4 +13,4 @@
  * RULE: same as printk — never call from ISR context.
  */
 #define tprintk(fmt, ...) \
-    printk("[%7u] " fmt, k_uptime_get32(), ##__VA_ARGS__)
+    printk("[%7u] " fmt, k_uptime_get_32(), ##__VA_ARGS__)
