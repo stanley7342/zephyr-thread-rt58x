@@ -5,7 +5,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | Item | Value |
 |------|-------|
 | SoC | RT582 (ARM Cortex-M3, 64 MHz BBPLL) |
-| Zephyr | ≥ 4.4 |
+| Zephyr | 4.4.0-rc1（`v4.4.0-rc1-211-gcf4d0f72478e`） |
 | OpenThread | FTD (Full Thread Device) CLI |
 | Console | UART0 — TX: GPIO16, RX: GPIO17, **115200 8N1** |
 | Flash usage | ~340 KB / 1 MB (35 %) |
@@ -39,7 +39,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | Git | 任意 | [git-scm.com](https://git-scm.com/) |
 | DTC | 1.4.6 | Windows: 含在 Zephyr SDK 內；Linux: `apt install device-tree-compiler` |
 
-> **Windows 注意**：建議使用 PowerShell 7 或 Git Bash。MSYS2 亦可，但路徑需調整為 `/c/...` 格式。
+> **Windows 注意**：建議使用 PowerShell 7 或 Git Bash。路徑使用正斜線（`/`）或雙反斜線（`\\`）。
 
 ---
 
@@ -48,9 +48,9 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 本專案使用 **west** 管理 Zephyr 依賴。工作區結構如下：
 
 ```
-<workspace>/          ← west 工作區根目錄（例如 C:\Users\Stanley）
-├── zephyr/           ← Zephyr 原始碼（west 自動下載）
-└── zephyr-thread/    ← 本專案
+<workspace>/          ← west 工作區根目錄（例如 C:\zephyr-workspace）
+├── zephyr/           ← Zephyr 原始碼（west 自動下載，~500 MB）
+└── zephyr-thread/    ← 本專案（west.yml 中 self.path = "zephyr-thread"）
 ```
 
 ### 2.1 初始化工作區（首次）
@@ -60,14 +60,14 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 mkdir C:\zephyr-workspace
 cd C:\zephyr-workspace
 
-# Clone 本專案
+# Clone 本專案至 zephyr-thread/（名稱必須與 west.yml self.path 一致）
 git clone https://github.com/<your-org>/zephyr-thread-rt58x.git zephyr-thread
 
 # 以本專案為 manifest 初始化 west 工作區
 west init -l zephyr-thread
 
-# 下載 Zephyr（約 500 MB）
-west update --narrow
+# 下載 Zephyr（west.yml 中指定的 revision）
+west update
 
 # 安裝 Zephyr Python 依賴
 pip install -r zephyr/scripts/requirements-base.txt
@@ -76,16 +76,17 @@ pip install -r zephyr/scripts/requirements-base.txt
 west zephyr-export
 ```
 
-> `--narrow` 只下載 west.yml 列出的專案，不下載全部 Zephyr module（加速）。
+> `west init -l` 讀取 `zephyr-thread/west.yml`，以它作為工作區 manifest，
+> 不再從遠端拉取額外的 manifest repo。
 
 ### 2.2 日後更新
 
 ```powershell
-cd zephyr-thread
+cd C:\zephyr-workspace\zephyr-thread
 git pull
 
-cd ..
-west update --narrow
+cd C:\zephyr-workspace
+west update
 ```
 
 ---
@@ -97,25 +98,26 @@ Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`），推薦使用。
 ### Windows
 
 1. 從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載 Windows 安裝包：
-   - 選擇最新的 `zephyr-sdk-<version>_windows-x86_64.7z`（或 minimal 版本）
+   - 選擇 `zephyr-sdk-<version>_windows-x86_64.7z`（或 minimal 版）
 
 2. 解壓縮至固定路徑（路徑不能有空格），例如：
    ```
-   C:\zephyr-sdk-1.0.1\
+   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\
    ```
+   > 注意：7z 解壓後有一層同名子目錄，安裝目錄應為最內層含 `setup.cmd` 的資料夾。
 
 3. 執行安裝腳本（Windows CMD）：
    ```cmd
-   C:\zephyr-sdk-1.0.1\setup.cmd
+   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd
    ```
    或在 Git Bash：
    ```bash
-   /c/zephyr-sdk-1.0.1/setup.sh -c
+   /c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1/setup.sh -c
    ```
 
 4. 確認 `arm-zephyr-eabi` 工具鏈存在：
    ```
-   C:\zephyr-sdk-1.0.1\arm-zephyr-eabi\bin\arm-zephyr-eabi-gcc.exe
+   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\gnu\arm-zephyr-eabi\bin\arm-zephyr-eabi-gcc.exe
    ```
 
 ### Linux / macOS
@@ -136,9 +138,9 @@ tar xf zephyr-sdk-${SDK_VER}_linux-x86_64.tar.xz -C ~/
 ### PowerShell
 
 ```powershell
-$env:ZEPHYR_BASE         = "C:/zephyr-workspace/zephyr"
+$env:ZEPHYR_BASE              = "C:/zephyr-workspace/zephyr"
 $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
-$env:ZEPHYR_SDK_INSTALL_DIR   = "C:/zephyr-sdk-1.0.1"
+$env:ZEPHYR_SDK_INSTALL_DIR   = "C:/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1"
 ```
 
 ### Bash / Git Bash
@@ -146,19 +148,11 @@ $env:ZEPHYR_SDK_INSTALL_DIR   = "C:/zephyr-sdk-1.0.1"
 ```bash
 export ZEPHYR_BASE=/c/zephyr-workspace/zephyr
 export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
-export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1
+export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1
 ```
 
-> **提示**：將這三行存成 `env.ps1`（PowerShell）或 `env.sh`（Bash）放在工作區根目錄，每次 `. env.ps1` 或 `source env.sh` 即可。
-
-### 備用：Rafael IoT SDK 工具鏈（gnuarmemb）
-
-若已安裝 Rafael IoT SDK 內附的工具鏈，也可使用：
-
-```powershell
-$env:ZEPHYR_TOOLCHAIN_VARIANT  = "gnuarmemb"
-$env:GNUARMEMB_TOOLCHAIN_PATH  = "C:/Rafael-IoT-SDK-Internal/toolchain/arm/Windows"
-```
+> **提示**：將這三行存成 `env.ps1`（PowerShell）或 `env.sh`（Bash）放在工作區根目錄，
+> 每次 `. .\env.ps1` 或 `source env.sh` 即可。
 
 ---
 
@@ -295,15 +289,14 @@ Done
 | 症狀 | 可能原因 | 解法 |
 |------|---------|------|
 | `find_package(Zephyr)` 失敗 | `ZEPHYR_BASE` 未設定或路徑錯誤 | 確認 `$env:ZEPHYR_BASE` 指向正確的 `zephyr/` 目錄 |
-| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `ZEPHYR_TOOLCHAIN_VARIANT` 與 SDK 路徑 |
-| `west update` 超慢 | 下載整個 Zephyr module | 加上 `--narrow` 參數 |
+| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `ZEPHYR_TOOLCHAIN_VARIANT=zephyr` 且 `ZEPHYR_SDK_INSTALL_DIR` 指向含 `gnu/` 的目錄 |
+| `west update` 失敗 | revision 在遠端不存在 | 確認 `west.yml` 中的 `revision` 是有效的 tag 或 commit |
 | 完全沒有 UART 輸出 | Binary 燒錄至錯誤位址 | 燒錄至 **0x0**，不是 `0x8000` |
 | `printk` 輸出後系統卡死 | 從 ISR 呼叫 `printk`（spinlock 死鎖） | 使用 `k_work_submit` 延後到 thread context |
 | UART RX 中斷從不觸發 | `IRQ_CONNECT` 未呼叫 | 確認 `uart_rt582.c` 中有呼叫 `IRQ_CONNECT` |
 | RF init 後 OT task 卡住 | RF MCU init 阻塞 | 確認 `CONFIG_RF_FW_INCLUDE_PCI=TRUE` compile definition |
-| `>` prompt 不出現 | OT CLI 初始化失敗 | 確認 `otrInitUser` 有呼叫 `otAppCliInit` |
+| `>` prompt 不出現 | OT CLI 初始化失敗 | 確認 `main.c` 有呼叫 `otAppCliInit` |
 | OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP 未被識別 | 用 [Zadig](https://zadig.akeo.ie/) 安裝 WinUSB 驅動 |
-| CMake warning `drivers__serial No SOURCES` | Zephyr 內部空庫檢查（非錯誤） | 忽略，build 不受影響；driver 已在 `app` 中編譯 |
 
 ---
 
@@ -311,10 +304,17 @@ Done
 
 ```
 zephyr-thread/
-├── CMakeLists.txt              # 根 CMake；平台驅動 + OT include 點
+├── CMakeLists.txt              # 根 CMake；ZEPHYR_EXTRA_MODULES 註冊模組 + 平台驅動
 ├── Kconfig                     # 根 Kconfig；含 PHY/MAC PIB 設定選單
 ├── prj.conf                    # Kconfig fragments（UART、heap、OT 開關）
-├── west.yml                    # West manifest（Zephyr 依賴）
+├── west.yml                    # West manifest（Zephyr 依賴版本）
+│
+├── zephyr/
+│   └── module.yml              # Zephyr 模組描述；指向 cmake/zephyr_serial/
+│
+├── cmake/
+│   └── zephyr_serial/
+│       └── CMakeLists.txt      # 將 uart_rt582.c + hosal_uart.c 加入 drivers__serial
 │
 ├── subsys/openthread/
 │   └── CMakeLists.txt          # OT core、mbedTLS、RUCI、RF 等所有 OT 相關 sources
@@ -323,29 +323,31 @@ zephyr-thread/
 │   └── main.c                  # RF init、PIB 設定、OT task 啟動、watchdog thread
 │
 ├── drivers/
-│   ├── serial/
-│   │   ├── uart_rt582.c        # Zephyr UART driver（HOSAL 封裝）
-│   │   ├── Kconfig             # CONFIG_UART_RT582
-│   │   └── CMakeLists.txt
-│   ├── hosal/rt582_hosal/
-│   │   ├── Inc/                # hosal_uart.h、hosal_rf.h 等
-│   │   └── Src/
-│   │       ├── hosal_uart.c    # HOSAL UART 實作
-│   │       ├── hosal_rf.c      # RF MCU 事件 thread（Zephyr k_thread）
-│   │       └── hosal_trng.c    # TRNG 封裝
-│   └── soc/rt582/
-│       ├── rt582_driver/       # SoC 暫存器/時鐘驅動（sysctrl、gpio、dma 等）
-│       ├── rt582_system/       # SystemInit（BBPLL → 64 MHz）
-│       └── rt582_crypto/       # AES、SHA256、ECJPAKE 等加密實作
+│   └── serial/
+│       ├── uart_rt582.c        # Zephyr UART driver（HOSAL 封裝）
+│       ├── Kconfig             # CONFIG_UART_RT582
+│       └── CMakeLists.txt
 │
 ├── sdk/                        # Vendored Rafael IoT SDK（僅原始碼，無預編譯 .a）
 │   └── components/
 │       ├── network/thread/     # OpenThread port（ot_radio.c、ot_uart.c 等）
+│       │   └── openthread_port/
+│       │       ├── Inc/        # openthread-core-rt582-zephyr-config.h 等
+│       │       └── Src/        # ot_radio.c、ot_uart.c、ot_alarm.c 等
 │       ├── network/ruci/       # RUCI 指令/事件
 │       ├── network/lmac15p4/   # IEEE 802.15.4 MAC
 │       ├── network/rt569-rf/   # RT569 RF MCU 驅動
 │       ├── network/rt569-fw/   # RT569 RF 韌體 blob
-│       └── utility/            # log、fsm、util_queue 等
+│       ├── network/thread/openthread/  # OpenThread 原始碼
+│       ├── utility/            # log、fsm、util_queue 等
+│       └── platform/           # SoC / HOSAL 平台驅動
+│           ├── hosal/rt582_hosal/
+│           │   ├── Inc/        # hosal_uart.h、hosal_rf.h、hosal_trng.h
+│           │   └── Src/        # hosal_uart.c、hosal_rf.c、hosal_trng.c
+│           └── soc/rt582/
+│               ├── rt582_driver/   # SoC 暫存器/時鐘驅動（sysctrl、gpio、dma 等）
+│               ├── rt582_system/   # SystemInit（BBPLL → 64 MHz）
+│               └── rt582_crypto/   # AES、SHA256、ECJPAKE 等加密實作
 │
 ├── boards/arm/rt582_evb/       # Board 定義（DTS、defconfig、Kconfig）
 ├── dts/arm/rafael/rt582.dtsi   # SoC DTS（Flash 1 MB、RAM 144 KB、UART0/1）
@@ -357,7 +359,7 @@ zephyr-thread/
 | 決策 | 原因 |
 |------|------|
 | 全部從原始碼編譯，無預編譯 `.a` | 消除工具鏈升級時的 ABI 不相容問題 |
-| `uart_rt582.c` 加至 `app` 而非 `drivers__serial` | Zephyr 空庫檢查在 `find_package` 內部執行，app 為唯一可靠的掛載點 |
+| `uart_rt582.c` 透過 Zephyr 模組加入 `drivers__serial` | `ZEPHYR_EXTRA_MODULES` 使模組 cmake 在正確時間點執行（`drivers__serial` 建立後、空庫檢查前） |
 | 排除 `soft_source_match_table.c` | `ot_radio.c` 已提供 hardware-backed src match via lmac15p4，避免符號衝突 |
 | PIB 常數透過 Kconfig 設定 | 調整 RF 參數只需改 `prj.conf`，不需動應用程式碼 |
 | Shell 停用（`CONFIG_SHELL=n`） | Shell 的 TX 中斷路徑與 `printk` polling 競爭，會導致輸出亂碼 |
