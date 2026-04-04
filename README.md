@@ -32,11 +32,13 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 
 | 工具 | 最低版本 | 安裝 |
 |------|---------|------|
-| Python | 3.12 | [python.org](https://www.python.org/) |
+| PowerShell | 7.0 | `winget install Microsoft.PowerShell` |
+| Python | 3.12 | `winget install Python.Python.3.12` — 安裝後重開 PowerShell |
 | west | 0.14 | `pip install west` |
-| CMake | 3.20 | [cmake.org](https://cmake.org/) 或 `pip install cmake` |
-| Ninja | 1.10 | [ninja-build.org](https://ninja-build.org/) |
-| Git | 任意 | [git-scm.com](https://git-scm.com/) |
+| CMake | 3.20 | `winget install Kitware.CMake` |
+| Ninja | 1.10 | `winget install Ninja-build.Ninja` |
+| Git | 任意 | `winget install Git.Git` |
+| 7-Zip | 任意 | `winget install 7zip.7zip` — 解壓縮 Zephyr SDK `.7z` 用 |
 | DTC | 1.4.6 | 含在 Zephyr SDK 內，不需另外安裝 |
 
 > 以下所有指令均在 **PowerShell 7+** 執行。
