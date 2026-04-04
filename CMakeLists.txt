@@ -5,6 +5,11 @@ set(SOC_ROOT     ${CMAKE_CURRENT_LIST_DIR})
 set(DTS_ROOT     ${CMAKE_CURRENT_LIST_DIR})
 set(KCONFIG_ROOT ${CMAKE_CURRENT_LIST_DIR}/Kconfig)
 
+# Register this repo as a Zephyr module so cmake/zephyr_serial/CMakeLists.txt
+# is add_subdirectory'd at the correct point in Zephyr's build (after
+# drivers__serial is created, before the empty-library check).
+list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR})
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt582_helloworld VERSION 1.0.0)
 
@@ -64,14 +69,7 @@ target_include_directories(app PRIVATE
 )
 
 # ── RT582 UART driver ─────────────────────────────────────────────────────────
-# uart_rt582.c is compiled as part of 'app' (not the Zephyr 'drivers__serial'
-# library) because Zephyr's empty-library check runs inside find_package() and
-# marks drivers__serial as EXCLUDE_FROM_ALL before our CMakeLists can add
-# sources to it. Setting ALLOW_EMPTY suppresses the resulting CMake warning.
-if(CONFIG_UART_RT582)
-    set_property(TARGET drivers__serial PROPERTY ALLOW_EMPTY 1)
-    target_sources(app PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/drivers/serial/uart_rt582.c
-        ${RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_uart.c
-    )
-endif()
+# uart_rt582.c + hosal_uart.c are added to drivers__serial via the Zephyr
+# module cmake at cmake/zephyr_serial/CMakeLists.txt (see zephyr/module.yml).
+# ZEPHYR_EXTRA_MODULES above registers this repo as a module so that cmake
+# runs at the correct point in Zephyr's build graph.
