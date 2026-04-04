@@ -86,8 +86,9 @@ jobs:
         env:
           ZEPHYR_BASE: ${{ github.workspace }}/zephyr
           ZEPHYR_TOOLCHAIN_VARIANT: zephyr
-          ZEPHYR_SDK_INSTALL_DIR: ${{ runner.home }}/zephyr-sdk
         run: |
+          # $HOME expands correctly in the shell; runner.home is not a valid GHA context.
+          export ZEPHYR_SDK_INSTALL_DIR="$HOME/zephyr-sdk"
           west build -p always -b rt582_evb -d build . \
             -- -DZephyr_DIR="$ZEPHYR_BASE/share/zephyr-package/cmake"
 
