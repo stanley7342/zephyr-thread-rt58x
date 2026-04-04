@@ -6,12 +6,12 @@ The SDK is vendored into `sdk/` — no external `RAFAEL_SDK_BASE` env var needed
 
 ## Build Command
 ```sh
-export ZEPHYR_BASE=/c/Users/Stanley/zephyrproject/zephyr
-export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
-export GNUARMEMB_TOOLCHAIN_PATH=/c/Users/Stanley/Rafael-IoT-SDK-Internal/toolchain/arm/Windows
-# Run from /c/Users/Stanley/zephyrproject (west workspace root)
-west build -p always -b rt582_evb /c/Users/Stanley/zephyr-thread
-# Binary output: zephyr-thread/build/zephyr/zephyr.bin
+export ZEPHYR_BASE=/c/Users/Stanley/zephyr
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1
+# Run from /c/Users/Stanley (west workspace root)
+west build -p always -b rt582_evb /c/Users/Stanley/zephyr-thread-rt58x
+# Binary output: build/zephyr/zephyr.bin
 ```
 
 ## Critical Rules (learned the hard way)
