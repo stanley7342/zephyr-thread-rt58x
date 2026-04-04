@@ -25,8 +25,8 @@ static char log_buf[CONFIG_LOG_LINE_BUF_SIZE] = {0};
 
 log_setting_t log_set = {NULL, CONFIG_LOG_MAX_LEVEL};
 
-static const char* LS[] = {"DEBUG", "INFO", "WARN", "ERROR"};
-static const char* LC[] = {"\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m"};
+static const char* LS[] __attribute__((unused)) = {"DEBUG", "INFO", "WARN", "ERROR"};
+static const char* LC[] __attribute__((unused)) = {"\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m"};
 
 static size_t log_strcpy(size_t cur_len, char* dst, const char* src) {
     const char* src_old = src;

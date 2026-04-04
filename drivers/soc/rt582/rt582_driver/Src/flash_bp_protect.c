@@ -78,14 +78,12 @@ static bool _bp_lookup(const flash_bp_def_t *tbl, size_t n, uint8_t bp, flash_bp
      FLASH_BP_PROTECT_LOGI("[bp_lookup] bp=0x%02X n=%u", bp, (unsigned)n);
 
     for (size_t i = 0; i < n; i++) {
-        uint8_t m = tbl[i].mask;
-        uint8_t v = tbl[i].value;
         if ( (bp & tbl[i].mask) == (tbl[i].value & tbl[i].mask) ) {
             if (tbl[i].start == 0u && tbl[i].end == 0u && tbl[i].mask != 0u) {
                 /* NONE entry encoded as start=end=0, size=0 */
 
  FLASH_BP_PROTECT_LOGI("[bp_lookup] HIT i=%u mask=0x%02X val=0x%02X desc=%s",
-                                   (unsigned)i, m, v, tbl[i].desc);
+                                   (unsigned)i, tbl[i].mask, tbl[i].value, tbl[i].desc);
                 info->start_addr  = 0;
                 info->end_addr    = 0;
                 info->size        = 0;

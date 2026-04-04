@@ -22,7 +22,7 @@ int get_random_number(uint32_t* p_buffer, uint32_t number) {
      * Please note this function is block mode. it will block about 4 ms ~ 6 ms
      * If you don't want the code block here, use interrupt mode.
      */
-    uint32_t temp,i;
+    uint32_t i;
     volatile uint32_t *ptr;
 
     for(i=0;i<number;i++)

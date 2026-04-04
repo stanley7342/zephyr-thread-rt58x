@@ -160,7 +160,6 @@ uint32_t rtc_disable_alarm(void) {
 
 uint32_t calculate_frequency_integer(uint32_t *freq)
 {
-    uint32_t i = 0;
     uint32_t caldiv;
     uint32_t R1 = 0;
 

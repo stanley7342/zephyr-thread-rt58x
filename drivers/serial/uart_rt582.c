@@ -31,11 +31,17 @@ typedef struct {
     uint8_t tail;
 } rx_ring_t;
 
+/* rx_ring_put is called from ISR; rx_ring_get / rx_ring_empty from thread context.
+ * __DMB() (data memory barrier) prevents the compiler and CPU from reordering
+ * the buf[] write before the tail update (put) or the buf[] read after the head
+ * check (get), ensuring the consumer always sees a consistent snapshot. */
+
 static inline void rx_ring_put(rx_ring_t *r, uint8_t c)
 {
     uint8_t next = (uint8_t)((r->tail + 1U) % RX_BUF_SIZE);
     if (next != r->head) {
         r->buf[r->tail] = c;
+        __DMB(); /* buf write must be visible before tail advances */
         r->tail = next;
     }
 }
@@ -43,6 +49,7 @@ static inline void rx_ring_put(rx_ring_t *r, uint8_t c)
 static inline int rx_ring_get(rx_ring_t *r, uint8_t *c)
 {
     if (r->head == r->tail) return -1;
+    __DMB(); /* tail load must complete before buf[] is read */
     *c = r->buf[r->head];
     r->head = (uint8_t)((r->head + 1U) % RX_BUF_SIZE);
     return 0;

@@ -27,7 +27,6 @@
 #include "openthread_port.h"
 #include "code_utils.h"
 #include "mac_frame.h"
-#include "soft_source_match_table.h"
 
 #include "lmac15p4.h"
 #include "util_list.h"
@@ -259,7 +258,6 @@ void otPlatRadioSetPanId(otInstance *aInstance, uint16_t aPanId)
 {
     OT_UNUSED_VARIABLE(aInstance);
     sPANID = aPanId;
-    utilsSoftSrcMatchSetPanId(aPanId);
     lmac15p4_address_filter_set(0, sPromiscuous, sShortAddress,
                                 sExtendAddr_0, sExtendAddr_1, sPANID,
                                 sCoordinator);

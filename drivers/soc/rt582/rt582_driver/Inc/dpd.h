@@ -57,6 +57,7 @@ extern uint32_t record_reset_cause_en;
 __STATIC_INLINE uint32_t get_all_reset_cause(uint32_t *value) {
     record_reset_cause_en = 1;
     *value = inp32((SYSCTRL_BASE + SYS_SCRATCH_OFFSET) + (5 << 2));
+    return *value;
 }
 
 /**

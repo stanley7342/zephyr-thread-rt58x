@@ -43,11 +43,13 @@ west build -p always -b rt582_evb /c/Users/Stanley/zephyr-thread
 ### OpenThread
 8. **`CONFIG_RF_FW_INCLUDE_PCI=TRUE`** must be defined when compiling `rf_common_init.c`
    from source (enables the RUCI/MAC firmware load path; guarded by `#if` in the source).
-9. **`mac_frame.cpp`** must use the pre-compiled object from `libopenthread_port.a`
-   (extracted via `cmake -E ar -x`). Compiling from source produces a `uint32_t` ABI
-   mismatch with `libopenthread-ftd.a`.
-10. **`--allow-multiple-definition`** is required because `ot_radio.c` and
-    `libopenthread-platform-utils-static.a` both define `soft_source_match_table` symbols.
+9. **`mac_frame.cpp`** is compiled from source (`openthread_port/utils/mac_frame.cpp`).
+   All TUs share the same toolchain so `uint32_t` ABI is consistent; no pre-compiled
+   object needed.
+10. **`soft_source_match_table.c` is excluded from the build.** `ot_radio.c` provides
+    hardware-backed `otPlatRadio*SrcMatch*` via `lmac15p4` directly and no longer calls
+    `utilsSoftSrcMatchSetPanId`; the duplicate symbols and `--allow-multiple-definition`
+    are gone.
 
 ## Project Structure
 ```
