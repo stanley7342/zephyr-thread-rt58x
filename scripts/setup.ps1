@@ -72,7 +72,7 @@ function Install-WingetPackage([string]$id, [string]$name) {
 
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 
-Write-Step "安裝必要工具（winget）"
+Write-Step "安裝必要工具（winget + Chocolatey）"
 
 Install-WingetPackage "Python.Python.3.12"   "Python 3.12"
 Install-WingetPackage "Kitware.CMake"         "CMake"
@@ -93,6 +93,28 @@ if (Test-Path "$sevenZipPath\7z.exe") {
     Write-Ok "7z 可用"
 } else {
     Write-Warning "找不到 7z.exe，SDK 安裝可能失敗"
+}
+
+# DTC — Zephyr SDK 1.0.1 Windows 版不含 DTC，需透過 Chocolatey 安裝
+if (Assert-Command "dtc") {
+    Write-Skip "dtc"
+} else {
+    if (-not (Assert-Command "choco")) {
+        Write-Host "    安裝 Chocolatey ..."
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol =
+            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+            'https://community.chocolatey.org/install.ps1'))
+        # 重讀 PATH
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    }
+    Write-Host "    安裝 dtc-msys2 ..."
+    choco install dtc-msys2 -y
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    Write-Ok "dtc 安裝完成"
 }
 
 # west

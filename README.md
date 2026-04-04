@@ -39,7 +39,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | Ninja | 1.10 | `winget install Ninja-build.Ninja` |
 | Git | 任意 | `winget install Git.Git` |
 | 7-Zip | 任意 | `winget install 7zip.7zip` — 解壓縮 Zephyr SDK `.7z` 用 |
-| DTC | 1.4.6 | 含在 Zephyr SDK 內，不需另外安裝 |
+| DTC | 1.4.6 | `choco install dtc-msys2` （需先安裝 [Chocolatey](https://chocolatey.org/install)） |
 
 > 以下所有指令均在 **PowerShell 7+** 執行。
 
