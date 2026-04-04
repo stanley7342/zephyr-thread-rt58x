@@ -100,7 +100,12 @@
       "Bash(mv /c/Users/Stanley/zephyr-thread/subsys/openthread/platform/*.h /c/Users/Stanley/zephyr-thread/sdk/components/network/thread/openthread_port/Inc/)",
       "Bash(mkdir -p /c/Users/Stanley/zephyr-thread/.claude/memory)",
       "Bash(cp /c/Users/Stanley/.claude/projects/c--Users-Stanley/memory/MEMORY.md /c/Users/Stanley/.claude/projects/c--Users-Stanley/memory/feedback_no_auto_commit.md /c/Users/Stanley/.claude/projects/c--Users-Stanley/memory/project_zephyr_thread_session.md /c/Users/Stanley/zephyr-thread/.claude/memory/)",
-      "Bash(cp /c/Users/Stanley/.claude/settings.json /c/Users/Stanley/zephyr-thread/.claude/settings.json)"
+      "Bash(cp /c/Users/Stanley/.claude/settings.json /c/Users/Stanley/zephyr-thread/.claude/settings.json)",
+      "Bash(export ZEPHYR_BASE=/c/Users/Stanley/zephyr)",
+      "Read(//c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1//**)",
+      "Bash(export ZEPHYR_TOOLCHAIN_VARIANT=zephyr)",
+      "Bash(export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1)",
+      "Bash(grep -v \"^$\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\Stanley\\stbuild\\src",
