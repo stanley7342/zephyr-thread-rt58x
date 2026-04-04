@@ -37,9 +37,9 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | CMake | 3.20 | [cmake.org](https://cmake.org/) 或 `pip install cmake` |
 | Ninja | 1.10 | [ninja-build.org](https://ninja-build.org/) |
 | Git | 任意 | [git-scm.com](https://git-scm.com/) |
-| DTC | 1.4.6 | Windows: 含在 Zephyr SDK 內；Linux: `apt install device-tree-compiler` |
+| DTC | 1.4.6 | 含在 Zephyr SDK 內，不需另外安裝 |
 
-> **Windows 注意**：建議使用 PowerShell 7 或 Git Bash。路徑使用正斜線（`/`）或雙反斜線（`\\`）。
+> 以下所有指令均在 **PowerShell 7+** 執行。
 
 ---
 
@@ -57,8 +57,8 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 
 ```powershell
 # 建立工作區目錄
-mkdir C:\zephyr-workspace
-cd C:\zephyr-workspace
+New-Item -ItemType Directory -Path C:\zephyr-workspace
+Set-Location C:\zephyr-workspace
 
 # Clone 本專案至 zephyr-thread/（名稱必須與 west.yml self.path 一致）
 git clone https://github.com/<your-org>/zephyr-thread-rt58x.git zephyr-thread
@@ -70,22 +70,21 @@ west init -l zephyr-thread
 west update
 
 # 安裝 Zephyr Python 依賴
-pip install -r zephyr/scripts/requirements-base.txt
+pip install -r zephyr\scripts\requirements-base.txt
 
 # 匯出 Zephyr CMake 套件（讓 find_package(Zephyr) 能找到）
 west zephyr-export
 ```
 
-> `west init -l` 讀取 `zephyr-thread/west.yml`，以它作為工作區 manifest，
-> 不再從遠端拉取額外的 manifest repo。
+> `west init -l` 讀取 `zephyr-thread\west.yml`，以它作為工作區 manifest，不再從遠端拉取額外的 manifest repo。
 
 ### 2.2 日後更新
 
 ```powershell
-cd C:\zephyr-workspace\zephyr-thread
+Set-Location C:\zephyr-workspace\zephyr-thread
 git pull
 
-cd C:\zephyr-workspace
+Set-Location C:\zephyr-workspace
 west update
 ```
 
@@ -95,47 +94,31 @@ west update
 
 Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`），推薦使用。
 
-### Windows
+1. 從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載：
+   - 選擇 `zephyr-sdk-<version>_windows-x86_64.7z`
 
-1. 從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載 Windows 安裝包：
-   - 選擇 `zephyr-sdk-<version>_windows-x86_64.7z`（或 minimal 版）
-
-2. 解壓縮至固定路徑（路徑不能有空格），例如：
+2. 用 7-Zip 解壓縮至固定路徑（路徑不能有空格），例如：
    ```
    C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\
    ```
    > 注意：7z 解壓後有一層同名子目錄，安裝目錄應為最內層含 `setup.cmd` 的資料夾。
 
-3. 執行安裝腳本（Windows CMD）：
-   ```cmd
-   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd
-   ```
-   或在 Git Bash：
-   ```bash
-   /c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1/setup.sh -c
+3. 執行安裝腳本：
+   ```powershell
+   & "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd"
    ```
 
-4. 確認 `arm-zephyr-eabi` 工具鏈存在：
+4. 確認工具鏈存在：
+   ```powershell
+   Test-Path "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\gnu\arm-zephyr-eabi\bin\arm-zephyr-eabi-gcc.exe"
+   # 應輸出 True
    ```
-   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\gnu\arm-zephyr-eabi\bin\arm-zephyr-eabi-gcc.exe
-   ```
-
-### Linux / macOS
-
-```bash
-SDK_VER=1.0.1
-wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/zephyr-sdk-${SDK_VER}_linux-x86_64.tar.xz
-tar xf zephyr-sdk-${SDK_VER}_linux-x86_64.tar.xz -C ~/
-~/zephyr-sdk-${SDK_VER}/setup.sh -t arm-zephyr-eabi -c
-```
 
 ---
 
 ## 4. 設定環境變數
 
-每次開啟新的終端機會話都需要設定以下變數。
-
-### PowerShell
+每次開啟新的 PowerShell 會話都需要設定以下變數。
 
 ```powershell
 $env:ZEPHYR_BASE              = "C:/zephyr-workspace/zephyr"
@@ -143,26 +126,18 @@ $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 $env:ZEPHYR_SDK_INSTALL_DIR   = "C:/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1"
 ```
 
-### Bash / Git Bash
-
-```bash
-export ZEPHYR_BASE=/c/zephyr-workspace/zephyr
-export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
-export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1
-```
-
-> **提示**：將這三行存成 `env.ps1`（PowerShell）或 `env.sh`（Bash）放在工作區根目錄，
-> 每次 `. .\env.ps1` 或 `source env.sh` 即可。
+> **提示**：將這三行存成 `C:\zephyr-workspace\env.ps1`，每次開啟新視窗執行 `. C:\zephyr-workspace\env.ps1` 即可。
 
 ---
 
 ## 5. 編譯
 
-所有指令從 **west 工作區根目錄** 執行（即 `C:\zephyr-workspace`）。
+所有指令從 **west 工作區根目錄** 執行（`C:\zephyr-workspace`）。
 
 ### Clean build（推薦，首次或清除快取）
 
 ```powershell
+Set-Location C:\zephyr-workspace
 west build -p always -b rt582_evb zephyr-thread --build-dir zephyr-thread/build
 ```
 
@@ -203,33 +178,33 @@ GND          ───── GND
 
 **啟動 OpenOCD server（終端機 1）：**
 
-```bash
-OPENOCD=C:/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
+```powershell
+$OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
 
-"$OPENOCD/bin/win/openocd.exe" \
-  -s "$OPENOCD/script" \
-  -f interface/cmsis-dap.cfg \
+& "$OPENOCD\bin\win\openocd.exe" `
+  -s "$OPENOCD\script" `
+  -f interface/cmsis-dap.cfg `
   -f target/rt58x.cfg
 ```
 
 **燒錄並重置（終端機 2）：**
 
-```bash
-OPENOCD=C:/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD
-BIN=C:/zephyr-workspace/zephyr-thread/build/zephyr/zephyr.bin
+```powershell
+$OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
+$BIN     = "C:\zephyr-workspace\zephyr-thread\build\zephyr\zephyr.bin"
 
-"$OPENOCD/bin/win/openocd.exe" \
-  -s "$OPENOCD/script" \
-  -f interface/cmsis-dap.cfg \
-  -f target/rt58x.cfg \
-  -c "init; halt; flash write_image erase \"$BIN\" 0x0; reset run; exit"
+& "$OPENOCD\bin\win\openocd.exe" `
+  -s "$OPENOCD\script" `
+  -f interface/cmsis-dap.cfg `
+  -f target/rt58x.cfg `
+  -c "init; halt; flash write_image erase `"$BIN`" 0x0; reset run; exit"
 ```
 
 ---
 
 ## 7. 驗證 — 序列終端機
 
-以 **115200 baud、8N1、無 flow control** 開啟序列終端機（PuTTY、Tera Term、minicom）。
+以 **115200 baud、8N1、無 flow control** 開啟序列終端機（PuTTY、Tera Term）。
 
 Reset 後應看到：
 
@@ -288,8 +263,9 @@ Done
 
 | 症狀 | 可能原因 | 解法 |
 |------|---------|------|
-| `find_package(Zephyr)` 失敗 | `ZEPHYR_BASE` 未設定或路徑錯誤 | 確認 `$env:ZEPHYR_BASE` 指向正確的 `zephyr/` 目錄 |
-| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `ZEPHYR_TOOLCHAIN_VARIANT=zephyr` 且 `ZEPHYR_SDK_INSTALL_DIR` 指向含 `gnu/` 的目錄 |
+| `find_package(Zephyr)` 失敗 | `ZEPHYR_BASE` 未設定或路徑錯誤 | 確認 `$env:ZEPHYR_BASE` 指向正確的 `zephyr\` 目錄 |
+| `Could NOT find Python3: Found unsuitable version` | Python 版本不足 | 確認 Python ≥ 3.12（`python --version`） |
+| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `$env:ZEPHYR_TOOLCHAIN_VARIANT` 與 `$env:ZEPHYR_SDK_INSTALL_DIR` 已設定 |
 | `west update` 失敗 | revision 在遠端不存在 | 確認 `west.yml` 中的 `revision` 是有效的 tag 或 commit |
 | 完全沒有 UART 輸出 | Binary 燒錄至錯誤位址 | 燒錄至 **0x0**，不是 `0x8000` |
 | `printk` 輸出後系統卡死 | 從 ISR 呼叫 `printk`（spinlock 死鎖） | 使用 `k_work_submit` 延後到 thread context |
