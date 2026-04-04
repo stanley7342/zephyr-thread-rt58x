@@ -13,6 +13,33 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt582_helloworld VERSION 1.0.0)
 
+# ── Build metadata ────────────────────────────────────────────────────────────
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE BUILD_GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT BUILD_GIT_HASH)
+    set(BUILD_GIT_HASH "unknown")
+endif()
+
+execute_process(
+    COMMAND git status --porcelain
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_DIRTY_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(GIT_DIRTY_OUTPUT)
+    string(APPEND BUILD_GIT_HASH "+dirty")
+endif()
+
+target_compile_definitions(app PRIVATE
+    BUILD_GIT_HASH="${BUILD_GIT_HASH}"
+)
+
 # Rafael IoT SDK vendored into sdk/.
 set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/sdk)
 set(RT582_PLATFORM ${RAFAEL_SDK}/components/platform)
