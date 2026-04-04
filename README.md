@@ -105,8 +105,9 @@ Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`），推薦使用。
    ```
    > 注意：7z 解壓後有一層同名子目錄，安裝目錄應為最內層含 `setup.cmd` 的資料夾。
 
-3. 執行安裝腳本：
+3. 執行安裝腳本（`setup.cmd` 需要 `7z` 在 PATH）：
    ```powershell
+   $env:PATH += ";C:\Program Files\7-Zip"
    & "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd"
    ```
 
