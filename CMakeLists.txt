@@ -8,9 +8,9 @@ set(KCONFIG_ROOT ${CMAKE_CURRENT_LIST_DIR}/Kconfig)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt582_helloworld VERSION 1.0.0)
 
-# Rafael IoT SDK vendored into sdk/ — pre-built libs in sdk/lib are no longer used.
-# All platform code is compiled from source under drivers/.
+# Rafael IoT SDK vendored into sdk/.
 set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/sdk)
+set(RT582_PLATFORM ${RAFAEL_SDK}/components/platform)
 
 # Application source
 target_sources(app PRIVATE src/main.c)
@@ -24,8 +24,8 @@ endif()
 # Replaces librt582_system.a + librt582_driver.a.
 # Excludes uart_drv.c / uart_retarget.c (UART handled via hosal_uart.c + uart_rt582.c).
 # Excludes dwt.c (may conflict with Zephyr cycle-counter support).
-set(RT582_DRV_SRC ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/rt582/rt582_driver/Src)
-set(RT582_SYS_SRC ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/rt582/rt582_system/Src)
+set(RT582_DRV_SRC ${RT582_PLATFORM}/soc/rt582/rt582_driver/Src)
+set(RT582_SYS_SRC ${RT582_PLATFORM}/soc/rt582/rt582_system/Src)
 
 # system_mcu.c uses SET_SYS_CLK and CHIP_TYPE at compile time.
 # SET_SYS_CLK=SYS_CLK_64MHZ=2 → SystemInit configures BBPLL to 64 MHz.
@@ -58,9 +58,9 @@ target_sources(app PRIVATE
 )
 
 target_include_directories(app PRIVATE
-    drivers/soc/rt582/rt582_driver/Inc
-    drivers/soc/rt582/rt582_system/Include
-    drivers/hosal/rt582_hosal/Inc
+    ${RT582_PLATFORM}/soc/rt582/rt582_driver/Inc
+    ${RT582_PLATFORM}/soc/rt582/rt582_system/Include
+    ${RT582_PLATFORM}/hosal/rt582_hosal/Inc
 )
 
 # ── RT582 UART driver ─────────────────────────────────────────────────────────
@@ -72,6 +72,6 @@ if(CONFIG_UART_RT582)
     set_property(TARGET drivers__serial PROPERTY ALLOW_EMPTY 1)
     target_sources(app PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/drivers/serial/uart_rt582.c
-        ${CMAKE_CURRENT_LIST_DIR}/drivers/hosal/rt582_hosal/Src/hosal_uart.c
+        ${RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_uart.c
     )
 endif()

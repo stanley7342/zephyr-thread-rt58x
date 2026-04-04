@@ -105,7 +105,8 @@
       "Read(//c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1//**)",
       "Bash(export ZEPHYR_TOOLCHAIN_VARIANT=zephyr)",
       "Bash(export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(git mv:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Stanley\\stbuild\\src",

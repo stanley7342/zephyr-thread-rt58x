@@ -7,6 +7,6 @@ zephyr_sources(soc.c)
 
 # Platform drivers are compiled from source under drivers/ (no pre-built .a needed).
 zephyr_include_directories(
-    ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_driver/Inc
-    ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_system/Include
+    ${CMAKE_SOURCE_DIR}/sdk/components/platform/soc/rt582/rt582_driver/Inc
+    ${CMAKE_SOURCE_DIR}/sdk/components/platform/soc/rt582/rt582_system/Include
 )

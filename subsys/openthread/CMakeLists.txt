@@ -10,11 +10,11 @@ set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt582)
 set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt582)
 set(RUCI_INC      ${RAFAEL_SDK}/components/network/ruci/Inc)
 set(LMAC_INC      ${RAFAEL_SDK}/components/network/lmac15p4/Inc)
-set(RT582_DRV_INC ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_driver/Inc)
-set(RT582_SYS_INC ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_system/Include)
-set(HOSAL_INC     ${CMAKE_SOURCE_DIR}/drivers/hosal/rt582_hosal/Inc)
-set(RT582_CRYPTO_INC ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_crypto/Inc)
-set(RT582_CRYPTO_SRC ${CMAKE_SOURCE_DIR}/drivers/soc/rt582/rt582_crypto)
+set(RT582_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_driver/Inc)
+set(RT582_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_system/Include)
+set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Inc)
+set(RT582_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_crypto/Inc)
+set(RT582_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_crypto)
 set(UTIL_INC      ${RAFAEL_SDK}/components/utility/utility/Inc)
 set(LOG_INC       ${RAFAEL_SDK}/components/utility/log)
 set(MBEDTLS_INC   ${OT_ROOT}/third_party/mbedtls/repo/include)
@@ -60,8 +60,8 @@ target_sources(app PRIVATE
 
     # LMAC + RF MCU
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
-    ${CMAKE_SOURCE_DIR}/drivers/hosal/rt582_hosal/Src/hosal_rf.c
-    ${CMAKE_SOURCE_DIR}/drivers/hosal/rt582_hosal/Src/hosal_trng.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_rf.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_trng.c
     ${RT569_RF_DIR}/Src/rf_mcu.c
     ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
     ${RT569_RF_DIR}/Src/rf_common_init.c
