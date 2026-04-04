@@ -45,6 +45,31 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 
 ---
 
+## 快速開始（自動化腳本）
+
+若不想手動執行第 2–5 節，可使用 `scripts\setup.ps1` 一鍵完成所有步驟：
+
+```powershell
+# 1. Clone 本專案
+git clone https://github.com/<your-org>/zephyr-thread-rt58x.git
+Set-Location zephyr-thread-rt58x
+
+# 2. 執行安裝腳本（需要系統管理員權限安裝 winget 套件）
+.\scripts\setup.ps1
+
+# 可選：安裝完成後直接編譯驗證
+.\scripts\setup.ps1 -Build
+
+# 可選：自訂工作區與 SDK 路徑
+.\scripts\setup.ps1 -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+```
+
+腳本完成後會產生 `C:\zephyr-workspace\env.ps1`，之後每次開啟新 PowerShell 執行 `. C:\zephyr-workspace\env.ps1` 即可載入環境。
+
+> 若想了解每個步驟的細節，繼續閱讀以下章節。
+
+---
+
 ## 2. Clone 與 West 工作區設定
 
 本專案使用 **west** 管理 Zephyr 依賴。工作區結構如下：
