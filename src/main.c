@@ -9,6 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include "tprintk.h"
 
 #include <openthread/cli.h>
 #include <openthread/instance.h>
@@ -69,15 +70,15 @@ int main(void)
                     2, 0, K_NO_WAIT);
     k_thread_name_set(&wdog_thread_data, "wdog");
 
-    printk("[MAIN] wdog started\n");
+    tprintk("[MAIN] wdog started\n");
 
-    printk("[RF] hosal_rf_init...\n");
+    tprintk("[RF] hosal_rf_init...\n");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
-    printk("[RF] hosal_rf_init done\n");
+    tprintk("[RF] hosal_rf_init done\n");
 
-    printk("[RF] lmac15p4_init...\n");
+    tprintk("[RF] lmac15p4_init...\n");
     lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
-    printk("[RF] lmac15p4_init done\n");
+    tprintk("[RF] lmac15p4_init done\n");
 
     lmac15p4_phy_pib_set(PHY_PIB_TURNAROUND_TIMER, PHY_PIB_CCA_DETECT_MODE,
                          PHY_PIB_CCA_THRESHOLD, PHY_PIB_CCA_DETECTED_TIME);
@@ -86,10 +87,10 @@ int main(void)
                          MAC_PIB_MAC_MAX_CSMACA_BACKOFFS,
                          MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME,
                          MAC_PIB_MAC_MAX_FRAME_RETRIES, MAC_PIB_MAC_MIN_BE);
-    printk("[RF] PIB set done\n");
+    tprintk("[RF] PIB set done\n");
 
     otrStart();
-    printk("OpenThread FTD task started.\n");
+    tprintk("OpenThread FTD task started.\n");
 
     return 0;
 }
