@@ -31,6 +31,7 @@
 #include "lmac15p4.h"
 #include "util_list.h"
 #include "flashctl.h"
+#include "tprintk.h"
 
 /* ── Constants ───────────────────────────────────────────────────────────── */
 #define CCA_THRESHOLD_DEFAULT       85

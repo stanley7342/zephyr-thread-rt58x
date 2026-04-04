@@ -1,16 +1,16 @@
 #pragma once
 
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
-
 /*
- * tprintk — printk with millisecond uptime timestamp
+ * tprintk.h — redefine printk to prepend millisecond uptime timestamp.
  *
- * Output format:  [  1234] [MAIN] message
- *                  ^^^^^^^
- *                  k_uptime_get32() — ms since boot (wraps ~49 days)
+ * Include AFTER <zephyr/kernel.h> (or any header that pulls it in).
+ * k_uptime_get_32() must already be declared.
  *
- * RULE: same as printk — never call from ISR context.
+ * Output format:  [  1234] [TAG] message
+ *
+ * To emit raw output (no timestamp) at a specific call site, write:
+ *   (printk)("raw line\n");   <- parentheses bypass the macro
  */
-#define tprintk(fmt, ...) \
-    printk("[%7u] " fmt, k_uptime_get_32(), ##__VA_ARGS__)
+#undef printk
+#define printk(fmt, ...) \
+    (printk)("[%7u] " fmt, k_uptime_get_32(), ##__VA_ARGS__)

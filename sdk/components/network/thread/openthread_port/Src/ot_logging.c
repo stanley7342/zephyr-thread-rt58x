@@ -12,6 +12,7 @@
 
 #include <openthread/config.h>
 #include <openthread/platform/logging.h>
+#include "tprintk.h"
 
 void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion,
                const char *aFormat, ...)

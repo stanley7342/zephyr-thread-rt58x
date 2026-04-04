@@ -32,6 +32,7 @@
 void otPlatUartSendDone(void) {}
 
 #include "openthread_port.h"
+#include "tprintk.h"
 
 /* ── UART device ─────────────────────────────────────────────────────────── *
  * Reuse UART0 which is already the Zephyr console (uart_rt582 driver).     */
@@ -129,7 +130,7 @@ otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
     if (!ot_uart_dev || !device_is_ready(ot_uart_dev)) {
         for (uint16_t i = 0; i < aBufLength; i++) {
-            printk("%c", aBuf[i]);
+            (printk)("%c", aBuf[i]);  /* raw: CLI data, no timestamp */
         }
         otPlatUartSendDone();
         return OT_ERROR_NONE;

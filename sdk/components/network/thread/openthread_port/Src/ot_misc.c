@@ -11,6 +11,7 @@
 
 #include "mcu.h"
 #include "wdt.h"
+#include "tprintk.h"
 
 #define ms_sec(N) ((N) * 1000)
 

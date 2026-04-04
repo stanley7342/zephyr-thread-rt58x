@@ -24,6 +24,7 @@
 #include <openthread/tasklet.h>
 
 #include "openthread_port.h"
+#include "tprintk.h"
 
 /* Forward declaration — defined in ot_uart.c */
 extern otError otPlatUartEnable(void);

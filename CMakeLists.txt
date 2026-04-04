@@ -40,6 +40,9 @@ target_compile_definitions(app PRIVATE
     BUILD_GIT_HASH="${BUILD_GIT_HASH}"
 )
 
+# Make tprintk.h findable by SDK source files via #include "tprintk.h"
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 # Rafael IoT SDK vendored into sdk/.
 set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/sdk)
 set(RT582_PLATFORM ${RAFAEL_SDK}/components/platform)
