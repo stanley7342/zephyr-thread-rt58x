@@ -3,3 +3,4 @@ build/
 *.elf
 *.hex
 *.map
+.claude/settings.json

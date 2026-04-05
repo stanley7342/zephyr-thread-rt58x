@@ -41,25 +41,26 @@ ok "Homebrew：$(brew --version | head -1)"
 step "檢查並安裝必要工具"
 
 declare -A BREW_PKGS=(
+    ["wget"]="wget"
     ["git"]="Git"
     ["cmake"]="CMake"
     ["ninja"]="Ninja"
     ["python@3.12"]="Python 3.12"
-    ["wget"]="wget"
     ["xz"]="xz"
 )
-BREW_ORDER=(git cmake ninja "python@3.12" wget xz)
+BREW_ORDER=(wget git cmake ninja "python@3.12" xz)
 TO_INSTALL=()
 
-printf "    %-20s  %-20s  %s\n" "套件" "brew 名稱" "狀態"
-printf "    %-20s  %-20s  %s\n" "--------------------" "--------------------" "------"
+printf "    %-20s  %-20s  %-20s  %s\n" "Package" "brew name" "Version" "Status"
+printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in "${BREW_ORDER[@]}"; do
     name="${BREW_PKGS[$pkg]}"
     if brew list --formula 2>/dev/null | grep -q "^${pkg%%@*}$"; then
-        printf "    %-20s  %-20s  \033[90m已安裝\033[0m\n" "$name" "$pkg"
+        ver="$(brew list --versions "${pkg%%@*}" 2>/dev/null | awk '{print $2}')"
+        printf "    %-20s  %-20s  %-16s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
     else
-        printf "    %-20s  %-20s  \033[33m待安裝\033[0m\n" "$name" "$pkg"
+        printf "    %-20s  %-20s  %-16s  \033[33m待安裝\033[0m\n" "$name" "$pkg" "-"
         TO_INSTALL+=("$pkg")
     fi
 done
@@ -77,9 +78,21 @@ PYTHON3="$(brew --prefix python@3.12)/bin/python3.12"
 [[ -f "$PYTHON3" ]] || PYTHON3="$(command -v python3.12 2>/dev/null || command -v python3)"
 ok "Python：$PYTHON3 ($($PYTHON3 --version))"
 
-# ── 步驟 2：west ──────────────────────────────────────────────────────────────
-step "安裝 west"
-"$PYTHON3" -m pip install --quiet west
+# ── 步驟 2：建立 venv 並安裝 west ────────────────────────────────────────────
+step "建立 Python venv 並安裝 west"
+
+VENV_DIR="$HOME/.zephyr-venv"
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+    "$PYTHON3" -m venv "$VENV_DIR"
+    ok "venv 建立於 $VENV_DIR"
+else
+    skip "venv（$VENV_DIR）"
+fi
+
+source "$VENV_DIR/bin/activate"
+PYTHON3="$VENV_DIR/bin/python3"
+pip install --quiet --upgrade pip
+pip install --quiet west
 ok "west：$(west --version 2>/dev/null || echo 已安裝)"
 
 # ── 步驟 3：Zephyr SDK ────────────────────────────────────────────────────────
@@ -93,7 +106,8 @@ else
     SDK_VER="1.0.1"
     ARCH="$(uname -m)"
     [[ "$ARCH" == "arm64" ]] && ARCH="aarch64"
-    SDK_FILE="zephyr-sdk-${SDK_VER}_macos-${ARCH}.tar.xz"
+    # v1.0.1 bundle requires _gnu suffix
+    SDK_FILE="zephyr-sdk-${SDK_VER}_macos-${ARCH}_gnu.tar.xz"
     SDK_URL="https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/${SDK_FILE}"
     TMP="/tmp/${SDK_FILE}"
 
@@ -122,9 +136,12 @@ else
 
     mkdir -p "$(dirname "$SDK_DIR")"
     echo "    解壓縮 SDK ..."
-    tar -xf "$TMP" -C "$(dirname "$SDK_DIR")"
+    tar -xvf "$TMP" -C "$(dirname "$SDK_DIR")" | while IFS= read -r line; do
+        printf "\r    \033[90m%-72s\033[0m" "${line:0:72}"
+    done
+    echo ""
     echo "    執行 setup.sh ..."
-    bash "$SDK_SETUP" -c arm-zephyr-eabi
+    bash "$SDK_SETUP"
     ok "Zephyr SDK 安裝完成"
 fi
 
@@ -159,21 +176,19 @@ fi
 
 # ── 步驟 5：Python 依賴 ───────────────────────────────────────────────────────
 step "安裝 Zephyr Python 依賴"
-"$PYTHON3" -m pip install --quiet --upgrade pip
-"$PYTHON3" -m pip install --quiet -r "$REQ"
+pip install --quiet -r "$REQ"
 ok "Python 依賴安裝完成"
 
 # ── 步驟 6：產生 env.sh ───────────────────────────────────────────────────────
 step "產生 $WORKSPACE/env.sh"
 
 ENV_SH="$WORKSPACE/env.sh"
-BREW_PYTHON_BIN="$(brew --prefix python@3.12)/bin"
 cat > "$ENV_SH" <<EOF
 # Zephyr 環境變數 — 每次開啟新 shell 執行: source $ENV_SH
+source "$VENV_DIR/bin/activate"
 export ZEPHYR_BASE="$ZEPHYR_DIR"
 export ZEPHYR_TOOLCHAIN_VARIANT="zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
-export PATH="${BREW_PYTHON_BIN}:\$PATH"
 
 echo "Zephyr 環境已載入（ZEPHYR_BASE=\$ZEPHYR_BASE）"
 EOF

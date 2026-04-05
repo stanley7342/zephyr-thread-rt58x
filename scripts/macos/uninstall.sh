@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # RT582-EVB Zephyr + OpenThread — macOS 移除腳本
 #
-# 移除 install.sh 安裝的元件（SDK、.west、zephyr、west pip、env.sh）。
+# 移除 install.sh 安裝的元件（SDK、.west、zephyr、Python venv、env.sh）。
 # brew 安裝的套件不會自動移除。
 #
 # 用法：
@@ -31,7 +31,6 @@ C2=45
 
 yellow() { echo -e "\033[33m$*\033[0m"; }
 gray()   { echo -e "\033[90m$*\033[0m"; }
-green()  { echo -e "\033[32m$*\033[0m"; }
 
 print_row() {
     local name="$1" path="$2" status="$3" color="$4"
@@ -42,10 +41,12 @@ print_row() {
     esac
 }
 
+VENV_DIR="$HOME/.zephyr-venv"
+
 echo ""
 echo -e "\033[33m移除 Zephyr 開發環境（macOS）\033[0m"
 echo ""
-printf "    %-${C1}s  %-${C2}s  %s\n" "項目" "路徑 / 套件" "狀態"
+printf "    %-${C1}s  %-${C2}s  %s\n" "Item" "Path / Package" "Status"
 printf "    %-${C1}s  %-${C2}s  %s\n" "$(printf '%0.s-' $(seq 1 $C1))" "$(printf '%0.s-' $(seq 1 $C2))" "------"
 
 declare -A DIR_ITEMS=(
@@ -53,8 +54,9 @@ declare -A DIR_ITEMS=(
     ["zephyr"]="$WORKSPACE/zephyr"
     ["env.sh"]="$WORKSPACE/env.sh"
     ["Zephyr SDK"]="$SDK_DIR"
+    ["Python venv"]="$VENV_DIR"
 )
-DIR_ORDER=(".west" "zephyr" "env.sh" "Zephyr SDK")
+DIR_ORDER=(".west" "zephyr" "env.sh" "Zephyr SDK" "Python venv")
 
 for name in "${DIR_ORDER[@]}"; do
     path="${DIR_ITEMS[$name]}"
@@ -65,16 +67,8 @@ for name in "${DIR_ORDER[@]}"; do
     fi
 done
 
-WEST_INSTALLED=0
-if python3 -m pip show west &>/dev/null 2>&1; then
-    WEST_INSTALLED=1
-    print_row "west (pip)" "pip uninstall west" "待移除" "yellow"
-else
-    print_row "west (pip)" "pip uninstall west" "未安裝" "gray"
-fi
-
 # brew 套件僅顯示，不自動移除
-BREW_PKGS=(git cmake ninja python@3.12 wget xz)
+BREW_PKGS=(cmake ninja python@3.12 xz)
 for pkg in "${BREW_PKGS[@]}"; do
     if brew list --formula 2>/dev/null | grep -q "^${pkg%%@*}$"; then
         print_row "$pkg (brew)" "$pkg" "已安裝（不自動移除）" "gray"
@@ -103,14 +97,8 @@ for name in "${DIR_ORDER[@]}"; do
     fi
 done
 
-if [[ $WEST_INSTALLED -eq 1 ]]; then
-    echo "  pip uninstall west ..."
-    python3 -m pip uninstall west -y --quiet
-    echo -e "  \033[32m[OK] west (pip) 已移除\033[0m"
-fi
-
 echo ""
 echo -e "\033[36m移除完成。\033[0m"
 echo ""
 echo "注意：brew 安裝的套件需手動移除："
-echo "  brew uninstall cmake ninja python@3.12 wget xz"
+echo "  brew uninstall cmake ninja python@3.12 xz"

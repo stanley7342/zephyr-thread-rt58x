@@ -1,18 +1,33 @@
-# CLAUDE.md — RT582 Zephyr + OpenThread Project
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 Zephyr RTOS port for the Rafael Microelectronics RT582 (Cortex-M3) with OpenThread FTD CLI.
 The SDK is vendored into `sdk/` — no external `RAFAEL_SDK_BASE` env var needed.
 
-## Build Command
+## Setup and Build
+
+**First-time setup (Linux/WSL):**
 ```sh
-export ZEPHYR_BASE=/c/Users/Stanley/zephyr
-export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
-export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1
-# Run from /c/Users/Stanley (west workspace root)
-west build -p always -b rt582_evb /c/Users/Stanley/zephyr-thread-rt58x
+bash scripts/linux/install.sh          # installs deps, Zephyr SDK, west workspace
+```
+This creates `~/zephyr-sdk-1.0.1`, a west workspace one level above this repo, and `../env.sh`.
+
+**Build:**
+```sh
+bash scripts/linux/build.sh            # clean build (default)
+bash scripts/linux/build.sh --incremental
 # Binary output: build/zephyr/zephyr.bin
 ```
+Equivalent scripts exist under `scripts/macos/` and `scripts/windows/` (PowerShell).
+
+**Manual build** (after `source ../env.sh` from the workspace root):
+```sh
+west build -p always -b rt582_evb .
+```
+
+**CI:** `.github/workflows/build.yml` — caches `zephyr/` and `modules/` keyed on `west.yml`.
 
 ## Critical Rules (learned the hard way)
 

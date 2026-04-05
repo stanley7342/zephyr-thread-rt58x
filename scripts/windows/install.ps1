@@ -92,21 +92,27 @@ $toInstall = @()
 $col1 = 14
 $col2 = 30
 
+$col3 = 16
+
 Write-Host ""
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "套件", "Package ID", "狀態")
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f "套件", "Package ID", "版本", "狀態")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f ("-" * $col1), ("-" * $col2), ("-" * $col3), "------")
 
 foreach ($pkg in $packages) {
-    $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
-    if ($installed) {
+    $installedLine = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
+    if ($installedLine) {
+        # winget list output: Name  Id  Version  Source
+        $ver = ($installedLine.Line -split '\s{2,}' | Select-Object -Index 2)
+        if (-not $ver) { $ver = "-" }
         $status = "已安裝"
         $color  = [ConsoleColor]::DarkGray
     } else {
+        $ver    = "-"
         $status = "待安裝"
         $color  = [ConsoleColor]::Yellow
         $toInstall += $pkg
     }
-    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $pkg.Name, $pkg.Id) -NoNewline
+    Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  " -f $pkg.Name, $pkg.Id, $ver) -NoNewline
     Write-Host $status -ForegroundColor $color
 }
 Write-Host ""
@@ -152,11 +158,20 @@ if (Test-Path "$sevenZipPath\7z.exe") {
     Write-Warning "找不到 7z.exe，SDK 安裝可能失敗"
 }
 
-# west
-Write-Host "    安裝 west（Python 3.12）..."
+# venv + west
+Write-Step "建立 Python venv 並安裝 west"
+$venvDir = Join-Path $env:USERPROFILE ".zephyr-venv"
+if (-not (Test-Path "$venvDir\Scripts\activate.ps1")) {
+    & $python312 -m venv $venvDir
+    Write-Ok "venv 建立於 $venvDir"
+} else {
+    Write-Skip "venv（$venvDir）"
+}
+$python312 = "$venvDir\Scripts\python.exe"
+& $python312 -m pip install --quiet --upgrade pip
 & $python312 -m pip install --quiet west
 if ($LASTEXITCODE -ne 0) { throw "west 安裝失敗" }
-Write-Ok "west 安裝完成"
+Write-Ok "west：$(& $python312 -m west --version 2>$null)"
 
 # ── 步驟 2：Zephyr SDK ────────────────────────────────────────────────────────
 
@@ -209,10 +224,13 @@ if (Test-Path $sdkSetup) {
     $sdkParent = Split-Path $SdkDir -Parent
     New-Item -ItemType Directory -Path $sdkParent -Force | Out-Null
     Write-Host "    解壓縮 SDK ..."
-    & 7z x $tmp -o"$sdkParent" -y | Out-Null
+    & 7z x $tmp -o"$sdkParent" -y -bb1 2>&1 | ForEach-Object {
+        Write-Host ("`r    " + $_.ToString().PadRight(72).Substring(0, 72)) -NoNewline
+    }
+    Write-Host ""
 
     Write-Host "    執行 setup.cmd ..."
-    & $sdkSetup
+    & cmd.exe /c "`"$sdkSetup`""
     Write-Ok "Zephyr SDK 安裝完成"
 }
 
@@ -234,9 +252,7 @@ if (-not (Test-Path $westConfig)) {
     $rc = $LASTEXITCODE
     Pop-Location
     if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
-    if (-not (Test-Path $westConfig)) {
-        throw "west init 成功但找不到 $westConfig"
-    }
+    if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
     Write-Ok "west init 完成"
 } else {
     Write-Skip "west init"
@@ -266,9 +282,7 @@ if (-not (Test-Path $req)) {
 # ── 步驟 4：Python 依賴 ───────────────────────────────────────────────────────
 
 Write-Step "安裝 Zephyr Python 依賴"
-
-& $python312 -m pip install --quiet --upgrade pip
-& $python312 -m pip install -r $req --quiet
+& $python312 -m pip install --quiet -r $req
 Write-Ok "Python 依賴安裝完成"
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
@@ -278,20 +292,15 @@ Write-Step "產生 $Workspace\env.ps1"
 $envPs1 = Join-Path $Workspace "env.ps1"
 $zephyrBase = $zephyrDir -replace "\\", "/"
 $sdkInstall = $SdkDir    -replace "\\", "/"
+$venvActivate = "$venvDir\Scripts\Activate.ps1"
 
 @"
 # Zephyr 環境變數 — 每次開啟新 PowerShell 執行: . $envPs1
+. "$venvActivate"
 `$env:ZEPHYR_BASE              = "$zephyrBase"
 `$env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:PATH                    += ";C:\Program Files\7-Zip"
-
-# west wrapper — 強制使用 Python 3.12，避免撿到 3.14 的壞 launcher
-`$python312 = (Get-Command python -ErrorAction SilentlyContinue)?.Source
-if (-not `$python312 -or `$python312 -notlike '*312*') {
-    `$python312 = 'C:\Users\Stanley\AppData\Local\Programs\Python\Python312\python.exe'
-}
-function west { & `$python312 -m west `@args }
 
 Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -ForegroundColor Green
 "@ | Set-Content $envPs1 -Encoding UTF8
@@ -306,7 +315,7 @@ $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 $env:ZEPHYR_SDK_INSTALL_DIR   = $sdkInstall
 $env:PATH = "C:\Program Files\CMake\bin;C:\Program Files\Ninja;C:\Program Files\7-Zip;" + $env:PATH
 
-Write-Ok "環境變數已設定"
+Write-Ok "環境變數已設定（venv 已啟用）"
 
 # ── 完成 ──────────────────────────────────────────────────────────────────────
 
