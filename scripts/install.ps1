@@ -42,8 +42,7 @@
 #>
 
 param(
-    [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Uninstall
+    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1"
 )
 
 # West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
@@ -53,53 +52,6 @@ $Workspace = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-# ── 移除模式 ─────────────────────────────────────────────────────────────────
-
-if ($Uninstall) {
-    Write-Host "`n移除 Zephyr 開發環境" -ForegroundColor Yellow
-    Write-Host "Workspace : $Workspace"
-    Write-Host "SDK       : $SdkDir"
-    Write-Host ""
-
-    $confirm = Read-Host "確認移除上述目錄與套件？(y/N)"
-    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-        Write-Host "已取消。" -ForegroundColor DarkGray
-        exit 0
-    }
-
-    # 1. west 工作區（含 junction 連結）與 SDK 目錄
-    # 使用 cmd /c rmdir 而非 Remove-Item：
-    #   Remove-Item -Recurse 會跟進 junction point 並在連結目標不存在時報錯；
-    #   rmdir /s /q 只刪除連結本身，不跟進，行為符合預期。
-    $sdkParent = Split-Path $SdkDir -Parent   # e.g. C:\zephyr-sdk-1.0.1
-    foreach ($dir in @($Workspace, $sdkParent)) {
-        if (Test-Path $dir) {
-            Write-Host "  刪除 $dir ..."
-            cmd /c rmdir /s /q `"$dir`"
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  [OK] $dir 已刪除" -ForegroundColor Green
-            } else {
-                Write-Warning "  刪除 $dir 失敗（exit $LASTEXITCODE），請手動刪除"
-            }
-        } else {
-            Write-Host "  [--] $dir 不存在，略過" -ForegroundColor DarkGray
-        }
-    }
-
-    # 2. pip 移除 west
-    if (Get-Command pip -ErrorAction SilentlyContinue) {
-        Write-Host "  pip uninstall west ..."
-        & $python312 -m pip uninstall west -y 2>$null
-        Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
-    }
-
-    Write-Host ""
-    Write-Host "移除完成。" -ForegroundColor Cyan
-    Write-Host "注意：Python / CMake / Ninja / Git / 7-Zip 等系統工具" -ForegroundColor Yellow
-    Write-Host "      為系統共用元件，請視需要透過 winget 或控制台手動移除。" -ForegroundColor Yellow
-    exit 0
-}
 
 # ── 輔助函式 ─────────────────────────────────────────────────────────────────
 
