@@ -317,9 +317,16 @@ Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -Foregrou
 Write-Ok "env.ps1 產生完成"
 Write-Host "    載入方式：. $envPs1" -ForegroundColor Yellow
 
-# ── 步驟 6：載入環境並選擇性編譯 ─────────────────────────────────────────────
+# ── 步驟 6：載入環境 ──────────────────────────────────────────────────────────
 
-. $envPs1
+$env:ZEPHYR_BASE              = $zephyrBase
+$env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
+$env:ZEPHYR_SDK_INSTALL_DIR   = $sdkInstall
+$env:PATH = "C:\Program Files\CMake\bin;C:\Program Files\Ninja;C:\Program Files\7-Zip;" + $env:PATH
+
+Write-Ok "環境變數已設定"
+
+# ── 步驟 7：選擇性編譯 ────────────────────────────────────────────────────────
 
 if ($Build) {
     Write-Step "west build（rt582_evb）"
