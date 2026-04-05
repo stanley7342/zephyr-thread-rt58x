@@ -6,3 +6,4 @@ build/
 .claude/settings.json
 tools/linux/openocd
 tools/macos/openocd
+.DS_Store
