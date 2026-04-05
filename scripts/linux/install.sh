@@ -67,10 +67,21 @@ fi
 PYTHON3="$(command -v python3)"
 ok "Python 3：$PYTHON3 ($($PYTHON3 --version))"
 
-# ── 步驟 2：west ──────────────────────────────────────────────────────────────
-step "安裝 west"
-"$PYTHON3" -m pip install --quiet --user west
-export PATH="$HOME/.local/bin:$PATH"
+# ── 步驟 2：建立 venv 並安裝 west ────────────────────────────────────────────
+step "建立 Python venv 並安裝 west"
+
+VENV_DIR="$HOME/.zephyr-venv"
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+    "$PYTHON3" -m venv "$VENV_DIR"
+    ok "venv 建立於 $VENV_DIR"
+else
+    skip "venv（$VENV_DIR）"
+fi
+
+source "$VENV_DIR/bin/activate"
+PYTHON3="$VENV_DIR/bin/python3"
+pip install --quiet --upgrade pip
+pip install --quiet west
 ok "west：$(west --version 2>/dev/null || echo 已安裝)"
 
 # ── 步驟 3：Zephyr SDK ────────────────────────────────────────────────────────
@@ -82,7 +93,8 @@ if [[ -f "$SDK_SETUP" ]]; then
     skip "Zephyr SDK"
 else
     SDK_VER="1.0.1"
-    SDK_FILE="zephyr-sdk-${SDK_VER}_linux-x86_64.tar.xz"
+    # Bundle tarball includes hosttools + all toolchains; _gnu suffix is required in v1.0.1+
+    SDK_FILE="zephyr-sdk-${SDK_VER}_linux-x86_64_gnu.tar.xz"
     SDK_URL="https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/${SDK_FILE}"
     TMP="/tmp/${SDK_FILE}"
 
@@ -115,7 +127,7 @@ else
     echo "    解壓縮 SDK ..."
     tar -xf "$TMP" -C "$(dirname "$SDK_DIR")"
     echo "    執行 setup.sh ..."
-    bash "$SDK_SETUP" -c arm-zephyr-eabi
+    bash "$SDK_SETUP"
     ok "Zephyr SDK 安裝完成"
 fi
 
@@ -150,8 +162,7 @@ fi
 
 # ── 步驟 5：Python 依賴 ───────────────────────────────────────────────────────
 step "安裝 Zephyr Python 依賴"
-"$PYTHON3" -m pip install --quiet --user --upgrade pip
-"$PYTHON3" -m pip install --quiet --user -r "$REQ"
+pip install --quiet -r "$REQ"
 ok "Python 依賴安裝完成"
 
 # ── 步驟 6：產生 env.sh ───────────────────────────────────────────────────────
@@ -160,10 +171,10 @@ step "產生 $WORKSPACE/env.sh"
 ENV_SH="$WORKSPACE/env.sh"
 cat > "$ENV_SH" <<EOF
 # Zephyr 環境變數 — 每次開啟新 shell 執行: source $ENV_SH
+source "$VENV_DIR/bin/activate"
 export ZEPHYR_BASE="$ZEPHYR_DIR"
 export ZEPHYR_TOOLCHAIN_VARIANT="zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
-export PATH="\$HOME/.local/bin:\$PATH"
 
 echo "Zephyr 環境已載入（ZEPHYR_BASE=\$ZEPHYR_BASE）"
 EOF
