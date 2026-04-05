@@ -41,16 +41,17 @@ declare -A PKG_NAMES=(
     [xz-utils]="xz-utils"
 )
 
-printf "    %-20s  %-20s  %-16s  %s\n" "套件" "apt 名稱" "版本" "狀態"
-printf "    %-20s  %-20s  %-16s  %s\n" "--------------------" "--------------------" "----------------" "------"
+printf "    %-20s  %-20s  %-20s  %s\n" "套件" "apt 名稱" "版本" "狀態"
+printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in wget git cmake ninja-build python3 python3-pip python3-venv xz-utils; do
     name="${PKG_NAMES[$pkg]}"
     if dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
         ver="$(dpkg -s "$pkg" 2>/dev/null | grep '^Version:' | awk '{print $2}')"
-        printf "    %-20s  %-20s  %-16s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
+        ver="${ver:0:20}"
+        printf "    %-20s  %-20s  %-20s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
     else
-        printf "    %-20s  %-20s  %-16s  \033[33m待安裝\033[0m\n" "$name" "$pkg" "-"
+        printf "    %-20s  %-20s  %-20s  \033[33m待安裝\033[0m\n" "$name" "$pkg" "-"
         PKGS+=("$pkg")
     fi
 done
