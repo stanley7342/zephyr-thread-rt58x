@@ -110,16 +110,18 @@ if (Assert-Command "dtc") {
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                     [System.Environment]::GetEnvironmentVariable("PATH", "User")
     }
-    # 找到 choco 可執行檔（優先用 PATH，其次用已知安裝路徑）
+    # 找到 choco 可執行檔（搜尋 PATH 及已知安裝目錄）
     $chocoExe = (Get-Command choco -ErrorAction SilentlyContinue)?.Source
     if (-not $chocoExe) {
-        $chocoExe = @(
-            "C:\ProgramData\chocolatey\bin\choco.exe",
-            "C:\ProgramData\chocolatey\choco.exe"
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        $chocoExe = Get-ChildItem "C:\ProgramData\chocolatey" -Filter choco.exe -Recurse `
+                        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
     }
     if (-not $chocoExe) {
-        Write-Error "找不到 choco，請重新開啟 PowerShell（系統管理員）後再執行此腳本"
+        # 最後嘗試：透過 cmd.exe WHERE 查找（使用系統 PATH）
+        $chocoExe = cmd /c where choco 2>$null | Select-Object -First 1
+    }
+    if (-not $chocoExe) {
+        Write-Error "找不到 choco.exe。請手動執行：`n  choco install dtc-msys2 -y`n或從 https://chocolatey.org/install 重新安裝 Chocolatey"
         exit 1
     }
     Write-Host "    安裝 dtc-msys2 ..."
