@@ -43,7 +43,6 @@
 
 param(
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Build,
     [switch] $Uninstall
 )
 
@@ -326,21 +325,6 @@ $env:PATH = "C:\Program Files\CMake\bin;C:\Program Files\Ninja;C:\Program Files\
 
 Write-Ok "環境變數已設定"
 
-# ── 步驟 7：選擇性編譯 ────────────────────────────────────────────────────────
-
-if ($Build) {
-    Write-Step "west build（rt582_evb）"
-    Push-Location $Workspace
-    & $python312 -m west build -p always -b rt582_evb $projectName --build-dir "$projectName/build"
-    $rc = $LASTEXITCODE
-    Pop-Location
-    if ($rc -ne 0) { throw "west build 失敗（exit $rc）" }
-    $bin = Join-Path $projectDir "build\zephyr\zephyr.bin"
-    if (Test-Path $bin) {
-        Write-Ok "編譯成功：$bin"
-    }
-}
-
 # ── 完成 ──────────────────────────────────────────────────────────────────────
 
 Write-Host ""
@@ -351,5 +335,5 @@ Write-Host ""
 Write-Host "每次開啟新 PowerShell 請先執行："
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "編譯指令（從 $Workspace）："
-Write-Host "  west build -p always -b rt582_evb $projectName --build-dir $projectName/build" -ForegroundColor Yellow
+Write-Host "編譯請使用："
+Write-Host "  .\scripts\build.ps1" -ForegroundColor Yellow
