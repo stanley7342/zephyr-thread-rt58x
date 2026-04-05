@@ -55,12 +55,31 @@ if (-not $usbipd) {
 }
 
 if (-not $usbipd) {
-    Write-Host "找不到 usbipd，請先安裝後重開 PowerShell：" -ForegroundColor Red
-    Write-Host "  winget install usbipd" -ForegroundColor Yellow
-    exit 1
+    Write-Host "    未找到 usbipd，正在安裝..." -ForegroundColor Yellow
+    winget install --id Microsoft.usbipd -e --silent --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "usbipd 安裝失敗，請手動執行：winget install usbipd" -ForegroundColor Red
+        exit 1
+    }
+    # 重新讀取 PATH
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH","User")
+    $candidates = @(
+        "$env:ProgramFiles\usbipd-win\usbipd.exe",
+        "$env:ProgramFiles\usbipd\usbipd.exe",
+        "${env:ProgramFiles(x86)}\usbipd-win\usbipd.exe"
+    )
+    $usbipd = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $usbipd) {
+        $usbipd = (Get-Command usbipd -ErrorAction SilentlyContinue)?.Source
+    }
+    if (-not $usbipd) {
+        Write-Host "usbipd 已安裝但找不到執行檔，請重新開啟 PowerShell 再執行本腳本。" -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Host "    [OK] usbipd 安裝完成" -ForegroundColor Green
 }
 
-# 之後用完整路徑呼叫，避免 PATH 問題
 Set-Alias -Name usbipd -Value $usbipd -Scope Script -Force
 
 # ── Detach 模式 ───────────────────────────────────────────────────────────────
