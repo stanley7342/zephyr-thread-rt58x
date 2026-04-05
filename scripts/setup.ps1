@@ -71,13 +71,20 @@ if ($Uninstall) {
         exit 0
     }
 
-    # 1. west 工作區（含 junction 連結）
+    # 1. west 工作區（含 junction 連結）與 SDK 目錄
+    # 使用 cmd /c rmdir 而非 Remove-Item：
+    #   Remove-Item -Recurse 會跟進 junction point 並在連結目標不存在時報錯；
+    #   rmdir /s /q 只刪除連結本身，不跟進，行為符合預期。
     $sdkParent = Split-Path $SdkDir -Parent   # e.g. C:\zephyr-sdk-1.0.1
     foreach ($dir in @($Workspace, $sdkParent)) {
         if (Test-Path $dir) {
             Write-Host "  刪除 $dir ..."
-            Remove-Item $dir -Recurse -Force
-            Write-Host "  [OK] $dir 已刪除" -ForegroundColor Green
+            cmd /c rmdir /s /q `"$dir`"
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  [OK] $dir 已刪除" -ForegroundColor Green
+            } else {
+                Write-Warning "  刪除 $dir 失敗（exit $LASTEXITCODE），請手動刪除"
+            }
         } else {
             Write-Host "  [--] $dir 不存在，略過" -ForegroundColor DarkGray
         }
