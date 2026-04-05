@@ -27,7 +27,7 @@
     移除所有由本腳本安裝的元件（SDK 目錄、.west 目錄、west pip 套件）。
     winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
 
-.PARAMETER Background
+.PARAMETER Bg
     在背景執行，log 輸出至 <workspace>\install.log。
     需在**系統管理員** PowerShell 內執行（背景模式無法自動提權）。
 
@@ -36,7 +36,7 @@
     .\scripts\install.ps1
 
     # 安裝（背景，log 寫入 install.log）
-    .\scripts\install.ps1 -Background
+    .\scripts\install.ps1 -Bg
 
     # 自訂 SDK 路徑
     .\scripts\install.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
@@ -44,7 +44,7 @@
 
 param(
     [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Background
+    [switch] $Bg
 )
 
 # West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
@@ -56,7 +56,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ── 背景模式 ──────────────────────────────────────────────────────────────────
-if ($Background) {
+if ($Bg) {
     $logFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "install.log"
     Write-Host "背景安裝中，log 輸出至：$logFile" -ForegroundColor Cyan
     $job = Start-Job -ScriptBlock {

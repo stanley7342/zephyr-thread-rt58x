@@ -16,7 +16,7 @@
 .PARAMETER SdkDir
     Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 
-.PARAMETER Background
+.PARAMETER Bg
     在背景執行（自動確認移除），log 輸出至 <workspace>\uninstall.log。
     需在**系統管理員** PowerShell 內執行。
 
@@ -24,12 +24,12 @@
     .\scripts\uninstall.ps1
 
     # 背景執行（自動確認，不互動）
-    .\scripts\uninstall.ps1 -Background
+    .\scripts\uninstall.ps1 -Bg
 #>
 
 param(
     [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Background
+    [switch] $Bg
 )
 
 Set-StrictMode -Version Latest
@@ -40,7 +40,7 @@ $Workspace  = Split-Path $projectDir -Parent
 $sdkParent  = Split-Path $SdkDir -Parent
 
 # ── 背景模式 ──────────────────────────────────────────────────────────────────
-if ($Background) {
+if ($Bg) {
     $logFile = Join-Path $Workspace "uninstall.log"
     Write-Host "背景移除中，log 輸出至：$logFile" -ForegroundColor Yellow
     $job = Start-Job -ScriptBlock {
