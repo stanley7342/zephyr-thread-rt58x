@@ -87,26 +87,45 @@ function Assert-Command([string]$cmd) {
     return [bool](Get-Command $cmd -ErrorAction SilentlyContinue)
 }
 
-function Install-WingetPackage([string]$id, [string]$name) {
-    if (-not (winget list --id $id -e --accept-source-agreements 2>$null |
-              Select-String $id)) {
-        Write-Host "    安裝 $name ..."
-        winget install --id $id -e --silent `
-            --accept-source-agreements --accept-package-agreements
+# ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
+
+Write-Step "檢查必要工具"
+
+# 套件清單
+$packages = @(
+    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
+    @{ Id = "Kitware.CMake";      Name = "CMake"       },
+    @{ Id = "Ninja-build.Ninja";  Name = "Ninja"       },
+    @{ Id = "Git.Git";            Name = "Git"         },
+    @{ Id = "7zip.7zip";          Name = "7-Zip"       }
+)
+
+# 先列出並檢查安裝狀態
+$toInstall = @()
+foreach ($pkg in $packages) {
+    $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
+    if ($installed) {
+        Write-Host "    [已安裝] $($pkg.Name)" -ForegroundColor DarkGray
     } else {
-        Write-Skip $name
+        Write-Host "    [待安裝] $($pkg.Name)" -ForegroundColor Yellow
+        $toInstall += $pkg
     }
 }
 
-# ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
-
-Write-Step "安裝必要工具（winget）"
-
-Install-WingetPackage "Python.Python.3.12"   "Python 3.12"
-Install-WingetPackage "Kitware.CMake"         "CMake"
-Install-WingetPackage "Ninja-build.Ninja"     "Ninja"
-Install-WingetPackage "Git.Git"               "Git"
-Install-WingetPackage "7zip.7zip"             "7-Zip"
+# 再逐一安裝缺少的套件
+if ($toInstall.Count -eq 0) {
+    Write-Ok "所有工具已安裝，略過"
+} else {
+    Write-Host ""
+    Write-Step "安裝缺少的工具（共 $($toInstall.Count) 項）"
+    foreach ($pkg in $toInstall) {
+        Write-Host "    安裝 $($pkg.Name) ..."
+        winget install --id $pkg.Id -e --silent `
+            --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { throw "$($pkg.Name) 安裝失敗" }
+        Write-Ok "$($pkg.Name) 安裝完成"
+    }
+}
 
 # 重新整理 PATH（winget 安裝後新路徑需要重讀）
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
