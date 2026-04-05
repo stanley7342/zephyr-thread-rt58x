@@ -10,7 +10,6 @@
       3. 建立 west 工作區並下載 Zephyr
       4. 安裝 Zephyr Python 依賴
       5. 產生 env.ps1（快速載入環境變數）
-      6. 執行 west build 驗證環境（可選）
 
     West workspace = 本專案的父目錄（west 規範）。
     例如：專案在 C:\Users\Stanley\zephyr-thread-rt58x
@@ -20,26 +19,19 @@
 .PARAMETER SdkDir
     Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 
-.PARAMETER Build
-    建置完成後執行 west build 驗證（需要約 5 分鐘）。
-
-.PARAMETER Uninstall
-    移除所有由本腳本安裝的元件（SDK 目錄、.west 目錄、west pip 套件）。
-    winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
-
 .PARAMETER Bg
     在背景執行，log 輸出至 <workspace>\install.log。
     需在**系統管理員** PowerShell 內執行（背景模式無法自動提權）。
 
 .EXAMPLE
     # 安裝（前景）
-    .\scripts\install.ps1
+    .\scripts\windows\install.ps1
 
     # 安裝（背景，log 寫入 install.log）
-    .\scripts\install.ps1 -Bg
+    .\scripts\windows\install.ps1 -Bg
 
     # 自訂 SDK 路徑
-    .\scripts\install.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+    .\scripts\windows\install.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 #>
 
 param(
@@ -50,14 +42,15 @@ param(
 # West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
 # 不可自訂：west init -l 會解析 junction/symlink 實體路徑，
 # 導致 .west 建立在錯誤位置。
-$Workspace = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+# 腳本位於 <project>\scripts\windows\ → 上三層才是 workspace
+$Workspace = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ── 背景模式 ──────────────────────────────────────────────────────────────────
 if ($Bg) {
-    $logFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "install.log"
+    $logFile = Join-Path $Workspace "install.log"
     Write-Host "背景安裝中，log 輸出至：$logFile" -ForegroundColor Cyan
     $job = Start-Job -ScriptBlock {
         param($script, $sdkDir)
@@ -83,15 +76,10 @@ function Write-Skip([string]$msg) {
     Write-Host "    [--] $msg (已存在，略過)" -ForegroundColor DarkGray
 }
 
-function Assert-Command([string]$cmd) {
-    return [bool](Get-Command $cmd -ErrorAction SilentlyContinue)
-}
-
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 
 Write-Step "檢查必要工具"
 
-# 套件清單
 $packages = @(
     @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
@@ -100,10 +88,9 @@ $packages = @(
     @{ Id = "7zip.7zip";          Name = "7-Zip"       }
 )
 
-# 先列出並檢查安裝狀態（表格顯示）
 $toInstall = @()
-$col1 = 14   # 套件名稱欄寬
-$col2 = 30   # Package ID 欄寬
+$col1 = 14
+$col2 = 30
 
 Write-Host ""
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "套件", "Package ID", "狀態")
@@ -124,7 +111,6 @@ foreach ($pkg in $packages) {
 }
 Write-Host ""
 
-# 再逐一安裝缺少的套件
 if ($toInstall.Count -eq 0) {
     Write-Ok "所有工具已安裝，略過"
 } else {
@@ -138,11 +124,11 @@ if ($toInstall.Count -eq 0) {
     }
 }
 
-# 重新整理 PATH（winget 安裝後新路徑需要重讀）
+# 重新整理 PATH
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("PATH", "User")
 
-# ── Python 3.12 實體路徑（winget 安裝後才能確定）────────────────────────────────
+# ── Python 3.12 實體路徑 ─────────────────────────────────────────────────────
 $python312 = @(
     "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
     "C:\Program Files\Python312\python.exe",
@@ -150,7 +136,6 @@ $python312 = @(
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if (-not $python312) {
-    # 最後手段：從 PATH 搜尋 python3.12
     $python312 = (Get-Command python3.12 -ErrorAction SilentlyContinue)?.Source
 }
 if (-not $python312) {
@@ -158,19 +143,16 @@ if (-not $python312) {
 }
 Write-Ok "Python 3.12：$python312"
 
-# 7z 需要明確加入（winget 安裝後不一定在 PATH）
+# 7z 路徑
 $sevenZipPath = "C:\Program Files\7-Zip"
 if (Test-Path "$sevenZipPath\7z.exe") {
-    if ($env:PATH -notlike "*$sevenZipPath*") {
-        $env:PATH += ";$sevenZipPath"
-    }
+    if ($env:PATH -notlike "*$sevenZipPath*") { $env:PATH += ";$sevenZipPath" }
     Write-Ok "7z 可用"
 } else {
     Write-Warning "找不到 7z.exe，SDK 安裝可能失敗"
 }
 
-
-# west — 明確使用 Python 3.12（避免撿到 3.14 或其他壞掉的 launcher）
+# west
 Write-Host "    安裝 west（Python 3.12）..."
 & $python312 -m pip install --quiet west
 if ($LASTEXITCODE -ne 0) { throw "west 安裝失敗" }
@@ -190,7 +172,6 @@ if (Test-Path $sdkSetup) {
     $sdkUrl  = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${sdkVer}/${sdkFile}"
     $tmp     = Join-Path $env:TEMP $sdkFile
 
-    # 讀取檔案前 6 個 magic bytes（避免 ReadAllBytes 讀整個大檔 OOM）
     function Test-7zMagic([string]$path) {
         try {
             $fs = [System.IO.File]::OpenRead($path)
@@ -204,7 +185,6 @@ if (Test-Path $sdkSetup) {
         } catch { return $false }
     }
 
-    # 若快取檔存在但不是有效的 7z（例如上次下載到 HTML），先刪除
     if ((Test-Path $tmp) -and -not (Test-7zMagic $tmp)) {
         Write-Warning "    快取檔 $tmp 不是有效的 7z，重新下載..."
         Remove-Item $tmp -Force
@@ -226,7 +206,7 @@ if (Test-Path $sdkSetup) {
         Write-Skip "SDK 壓縮檔（$tmp）"
     }
 
-    $sdkParent = Split-Path $SdkDir -Parent   # C:\zephyr-sdk-1.0.1
+    $sdkParent = Split-Path $SdkDir -Parent
     New-Item -ItemType Directory -Path $sdkParent -Force | Out-Null
     Write-Host "    解壓縮 SDK ..."
     & 7z x $tmp -o"$sdkParent" -y | Out-Null
@@ -240,15 +220,10 @@ if (Test-Path $sdkSetup) {
 
 Write-Step "建立 west 工作區 → $Workspace"
 
-# 本專案路徑（此腳本在 <project>\scripts\setup.ps1）
-# West 規範：manifest repo 的父目錄即為 workspace root
-#   專案  : $projectDir  (e.g. C:\Users\Stanley\zephyr-thread-rt58x)
-#   Workspace: $Workspace = Split-Path $projectDir -Parent  (e.g. C:\Users\Stanley)
-$projectDir  = Split-Path $PSScriptRoot -Parent
-$projectName = Split-Path $projectDir -Leaf          # e.g. zephyr-thread-rt58x
+$projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$projectName = Split-Path $projectDir -Leaf
 $westConfig  = Join-Path $Workspace ".west\config"
 
-# west 指令不能有 ZEPHYR_BASE 干擾
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
@@ -344,4 +319,4 @@ Write-Host "每次開啟新 PowerShell 請先執行："
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "編譯請使用："
-Write-Host "  .\scripts\build.ps1" -ForegroundColor Yellow
+Write-Host "  .\scripts\windows\build.ps1" -ForegroundColor Yellow

@@ -4,7 +4,7 @@
     RT582-EVB Zephyr + OpenThread — 移除腳本
 
 .DESCRIPTION
-    移除所有由 setup.ps1 安裝的元件：
+    移除所有由 install.ps1 安裝的元件：
       - .west 目錄（west workspace 設定）
       - zephyr 目錄（Zephyr 原始碼）
       - Zephyr SDK 目錄
@@ -21,22 +21,22 @@
     需在**系統管理員** PowerShell 內執行。
 
 .EXAMPLE
-    .\scripts\uninstall.ps1
+    .\scripts\windows\uninstall.ps1
 
     # 背景執行（自動確認，不互動）
-    .\scripts\uninstall.ps1 -Bg
+    .\scripts\windows\uninstall.ps1 -Bg
 #>
 
 param(
     [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
     [switch] $Bg,
-    [switch] $Force  # 跳過確認提示（-Bg 自動帶入）
+    [switch] $Force
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$projectDir = Split-Path $PSScriptRoot -Parent
+$projectDir = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $Workspace  = Split-Path $projectDir -Parent
 $sdkParent  = Split-Path $SdkDir -Parent
 
@@ -54,7 +54,6 @@ if ($Bg) {
     exit 0
 }
 
-# Python 3.12
 $python312 = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 
 $col1 = 14
@@ -68,7 +67,6 @@ Write-Host ""
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "項目", "路徑 / ID", "狀態")
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
 
-# 目錄 / 檔案項目
 $dirItems = @(
     @{ Name = ".west";      Path = (Join-Path $Workspace ".west") },
     @{ Name = "zephyr";     Path = (Join-Path $Workspace "zephyr") },
@@ -83,14 +81,12 @@ foreach ($item in $dirItems) {
     Write-Host $status -ForegroundColor $color
 }
 
-# west pip 套件
 $westInstalled = (Test-Path $python312) -and (& $python312 -m pip show west 2>$null)
 $westStatus = if ($westInstalled) { "待移除" } else { "未安裝" }
 $westColor  = if ($westInstalled) { [ConsoleColor]::Yellow } else { [ConsoleColor]::DarkGray }
 Write-Host ("    {0,-$col1}  {1,-$col2}  " -f "west (pip)", "pip uninstall west") -NoNewline
 Write-Host $westStatus -ForegroundColor $westColor
 
-# winget 套件
 $wingetPackages = @(
     @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
@@ -146,13 +142,75 @@ if ($westInstalled) {
     Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
 }
 
+# Registry uninstall fallback（適用 winget 回傳 1603 等 MSI 錯誤）
+function Invoke-RegistryUninstall([string]$displayNamePattern) {
+    $regPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($path in $regPaths) {
+        $entry = Get-ItemProperty $path -ErrorAction SilentlyContinue |
+                 Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $displayNamePattern } |
+                 Select-Object -First 1
+        if ($entry) {
+            $uninstStr = $entry.UninstallString
+            if (-not $uninstStr) { continue }
+            Write-Host "    [Registry] UninstallString: $uninstStr"
+            if ($uninstStr -match "MsiExec\.exe\s+[/\\][IXix]\{([^}]+)\}") {
+                $guid = $Matches[1]
+                $msiLog = Join-Path $env:TEMP "uninstall_$guid.log"
+                $proc = Start-Process "msiexec.exe" -ArgumentList "/x {$guid} /qn /norestart /L*V `"$msiLog`"" -Wait -PassThru -Verb RunAs
+                $ec = $proc.ExitCode
+                if ($ec -eq 3010 -or $ec -eq 0) { return 0 }
+                Write-Warning "    msiexec exit $ec，log：$msiLog"
+                $installLoc = $entry.InstallLocation
+                if ($installLoc -and (Test-Path $installLoc)) {
+                    Write-Host "    刪除目錄：$installLoc"
+                    cmd /c rmdir /s /q `"$installLoc`"
+                }
+                $regKey = $entry.PSPath
+                if ($regKey) {
+                    Write-Host "    移除 Registry key：$regKey"
+                    Remove-Item -Path $regKey -Force -ErrorAction SilentlyContinue
+                }
+                return 0
+            } else {
+                $parts = [System.Text.RegularExpressions.Regex]::Match($uninstStr, '^"([^"]+)"\s*(.*)')
+                if ($parts.Success) {
+                    $proc = Start-Process $parts.Groups[1].Value -ArgumentList ($parts.Groups[2].Value + " /S /silent /quiet") -Wait -NoNewWindow -PassThru
+                } else {
+                    $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstStr`"" -Wait -NoNewWindow -PassThru
+                }
+                return $proc.ExitCode
+            }
+        }
+    }
+    return -1
+}
+
 # 3. winget 套件
 foreach ($pkg in $wingetPackages) {
     $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
     if ($installed) {
         Write-Host "  移除 $($pkg.Name) ..."
         winget uninstall --id $pkg.Id -e --silent 2>$null
-        Write-Host "  [OK] $($pkg.Name) 已移除" -ForegroundColor Green
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] $($pkg.Name) 已移除" -ForegroundColor Green
+        } else {
+            Write-Warning "  winget 移除失敗（exit $LASTEXITCODE），嘗試 Registry fallback ..."
+            $rc = Invoke-RegistryUninstall "*$($pkg.Name)*"
+            if ($rc -ge 0) {
+                $stillInstalled = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
+                if (-not $stillInstalled) {
+                    Write-Host "  [OK] $($pkg.Name) 已移除（Registry fallback）" -ForegroundColor Green
+                } else {
+                    Write-Warning "  $($pkg.Name) 移除失敗，請手動移除：$($pkg.Id)"
+                }
+            } else {
+                Write-Warning "  $($pkg.Name) 在 Registry 找不到 UninstallString，請手動移除"
+            }
+        }
     }
 }
 

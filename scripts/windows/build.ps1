@@ -5,20 +5,17 @@
 
 .DESCRIPTION
     載入環境變數並執行 west build。
-    請先完成 setup.ps1 環境建置再使用本腳本。
-
-.PARAMETER Pristine
-    強制 clean build（等同 west build -p always）。預設：啟用。
+    請先完成 install.ps1 環境建置再使用本腳本。
 
 .PARAMETER NoPristine
     增量編譯（跳過 clean，加快重複編譯速度）。
 
 .EXAMPLE
     # Clean build（預設）
-    .\scripts\build.ps1
+    .\scripts\windows\build.ps1
 
     # 增量編譯
-    .\scripts\build.ps1 -NoPristine
+    .\scripts\windows\build.ps1 -NoPristine
 #>
 
 param(
@@ -28,19 +25,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$projectDir  = Split-Path $PSScriptRoot -Parent
+$projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectName = Split-Path $projectDir -Leaf
 $Workspace   = Split-Path $projectDir -Parent
 $envPs1      = Join-Path $Workspace "env.ps1"
 
 if (-not (Test-Path $envPs1)) {
-    throw "找不到 $envPs1，請先執行：`n  .\scripts\setup.ps1"
+    throw "找不到 $envPs1，請先執行：`n  .\scripts\windows\install.ps1"
 }
 
-# 載入環境
 . $envPs1
 
-# Python 3.12 實體路徑
 $python312 = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 if (-not (Test-Path $python312)) {
     throw "找不到 Python 3.12：$python312"

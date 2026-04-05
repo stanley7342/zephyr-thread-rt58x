@@ -16,7 +16,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 ## 目錄
 
 1. [Prerequisites](#1-prerequisites)
-2. [快速開始（自動化腳本）](#快速開始自動化腳本)
+2. [快速開始（自動化腳本）](#2-快速開始自動化腳本)
 3. [Clone 與 West 工作區設定](#3-clone-與-west-工作區設定)
 4. [安裝 Zephyr SDK Toolchain](#4-安裝-zephyr-sdk-toolchain)
 5. [設定環境變數](#5-設定環境變數)
@@ -31,197 +31,273 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 
 ## 1. Prerequisites
 
-| 工具 | 最低版本 | 安裝 |
+### Windows
+
+| 工具 | 最低版本 | 說明 |
 |------|---------|------|
 | PowerShell | 7.0 | `winget install Microsoft.PowerShell` |
-| Python | 3.12 | `winget install Python.Python.3.12` — 安裝後重開 PowerShell |
+| Python | 3.12 | `winget install Python.Python.3.12` |
 | west | 0.14 | `pip install west` |
 | CMake | 3.20 | `winget install Kitware.CMake` |
 | Ninja | 1.10 | `winget install Ninja-build.Ninja` |
 | Git | 任意 | `winget install Git.Git` |
-| 7-Zip | 任意 | `winget install 7zip.7zip` — 解壓縮 Zephyr SDK `.7z` 用 |
-| DTC | 1.4.6 | Zephyr SDK 1.0.1 Windows 版已內建，無需另外安裝 |
+| 7-Zip | 任意 | `winget install 7zip.7zip`（解壓縮 SDK `.7z` 用） |
+| DTC | — | Zephyr SDK 1.0.1 Windows 版已內建，無需另外安裝 |
 
-> 以下所有指令均在 **PowerShell 7+** 執行。
+### Linux / WSL
+
+```bash
+sudo apt-get install git cmake ninja-build python3 python3-pip wget xz-utils
+pip install west
+```
+
+### macOS
+
+```bash
+brew install git cmake ninja python@3.12 wget xz
+pip3 install west
+```
+
+> **注意**：macOS 需先安裝 [Homebrew](https://brew.sh)。  
+> **注意**：腳本會自動偵測 Apple Silicon（`aarch64`）或 Intel（`x86_64`）並下載對應 SDK。
 
 ---
 
-## 快速開始（自動化腳本）
+## 2. 快速開始（自動化腳本）
 
-三支腳本分別對應安裝、編譯、移除：
+三支腳本分別對應安裝、編譯、移除，依平台放在對應子目錄：
 
-| 腳本 | 說明 |
-|------|------|
-| `scripts\install.ps1` | 安裝工具、SDK、west 工作區、產生 `env.ps1` |
-| `scripts\build.ps1` | 載入環境並執行 `west build` |
-| `scripts\uninstall.ps1` | 移除 SDK、west 工作區、pip 套件 |
+```
+scripts/
+├── windows/   install.ps1  build.ps1  uninstall.ps1
+├── linux/     install.sh   build.sh   uninstall.sh
+└── macos/     install.sh   build.sh   uninstall.sh
+```
+
+### Windows（PowerShell 7+，以系統管理員執行）
 
 ```powershell
 # 1. Clone 本專案
 git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
 Set-Location zephyr-thread-rt58x
 
-# 2. 安裝環境（需要系統管理員權限）
-.\scripts\install.ps1
+# 2. 安裝環境
+.\scripts\windows\install.ps1
 
-# 3. 編譯
-.\scripts\build.ps1
+# 3. 編譯（Clean build）
+.\scripts\windows\build.ps1
 
-# 增量編譯（跳過 clean）
-.\scripts\build.ps1 -NoPristine
+# 增量編譯
+.\scripts\windows\build.ps1 -NoPristine
 ```
 
-腳本完成後會在**專案父目錄**產生 `env.ps1`，之後每次開啟新 PowerShell 執行 `. <workspace>\env.ps1` 即可載入環境。
+### Linux / WSL（Bash）
 
-### install.ps1 參數
+```bash
+git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
+cd zephyr-thread-rt58x
 
-| 參數 | 說明 |
+bash scripts/linux/install.sh
+bash scripts/linux/build.sh
+
+# 增量編譯
+bash scripts/linux/build.sh --incremental
+```
+
+### macOS（Bash）
+
+```bash
+git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
+cd zephyr-thread-rt58x
+
+bash scripts/macos/install.sh
+bash scripts/macos/build.sh
+
+# 增量編譯
+bash scripts/macos/build.sh --incremental
+```
+
+安裝完成後，**專案父目錄**會產生環境檔，之後每次開啟新 shell 執行一次即可載入環境：
+
+| 平台 | 指令 |
 |------|------|
-| `-SdkDir <路徑>` | Zephyr SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
+| Windows | `. <workspace>\env.ps1` |
+| Linux / macOS | `source <workspace>/env.sh` |
+
+### install 參數
+
+| 平台 | 參數 | 說明 |
+|------|------|------|
+| Windows | `-SdkDir <路徑>` | SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
+| Windows | `-Bg` | 背景執行，log 輸出至 `<workspace>\install.log` |
+| Linux/macOS | `--sdk-dir <路徑>` | SDK 安裝目錄（預設：`~/zephyr-sdk-1.0.1`） |
 
 ### 移除環境
 
 ```powershell
-.\scripts\uninstall.ps1
+# Windows
+.\scripts\windows\uninstall.ps1
 ```
 
-腳本會顯示即將刪除的目錄並要求確認（輸入 `y`），然後執行：
+```bash
+# Linux / WSL
+bash scripts/linux/uninstall.sh
+
+# macOS
+bash scripts/macos/uninstall.sh
+```
+
+腳本會顯示即將刪除的項目並要求確認（`y`）：
 
 | 項目 | 動作 |
 |------|------|
 | `.west` 目錄 | 整個目錄刪除 |
 | `zephyr`（Zephyr 原始碼） | 整個目錄刪除 |
-| `env.ps1` | 刪除 |
-| Zephyr SDK（`C:\zephyr-sdk-1.0.1`） | 整個目錄刪除 |
+| `env.ps1` / `env.sh` | 刪除 |
+| Zephyr SDK 目錄 | 整個目錄刪除 |
 | `west`（pip 套件） | `pip uninstall west` |
-| Python / CMake / Ninja / Git / 7-Zip | `winget uninstall` で自動移除 |
+| Python / CMake / Ninja 等系統工具 | Windows：`winget uninstall`（含 Registry fallback）；Linux/macOS：僅顯示，需手動移除 |
 
-> 若想重新安裝，重新執行 `.\scripts\install.ps1` 即可。
-
-> 若想了解每個步驟的細節，繼續閱讀以下章節。
+> 若想重新安裝，重新執行 `install` 腳本即可。
 
 ---
 
-## 2. Clone 與 West 工作區設定
+## 3. Clone 與 West 工作區設定
 
 本專案使用 **west** 管理 Zephyr 依賴。工作區結構如下：
 
 ```
-<workspace>/          ← west 工作區根目錄（例如 C:\zephyr-workspace）
-├── zephyr/           ← Zephyr 原始碼（west 自動下載，~500 MB）
-└── zephyr-thread/    ← 本專案（west.yml 中 self.path = "zephyr-thread"）
+<workspace>/              ← west 工作區根目錄（例如 ~/）
+├── zephyr/               ← Zephyr 原始碼（west 自動下載，~500 MB）
+└── zephyr-thread-rt58x/  ← 本專案（west manifest）
 ```
 
-### 2.1 初始化工作區（首次）
+### 3.1 初始化工作區（手動，首次）
 
-```powershell
-# 建立工作區目錄
-New-Item -ItemType Directory -Path C:\zephyr-workspace
-Set-Location C:\zephyr-workspace
-
-# Clone 本專案至 zephyr-thread/（名稱必須與 west.yml self.path 一致）
-git clone https://github.com/stanley7342/zephyr-thread-rt58x.git zephyr-thread
-
+```bash
 # 以本專案為 manifest 初始化 west 工作區
-west init -l zephyr-thread
+cd <workspace>
+west init -l zephyr-thread-rt58x
 
-# 下載 Zephyr（west.yml 中指定的 revision）
+# 下載 Zephyr
 west update
 
 # 安裝 Zephyr Python 依賴
-pip install -r zephyr\scripts\requirements-base.txt
-
-# 匯出 Zephyr CMake 套件（讓 find_package(Zephyr) 能找到）
-west zephyr-export
+pip install -r zephyr/scripts/requirements-base.txt
 ```
 
-> `west init -l` 讀取 `zephyr-thread\west.yml`，以它作為工作區 manifest，不再從遠端拉取額外的 manifest repo。
+### 3.2 日後更新
 
-### 2.2 日後更新
-
-```powershell
-Set-Location C:\zephyr-workspace\zephyr-thread
+```bash
+cd zephyr-thread-rt58x
 git pull
 
-Set-Location C:\zephyr-workspace
+cd ..
 west update
 ```
 
 ---
 
-## 3. 安裝 Zephyr SDK Toolchain
+## 4. 安裝 Zephyr SDK Toolchain
 
-Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`），推薦使用。
+Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`）。
 
-1. 從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載：
-   - 選擇 `zephyr-sdk-<version>_windows-x86_64_gnu.7z`（含所有 GNU toolchain，包含 `arm-zephyr-eabi`）
+### Windows
 
-2. 用 7-Zip 解壓縮至固定路徑（路徑不能有空格），例如：
-   ```
-   C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\
-   ```
-   > 注意：7z 解壓後有一層同名子目錄，安裝目錄應為最內層含 `setup.cmd` 的資料夾。
+從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載：
+- `zephyr-sdk-<version>_windows-x86_64_gnu.7z`
 
-3. 執行安裝腳本（`setup.cmd` 需要 `7z` 在 PATH）：
-   ```powershell
-   $env:PATH += ";C:\Program Files\7-Zip"
-   & "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd"
-   ```
+用 7-Zip 解壓縮至無空格路徑（例如 `C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\`），再執行：
 
-4. 確認工具鏈存在：
-   ```powershell
-   Test-Path "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\gnu\arm-zephyr-eabi\bin\arm-zephyr-eabi-gcc.exe"
-   # 應輸出 True
-   ```
+```powershell
+$env:PATH += ";C:\Program Files\7-Zip"
+& "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1\setup.cmd"
+```
+
+### Linux / WSL
+
+```bash
+wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64.tar.xz
+tar -xf zephyr-sdk-1.0.1_linux-x86_64.tar.xz -C ~/
+~/zephyr-sdk-1.0.1/setup.sh -c arm-zephyr-eabi
+```
+
+### macOS
+
+```bash
+# Apple Silicon
+curl -LO https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_macos-aarch64.tar.xz
+tar -xf zephyr-sdk-1.0.1_macos-aarch64.tar.xz -C ~/
+~/zephyr-sdk-1.0.1/setup.sh -c arm-zephyr-eabi
+```
 
 ---
 
-## 4. 設定環境變數
+## 5. 設定環境變數
 
-每次開啟新的 PowerShell 會話都需要設定以下變數。
+每次開啟新的 shell 都需要設定以下變數（`install` 腳本會自動產生環境檔）。
+
+### Windows
 
 ```powershell
-$env:ZEPHYR_BASE              = "C:/zephyr-workspace/zephyr"
+. <workspace>\env.ps1
+```
+
+或手動：
+
+```powershell
+$env:ZEPHYR_BASE              = "C:/Users/Stanley/zephyr"
 $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 $env:ZEPHYR_SDK_INSTALL_DIR   = "C:/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1"
 ```
 
-> **提示**：將這三行存成 `C:\zephyr-workspace\env.ps1`，每次開啟新視窗執行 `. C:\zephyr-workspace\env.ps1` 即可。
+### Linux / macOS
+
+```bash
+source <workspace>/env.sh
+```
+
+或手動：
+
+```bash
+export ZEPHYR_BASE=~/zephyr
+export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-1.0.1
+```
 
 ---
 
-## 5. 編譯
+## 6. 編譯
 
-所有指令從 **west 工作區根目錄** 執行（`C:\zephyr-workspace`）。
+所有指令從 **west 工作區根目錄**執行。
 
-### Clean build（推薦，首次或清除快取）
+### Clean build（推薦）
 
-```powershell
-Set-Location C:\zephyr-workspace
-west build -p always -b rt582_evb zephyr-thread --build-dir zephyr-thread/build
+```bash
+west build -p always -b rt582_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
 ```
 
-### 增量 build（修改程式碼後快速重編）
+### 增量 build
 
-```powershell
-west build -b rt582_evb zephyr-thread --build-dir zephyr-thread/build
+```bash
+west build -b rt582_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
 ```
 
 ### 輸出檔案
 
 | 檔案 | 說明 |
 |------|------|
-| `zephyr-thread/build/zephyr/zephyr.bin` | 原始 binary，直接燒錄至 0x00000000 |
-| `zephyr-thread/build/zephyr/zephyr.elf` | ELF，含 debug 資訊，用於 GDB |
-| `zephyr-thread/build/zephyr/zephyr.hex` | Intel HEX 格式 |
+| `build/zephyr/zephyr.bin` | 原始 binary，直接燒錄至 `0x00000000` |
+| `build/zephyr/zephyr.elf` | ELF，含 debug 資訊，用於 GDB |
+| `build/zephyr/zephyr.hex` | Intel HEX 格式 |
 
 ---
 
-## 6. 燒錄
+## 7. 燒錄
 
 > **重要**：請燒錄至位址 **`0x00000000`**（Flash 起始位址）。
 > Binary 含有自己的 vector table，直接開機——不需要 bootloader。
-> 燒錄至 `0x8000` 將導致無輸出（除非有相容 bootloader）。
+> 燒錄至 `0x8000` 將導致無輸出。
 
 ### 硬體接線（UART Console）
 
@@ -233,8 +309,6 @@ GND          ───── GND
 ```
 
 ### 使用 OpenOCD（CMSIS-DAP / DAPLink，推薦）
-
-將 CMSIS-DAP debug probe 接至 RT582-EVB 的 SWD 排針。
 
 **啟動 OpenOCD server（終端機 1）：**
 
@@ -251,7 +325,7 @@ $OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
 
 ```powershell
 $OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
-$BIN     = "C:\zephyr-workspace\zephyr-thread\build\zephyr\zephyr.bin"
+$BIN     = "C:\Users\Stanley\zephyr-thread-rt58x\build\zephyr\zephyr.bin"
 
 & "$OPENOCD\bin\win\openocd.exe" `
   -s "$OPENOCD\script" `
@@ -262,7 +336,7 @@ $BIN     = "C:\zephyr-workspace\zephyr-thread\build\zephyr\zephyr.bin"
 
 ---
 
-## 7. 驗證 — 序列終端機
+## 8. 驗證 — 序列終端機
 
 以 **115200 baud、8N1、無 flow control** 開啟序列終端機（PuTTY、Tera Term）。
 
@@ -286,7 +360,7 @@ OpenThread FTD task started.
 
 ---
 
-## 8. OpenThread CLI 快速上手
+## 9. OpenThread CLI 快速上手
 
 ```
 > state
@@ -319,13 +393,13 @@ Done
 
 ---
 
-## 9. 疑難排解
+## 10. 疑難排解
 
 | 症狀 | 可能原因 | 解法 |
 |------|---------|------|
-| `find_package(Zephyr)` 失敗 | `ZEPHYR_BASE` 未設定或路徑錯誤 | 確認 `$env:ZEPHYR_BASE` 指向正確的 `zephyr\` 目錄 |
-| `Could NOT find Python3: Found unsuitable version` | Python 版本不足 | 確認 Python ≥ 3.12（`python --version`） |
-| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `$env:ZEPHYR_TOOLCHAIN_VARIANT` 與 `$env:ZEPHYR_SDK_INSTALL_DIR` 已設定 |
+| `find_package(Zephyr)` 失敗 | `ZEPHYR_BASE` 未設定或路徑錯誤 | 確認 `ZEPHYR_BASE` 指向正確的 `zephyr/` 目錄 |
+| `Could NOT find Python3: Found unsuitable version` | Python 版本不足 | 確認 Python ≥ 3.12 |
+| `No CMAKE_C_COMPILER` | Toolchain 未設定 | 確認 `ZEPHYR_TOOLCHAIN_VARIANT` 與 `ZEPHYR_SDK_INSTALL_DIR` 已設定 |
 | `west update` 失敗 | revision 在遠端不存在 | 確認 `west.yml` 中的 `revision` 是有效的 tag 或 commit |
 | 完全沒有 UART 輸出 | Binary 燒錄至錯誤位址 | 燒錄至 **0x0**，不是 `0x8000` |
 | `printk` 輸出後系統卡死 | 從 ISR 呼叫 `printk`（spinlock 死鎖） | 使用 `k_work_submit` 延後到 thread context |
@@ -333,17 +407,33 @@ Done
 | RF init 後 OT task 卡住 | RF MCU init 阻塞 | 確認 `CONFIG_RF_FW_INCLUDE_PCI=TRUE` compile definition |
 | `>` prompt 不出現 | OT CLI 初始化失敗 | 確認 `main.c` 有呼叫 `otAppCliInit` |
 | OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP 未被識別 | 用 [Zadig](https://zadig.akeo.ie/) 安裝 WinUSB 驅動 |
+| winget 移除失敗（exit 1603） | MSI 資料庫損毀 | `uninstall.ps1` 會自動嘗試 Registry fallback（msiexec + 強制清除） |
 
 ---
 
-## 10. 專案結構
+## 11. 專案結構
 
 ```
-zephyr-thread/
+zephyr-thread-rt58x/
 ├── CMakeLists.txt              # 根 CMake；ZEPHYR_EXTRA_MODULES 註冊模組 + 平台驅動
 ├── Kconfig                     # 根 Kconfig；含 PHY/MAC PIB 設定選單
 ├── prj.conf                    # Kconfig fragments（UART、heap、OT 開關）
 ├── west.yml                    # West manifest（Zephyr 依賴版本）
+│
+├── scripts/
+│   ├── windows/                # Windows 腳本（PowerShell 7+）
+│   │   ├── install.ps1         # 安裝工具、SDK、west 工作區、env.ps1
+│   │   ├── build.ps1           # 編譯
+│   │   └── uninstall.ps1       # 移除環境（含 Registry fallback）
+│   ├── linux/                  # Linux / WSL 腳本（Bash）
+│   │   ├── install.sh
+│   │   ├── build.sh
+│   │   └── uninstall.sh
+│   ├── macos/                  # macOS 腳本（Bash，支援 Apple Silicon）
+│   │   ├── install.sh
+│   │   ├── build.sh
+│   │   └── uninstall.sh
+│   └── strip_printk_newlines.py
 │
 ├── zephyr/
 │   └── module.yml              # Zephyr 模組描述；指向 cmake/zephyr_serial/
@@ -361,15 +451,12 @@ zephyr-thread/
 ├── drivers/
 │   └── serial/
 │       ├── uart_rt582.c        # Zephyr UART driver（HOSAL 封裝）
-│       ├── Kconfig             # CONFIG_UART_RT582
+│       ├── Kconfig
 │       └── CMakeLists.txt
 │
 ├── sdk/                        # Vendored Rafael IoT SDK（僅原始碼，無預編譯 .a）
 │   └── components/
 │       ├── network/thread/     # OpenThread port（ot_radio.c、ot_uart.c 等）
-│       │   └── openthread_port/
-│       │       ├── Inc/        # openthread-core-rt582-zephyr-config.h 等
-│       │       └── Src/        # ot_radio.c、ot_uart.c、ot_alarm.c 等
 │       ├── network/ruci/       # RUCI 指令/事件
 │       ├── network/lmac15p4/   # IEEE 802.15.4 MAC
 │       ├── network/rt569-rf/   # RT569 RF MCU 驅動
@@ -378,12 +465,7 @@ zephyr-thread/
 │       ├── utility/            # log、fsm、util_queue 等
 │       └── platform/           # SoC / HOSAL 平台驅動
 │           ├── hosal/rt582_hosal/
-│           │   ├── Inc/        # hosal_uart.h、hosal_rf.h、hosal_trng.h
-│           │   └── Src/        # hosal_uart.c、hosal_rf.c、hosal_trng.c
 │           └── soc/rt582/
-│               ├── rt582_driver/   # SoC 暫存器/時鐘驅動（sysctrl、gpio、dma 等）
-│               ├── rt582_system/   # SystemInit（BBPLL → 64 MHz）
-│               └── rt582_crypto/   # AES、SHA256、ECJPAKE 等加密實作
 │
 ├── boards/arm/rt582_evb/       # Board 定義（DTS、defconfig、Kconfig）
 ├── dts/arm/rafael/rt582.dtsi   # SoC DTS（Flash 1 MB、RAM 144 KB、UART0/1）
@@ -395,7 +477,7 @@ zephyr-thread/
 | 決策 | 原因 |
 |------|------|
 | 全部從原始碼編譯，無預編譯 `.a` | 消除工具鏈升級時的 ABI 不相容問題 |
-| `uart_rt582.c` 透過 Zephyr 模組加入 `drivers__serial` | `ZEPHYR_EXTRA_MODULES` 使模組 cmake 在正確時間點執行（`drivers__serial` 建立後、空庫檢查前） |
+| `uart_rt582.c` 透過 Zephyr 模組加入 `drivers__serial` | `ZEPHYR_EXTRA_MODULES` 使模組 cmake 在正確時間點執行 |
 | 排除 `soft_source_match_table.c` | `ot_radio.c` 已提供 hardware-backed src match via lmac15p4，避免符號衝突 |
 | PIB 常數透過 Kconfig 設定 | 調整 RF 參數只需改 `prj.conf`，不需動應用程式碼 |
 | Shell 停用（`CONFIG_SHELL=n`） | Shell 的 TX 中斷路徑與 `printk` polling 競爭，會導致輸出亂碼 |
