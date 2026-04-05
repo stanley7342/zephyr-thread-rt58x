@@ -24,6 +24,10 @@
 .PARAMETER SkipDtc
     跳過 DTC / Chocolatey 安裝步驟。
 
+.PARAMETER Uninstall
+    移除所有由本腳本安裝的元件（SDK 目錄、west 工作區、west pip 套件、dtc-msys2）。
+    winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
+
 .EXAMPLE
     # 使用預設路徑
     .\scripts\setup.ps1
@@ -36,17 +40,79 @@
 
     # 跳過 DTC 安裝
     .\scripts\setup.ps1 -SkipDtc
+
+    # 移除所有安裝
+    .\scripts\setup.ps1 -Uninstall
+    .\scripts\setup.ps1 -Uninstall -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk
 #>
 
 param(
     [string] $Workspace = "C:\zephyr-workspace",
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
     [switch] $Build,
-    [switch] $SkipDtc
+    [switch] $SkipDtc,
+    [switch] $Uninstall
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# ── 移除模式 ─────────────────────────────────────────────────────────────────
+
+if ($Uninstall) {
+    Write-Host "`n移除 Zephyr 開發環境" -ForegroundColor Yellow
+    Write-Host "Workspace : $Workspace"
+    Write-Host "SDK       : $SdkDir"
+    Write-Host ""
+
+    $confirm = Read-Host "確認移除上述目錄與套件？(y/N)"
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Host "已取消。" -ForegroundColor DarkGray
+        exit 0
+    }
+
+    # 1. west 工作區（含 junction 連結）
+    $sdkParent = Split-Path $SdkDir -Parent   # e.g. C:\zephyr-sdk-1.0.1
+    foreach ($dir in @($Workspace, $sdkParent)) {
+        if (Test-Path $dir) {
+            Write-Host "  刪除 $dir ..."
+            Remove-Item $dir -Recurse -Force
+            Write-Host "  [OK] $dir 已刪除" -ForegroundColor Green
+        } else {
+            Write-Host "  [--] $dir 不存在，略過" -ForegroundColor DarkGray
+        }
+    }
+
+    # 2. pip 移除 west
+    if (Get-Command pip -ErrorAction SilentlyContinue) {
+        Write-Host "  pip uninstall west ..."
+        pip uninstall west -y 2>$null
+        Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
+    }
+
+    # 3. choco 移除 dtc-msys2
+    $chocoExe = (Get-Command choco -ErrorAction SilentlyContinue)?.Source
+    if (-not $chocoExe) {
+        $chocoExe = Get-ChildItem "C:\ProgramData\chocolatey" -Filter choco.exe -Recurse `
+                        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $chocoExe) {
+        $chocoExe = cmd /c where choco 2>$null | Select-Object -First 1
+    }
+    if ($chocoExe) {
+        Write-Host "  choco uninstall dtc-msys2 ..."
+        & $chocoExe uninstall dtc-msys2 -y 2>$null
+        Write-Host "  [OK] dtc-msys2 已移除" -ForegroundColor Green
+    } else {
+        Write-Host "  [--] 找不到 choco，dtc-msys2 略過" -ForegroundColor DarkGray
+    }
+
+    Write-Host ""
+    Write-Host "移除完成。" -ForegroundColor Cyan
+    Write-Host "注意：Python / CMake / Ninja / Git / 7-Zip / Chocolatey 等系統工具" -ForegroundColor Yellow
+    Write-Host "      為系統共用元件，請視需要透過 winget 或控制台手動移除。" -ForegroundColor Yellow
+    exit 0
+}
 
 # ── 輔助函式 ─────────────────────────────────────────────────────────────────
 
