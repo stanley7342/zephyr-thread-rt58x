@@ -34,11 +34,34 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # ── 確認 usbipd 已安裝 ────────────────────────────────────────────────────────
-if (-not (Get-Command usbipd -ErrorAction SilentlyContinue)) {
-    Write-Host "找不到 usbipd，請先安裝：" -ForegroundColor Red
+$usbipd = Get-Command usbipd -ErrorAction SilentlyContinue |
+          Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue
+
+if (-not $usbipd) {
+    # winget 安裝後 PATH 可能尚未更新，先搜尋已知路徑
+    $candidates = @(
+        "$env:ProgramFiles\usbipd-win\usbipd.exe",
+        "$env:ProgramFiles\usbipd\usbipd.exe",
+        "${env:ProgramFiles(x86)}\usbipd-win\usbipd.exe"
+    )
+    $usbipd = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
+if (-not $usbipd) {
+    # 最後嘗試重新讀取系統 PATH
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH","User")
+    $usbipd = (Get-Command usbipd -ErrorAction SilentlyContinue)?.Source
+}
+
+if (-not $usbipd) {
+    Write-Host "找不到 usbipd，請先安裝後重開 PowerShell：" -ForegroundColor Red
     Write-Host "  winget install usbipd" -ForegroundColor Yellow
     exit 1
 }
+
+# 之後用完整路徑呼叫，避免 PATH 問題
+Set-Alias -Name usbipd -Value $usbipd -Scope Script -Force
 
 # ── Detach 模式 ───────────────────────────────────────────────────────────────
 if ($Detach) {
