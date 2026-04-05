@@ -21,11 +21,8 @@
 .PARAMETER Build
     建置完成後執行 west build 驗證（需要約 5 分鐘）。
 
-.PARAMETER SkipDtc
-    跳過 DTC / Chocolatey 安裝步驟。
-
 .PARAMETER Uninstall
-    移除所有由本腳本安裝的元件（SDK 目錄、west 工作區、west pip 套件、dtc-msys2）。
+    移除所有由本腳本安裝的元件（SDK 目錄、west 工作區、west pip 套件）。
     winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
 
 .EXAMPLE
@@ -38,9 +35,6 @@
     # 安裝完畢後直接編譯驗證
     .\scripts\setup.ps1 -Build
 
-    # 跳過 DTC 安裝
-    .\scripts\setup.ps1 -SkipDtc
-
     # 移除所有安裝
     .\scripts\setup.ps1 -Uninstall
     .\scripts\setup.ps1 -Uninstall -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk
@@ -52,7 +46,6 @@ param(
     [string] $Workspace = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
     [switch] $Build,
-    [switch] $SkipDtc,
     [switch] $Uninstall
 )
 
@@ -99,26 +92,9 @@ if ($Uninstall) {
         Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
     }
 
-    # 3. choco 移除 dtc-msys2
-    $chocoExe = (Get-Command choco -ErrorAction SilentlyContinue)?.Source
-    if (-not $chocoExe) {
-        $chocoExe = Get-ChildItem "C:\ProgramData\chocolatey" -Filter choco.exe -Recurse `
-                        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    }
-    if (-not $chocoExe) {
-        $chocoExe = cmd /c where choco 2>$null | Select-Object -First 1
-    }
-    if ($chocoExe) {
-        Write-Host "  choco uninstall dtc-msys2 ..."
-        & $chocoExe uninstall dtc-msys2 -y 2>$null
-        Write-Host "  [OK] dtc-msys2 已移除" -ForegroundColor Green
-    } else {
-        Write-Host "  [--] 找不到 choco，dtc-msys2 略過" -ForegroundColor DarkGray
-    }
-
     Write-Host ""
     Write-Host "移除完成。" -ForegroundColor Cyan
-    Write-Host "注意：Python / CMake / Ninja / Git / 7-Zip / Chocolatey 等系統工具" -ForegroundColor Yellow
+    Write-Host "注意：Python / CMake / Ninja / Git / 7-Zip 等系統工具" -ForegroundColor Yellow
     Write-Host "      為系統共用元件，請視需要透過 winget 或控制台手動移除。" -ForegroundColor Yellow
     exit 0
 }
@@ -160,7 +136,7 @@ if (-not (Test-Path $python312)) {
 
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 
-Write-Step "安裝必要工具（winget + Chocolatey）"
+Write-Step "安裝必要工具（winget）"
 
 Install-WingetPackage "Python.Python.3.12"   "Python 3.12"
 Install-WingetPackage "Kitware.CMake"         "CMake"
@@ -183,43 +159,6 @@ if (Test-Path "$sevenZipPath\7z.exe") {
     Write-Warning "找不到 7z.exe，SDK 安裝可能失敗"
 }
 
-# DTC — Zephyr SDK 1.0.1 Windows 版不含 DTC，需透過 Chocolatey 安裝
-if ($SkipDtc) {
-    Write-Warning "略過 DTC 安裝（-SkipDtc）。若編譯時出現 DTC 錯誤，請手動執行：choco install dtc-msys2 -y"
-} elseif (Assert-Command "dtc") {
-    Write-Skip "dtc"
-} else {
-    if (-not (Assert-Command "choco")) {
-        Write-Host "    安裝 Chocolatey ..."
-        Set-ExecutionPolicy Bypass -Scope Process -Force
-        [System.Net.ServicePointManager]::SecurityProtocol =
-            [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
-            'https://community.chocolatey.org/install.ps1'))
-        # 重讀 PATH（含 Chocolatey bin 目錄）
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                    [System.Environment]::GetEnvironmentVariable("PATH", "User")
-    }
-    # 找到 choco 可執行檔（搜尋 PATH 及已知安裝目錄）
-    $chocoExe = (Get-Command choco -ErrorAction SilentlyContinue)?.Source
-    if (-not $chocoExe) {
-        $chocoExe = Get-ChildItem "C:\ProgramData\chocolatey" -Filter choco.exe -Recurse `
-                        -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    }
-    if (-not $chocoExe) {
-        # 最後嘗試：透過 cmd.exe WHERE 查找（使用系統 PATH）
-        $chocoExe = cmd /c where choco 2>$null | Select-Object -First 1
-    }
-    if (-not $chocoExe) {
-        Write-Error "找不到 choco.exe。請手動執行：`n  choco install dtc-msys2 -y`n或從 https://chocolatey.org/install 重新安裝 Chocolatey"
-        exit 1
-    }
-    Write-Host "    安裝 dtc-msys2 ..."
-    & $chocoExe install dtc-msys2 -y
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("PATH", "User")
-    Write-Ok "dtc 安裝完成"
-}
 
 # west — 明確使用 Python 3.12（避免撿到 3.14 或其他壞掉的 launcher）
 Write-Host "    安裝 west（Python 3.12）..."

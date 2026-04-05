@@ -40,27 +40,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | Ninja | 1.10 | `winget install Ninja-build.Ninja` |
 | Git | 任意 | `winget install Git.Git` |
 | 7-Zip | 任意 | `winget install 7zip.7zip` — 解壓縮 Zephyr SDK `.7z` 用 |
-| DTC | 1.4.6 | 透過 Chocolatey 安裝，見下方說明 |
-
-### 安裝 Chocolatey（DTC 前置步驟）
-
-Chocolatey 是 Windows 的套件管理器，用來安裝 DTC（Device Tree Compiler）。
-
-以 **系統管理員** 開啟 PowerShell，執行：
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-[System.Net.ServicePointManager]::SecurityProtocol =
-    [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
-    'https://community.chocolatey.org/install.ps1'))
-```
-
-安裝完成後，**關閉並重新以系統管理員開啟 PowerShell**，使 `choco` 生效，再執行：
-
-```powershell
-choco install dtc-msys2 -y
-```
+| DTC | 1.4.6 | Zephyr SDK 1.0.1 Windows 版已內建，無需另外安裝 |
 
 > 以下所有指令均在 **PowerShell 7+** 執行。
 
@@ -94,7 +74,6 @@ Set-Location zephyr-thread-rt58x
 | `-Workspace <路徑>` | West 工作區根目錄（預設：本專案的父目錄） |
 | `-SdkDir <路徑>` | Zephyr SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
 | `-Build` | 安裝完成後自動執行 `west build` 驗證（約 5 分鐘） |
-| `-SkipDtc` | 跳過 Chocolatey / DTC 安裝（Chocolatey 尚未安裝時可先略過） |
 | `-Uninstall` | 移除所有由腳本安裝的元件（見下方說明） |
 
 ### 移除環境
