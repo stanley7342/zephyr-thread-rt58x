@@ -41,17 +41,31 @@ declare -A PKG_NAMES=(
     [xz-utils]="xz-utils"
 )
 
-printf "    %-18s  %-18s  %-18s  %s\n" "套件" "apt 名稱" "版本" "狀態"
-printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
+# printf %-Ns 按字元數補空格，CJK 雙寬字元需用 unicodedata 計算顯示寬度
+_tbl_row() {
+    python3 -c "
+import unicodedata, sys
+def dw(s): return sum(2 if unicodedata.east_asian_width(c) in ('W','F') else 1 for c in s)
+def pad(s, w): return s + ' ' * max(0, w - dw(s))
+cols = sys.argv[1:]
+widths = [20, 20, 20]
+out = '    ' + '  '.join(pad(c, w) for c, w in zip(cols[:3], widths))
+if len(cols) > 3: out += '  ' + cols[3]
+print(out)
+" "$@"
+}
+
+_tbl_row "套件" "apt 名稱" "版本" "狀態"
+_tbl_row "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in wget git cmake ninja-build python3 python3-pip python3-venv xz-utils; do
     name="${PKG_NAMES[$pkg]}"
     if dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
         ver="$(dpkg -s "$pkg" 2>/dev/null | grep '^Version:' | awk '{print $2}')"
         ver="${ver:0:20}"
-        printf "    %-20s  %-20s  %-20s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
+        _tbl_row "$name" "$pkg" "$ver" $'\033[90m已安裝\033[0m'
     else
-        printf "    %-20s  %-20s  %-20s  \033[33m待安裝\033[0m\n" "$name" "$pkg" "-"
+        _tbl_row "$name" "$pkg" "-" $'\033[33m待安裝\033[0m'
         PKGS+=("$pkg")
     fi
 done
