@@ -41,7 +41,7 @@ declare -A PKG_NAMES=(
     [xz-utils]="xz-utils"
 )
 
-printf "    %-20s  %-20s  %-20s  %s\n" "套件" "apt 名稱" "版本" "狀態"
+printf "    %-18s  %-18s  %-18s  %s\n" "套件" "apt 名稱" "版本" "狀態"
 printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in wget git cmake ninja-build python3 python3-pip python3-venv xz-utils; do
