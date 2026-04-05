@@ -61,17 +61,14 @@ Set-Location zephyr-thread-rt58x
 # 可選：安裝完成後直接編譯驗證
 .\scripts\setup.ps1 -Build
 
-# 可選：自訂工作區與 SDK 路徑
-.\scripts\setup.ps1 -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 ```
 
-腳本完成後會產生 `C:\zephyr-workspace\env.ps1`，之後每次開啟新 PowerShell 執行 `. C:\zephyr-workspace\env.ps1` 即可載入環境。
+腳本完成後會在**專案父目錄**產生 `env.ps1`，之後每次開啟新 PowerShell 執行 `. <workspace>\env.ps1` 即可載入環境。
 
 ### 腳本參數一覽
 
 | 參數 | 說明 |
 |------|------|
-| `-Workspace <路徑>` | West 工作區根目錄（預設：本專案的父目錄） |
 | `-SdkDir <路徑>` | Zephyr SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
 | `-Build` | 安裝完成後自動執行 `west build` 驗證（約 5 分鐘） |
 | `-Uninstall` | 移除所有由腳本安裝的元件（見下方說明） |
@@ -82,16 +79,14 @@ Set-Location zephyr-thread-rt58x
 
 ```powershell
 .\scripts\setup.ps1 -Uninstall
-
-# 自訂路徑（需與安裝時一致）
-.\scripts\setup.ps1 -Uninstall -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 ```
 
 腳本會顯示即將刪除的目錄並要求確認（輸入 `y`），然後執行：
 
 | 項目 | 動作 |
 |------|------|
-| West 工作區（`C:\zephyr-workspace`） | 整個目錄刪除 |
+| `.west` 目錄（workspace root 內） | 整個目錄刪除 |
+| `zephyr`（Zephyr 原始碼） | 整個目錄刪除 |
 | Zephyr SDK（`C:\zephyr-sdk-1.0.1`） | 整個目錄刪除 |
 | `west`（pip 套件） | `pip uninstall west` |
 | `dtc-msys2`（Chocolatey 套件） | `choco uninstall dtc-msys2` |

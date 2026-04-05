@@ -12,8 +12,10 @@
       5. 產生 env.ps1（快速載入環境變數）
       6. 執行 west build 驗證環境（可選）
 
-.PARAMETER Workspace
-    west 工作區根目錄。預設：C:\zephyr-workspace
+    West workspace = 本專案的父目錄（west 規範）。
+    例如：專案在 C:\Users\Stanley\zephyr-thread-rt58x
+          workspace = C:\Users\Stanley
+          Zephyr    = C:\Users\Stanley\zephyr
 
 .PARAMETER SdkDir
     Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
@@ -22,32 +24,33 @@
     建置完成後執行 west build 驗證（需要約 5 分鐘）。
 
 .PARAMETER Uninstall
-    移除所有由本腳本安裝的元件（SDK 目錄、west 工作區、west pip 套件）。
+    移除所有由本腳本安裝的元件（SDK 目錄、.west 目錄、west pip 套件）。
     winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
 
 .EXAMPLE
-    # 使用預設路徑
+    # 安裝
     .\scripts\setup.ps1
-
-    # 自訂路徑
-    .\scripts\setup.ps1 -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk
 
     # 安裝完畢後直接編譯驗證
     .\scripts\setup.ps1 -Build
 
+    # 自訂 SDK 路徑
+    .\scripts\setup.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+
     # 移除所有安裝
     .\scripts\setup.ps1 -Uninstall
-    .\scripts\setup.ps1 -Uninstall -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk
 #>
 
 param(
-    # West workspace = 本專案的父目錄（west 規範：manifest repo 的上一層）
-    # 例如：專案在 C:\Users\Stanley\zephyr-thread-rt58x → workspace = C:\Users\Stanley
-    [string] $Workspace = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
     [switch] $Build,
     [switch] $Uninstall
 )
+
+# West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
+# 不可自訂：west init -l 會解析 junction/symlink 實體路徑，
+# 導致 .west 建立在錯誤位置。
+$Workspace = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -244,7 +247,6 @@ $env:ZEPHYR_BASE = $null
 
 if (-not (Test-Path $westConfig)) {
     Write-Host "    west init ..."
-    # $Workspace から相対パスで manifest 指定（junction 解決を避ける）
     Push-Location $Workspace
     & $python312 -m west init -l $projectName
     $rc = $LASTEXITCODE
