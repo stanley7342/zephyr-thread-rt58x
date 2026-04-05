@@ -41,10 +41,8 @@ declare -A PKG_NAMES=(
     [xz-utils]="xz-utils"
 )
 
-# Header 含 CJK 雙寬字元（每字佔 2 顯示格）；直接硬碼空格數確保對齊
-# 欄寬 20 顯示格：套件(4)+16sp  apt名稱(8)+12sp  版本(4)+16sp  狀態
-echo "    套件                apt 名稱            版本                狀態"
-echo "    --------------------  --------------------  --------------------  ------"
+printf "    %-20s  %-20s  %-20s  %s\n" "Package" "apt name" "Version" "Status"
+printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in wget git cmake ninja-build python3 python3-pip python3-venv xz-utils; do
     name="${PKG_NAMES[$pkg]}"

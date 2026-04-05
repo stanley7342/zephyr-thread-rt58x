@@ -46,7 +46,7 @@ VENV_DIR="$HOME/.zephyr-venv"
 echo ""
 echo -e "\033[33m移除 Zephyr 開發環境（macOS）\033[0m"
 echo ""
-printf "    %-${C1}s  %-${C2}s  %s\n" "項目" "路徑 / 套件" "狀態"
+printf "    %-${C1}s  %-${C2}s  %s\n" "Item" "Path / Package" "Status"
 printf "    %-${C1}s  %-${C2}s  %s\n" "$(printf '%0.s-' $(seq 1 $C1))" "$(printf '%0.s-' $(seq 1 $C2))" "------"
 
 declare -A DIR_ITEMS=(

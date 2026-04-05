@@ -51,8 +51,8 @@ declare -A BREW_PKGS=(
 BREW_ORDER=(wget git cmake ninja "python@3.12" xz)
 TO_INSTALL=()
 
-printf "    %-20s  %-20s  %-16s  %s\n" "套件" "brew 名稱" "版本" "狀態"
-printf "    %-20s  %-20s  %-16s  %s\n" "--------------------" "--------------------" "----------------" "------"
+printf "    %-20s  %-20s  %-20s  %s\n" "Package" "brew name" "Version" "Status"
+printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
 for pkg in "${BREW_ORDER[@]}"; do
     name="${BREW_PKGS[$pkg]}"
