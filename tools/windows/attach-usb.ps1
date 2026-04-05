@@ -130,12 +130,18 @@ Write-Host "確認 WSL2 狀態..." -ForegroundColor Cyan
 $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
 if (-not $wslRunning) {
     Write-Host "    WSL2 未啟動，正在喚醒..." -ForegroundColor Yellow
-    # 在背景啟動 WSL2 並等待就緒
-    Start-Job { wsl --exec sh -c "sleep 5" } | Out-Null
-    Start-Sleep -Seconds 3
-    $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
-    if (-not $wslRunning) {
-        Write-Host "    WSL2 啟動失敗，請手動開啟 WSL 視窗後再試。" -ForegroundColor Red
+    # 在背景啟動 WSL2，sleep 60 確保 attach 期間持續存活
+    Start-Job { wsl --exec sleep 60 } | Out-Null
+    # Polling：最多等 15 秒
+    $ready = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
+        if ($wslRunning) { $ready = $true; break }
+        Write-Host "    等待 WSL2 就緒... ($($i+1)s)" -ForegroundColor DarkGray
+    }
+    if (-not $ready) {
+        Write-Host "    WSL2 啟動逾時，請手動開啟 WSL 視窗後再試。" -ForegroundColor Red
         exit 1
     }
     Write-Host "    [OK] WSL2 已就緒" -ForegroundColor Green
