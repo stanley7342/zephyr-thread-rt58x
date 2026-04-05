@@ -60,50 +60,44 @@ if [[ $SETUP_UDEV -eq 1 ]]; then
     exit 0
 fi
 
-# ── 尋找 openocd-rt58x（自行編譯版，優先使用）────────────────────────────────
+# ── 尋找 openocd-rt58x（優先使用 tools/linux/ 內建版本）────────────────────
 step "尋找 openocd-rt58x"
 
 OCD_BIN=""
 OCD_SCRIPT_DIR=""
+WORKSPACE="$(dirname "$PROJECT_DIR")"
 
-# openocd-rt58x 可能的位置（與本專案同層、home 目錄、workspace 同層）
-RT58X_OCD_CANDIDATES=(
-    "$WORKSPACE/openocd-rt58x"
-    "$HOME/openocd-rt58x"
-    "/opt/openocd-rt58x"
+# 搜尋順序：1) 本專案內建  2) 原始碼旁  3) home  4) /opt
+OCD_SEARCH=(
+    "$PROJECT_DIR/tools/linux/openocd:::$HOME/openocd-rt58x/tcl"
+    "$WORKSPACE/openocd-rt58x/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
+    "$WORKSPACE/openocd-rt58x/build/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
+    "$HOME/openocd-rt58x/src/openocd:::$HOME/openocd-rt58x/tcl"
+    "$HOME/openocd-rt58x/build/src/openocd:::$HOME/openocd-rt58x/tcl"
+    "/opt/openocd-rt58x/bin/openocd:::/opt/openocd-rt58x/share/openocd/scripts"
 )
 
-for cand in "${RT58X_OCD_CANDIDATES[@]}"; do
-    # 編譯後二進位可能在 src/openocd 或 build/src/openocd
-    for bin_path in \
-        "$cand/src/openocd" \
-        "$cand/build/src/openocd" \
-        "$cand/install/bin/openocd"
-    do
-        if [[ -x "$bin_path" ]]; then
-            OCD_BIN="$bin_path"
-            # tcl scripts 位於 openocd-rt58x/tcl/
-            if [[ -d "$cand/tcl" ]]; then
-                OCD_SCRIPT_DIR="$cand/tcl"
-            fi
-            ok "openocd-rt58x：$OCD_BIN"
-            [[ -n "$OCD_SCRIPT_DIR" ]] && ok "Scripts   ：$OCD_SCRIPT_DIR"
-            break 2
-        fi
-    done
+for entry in "${OCD_SEARCH[@]}"; do
+    bin_path="${entry%%:::*}"
+    tcl_path="${entry##*:::}"
+    if [[ -x "$bin_path" ]]; then
+        OCD_BIN="$bin_path"
+        [[ -d "$tcl_path" ]] && OCD_SCRIPT_DIR="$tcl_path"
+        ok "openocd-rt58x：$OCD_BIN"
+        [[ -n "$OCD_SCRIPT_DIR" ]] && ok "Scripts   ：$OCD_SCRIPT_DIR"
+        break
+    fi
 done
 
 if [[ -z "$OCD_BIN" ]]; then
     err "找不到已編譯的 openocd-rt58x"
     echo ""
-    echo "    請先編譯 openocd-rt58x 並放置於下列任一位置："
-    for cand in "${RT58X_OCD_CANDIDATES[@]}"; do
-        echo "      $cand"
-    done
+    echo "    請將編譯好的 openocd binary 複製到："
+    echo "      $PROJECT_DIR/tools/linux/openocd"
     echo ""
-    echo "    編譯方式："
-    echo "      git clone <openocd-rt58x-repo> $WORKSPACE/openocd-rt58x"
-    echo "      cd $WORKSPACE/openocd-rt58x"
+    echo "    或從原始碼編譯："
+    echo "      git clone <openocd-rt58x-repo> $HOME/openocd-rt58x"
+    echo "      cd $HOME/openocd-rt58x"
     echo "      ./bootstrap && ./configure && make -j\$(nproc)"
     exit 1
 fi
