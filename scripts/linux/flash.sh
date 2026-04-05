@@ -14,6 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+TOOLS_LINUX="$PROJECT_DIR/tools/linux"
 BIN="${PROJECT_DIR}/build/zephyr/zephyr.bin"
 SETUP_UDEV=0
 
@@ -68,9 +69,8 @@ OCD_SCRIPT_DIR=""
 WORKSPACE="$(dirname "$PROJECT_DIR")"
 
 # 搜尋順序：1) 本專案內建  2) 原始碼旁  3) home  4) /opt
-TOOLS_DIR="$SCRIPT_DIR"   # tools/linux/
 OCD_SEARCH=(
-    "$TOOLS_DIR/openocd:::$TOOLS_DIR/tcl"
+    "$TOOLS_LINUX/openocd:::$TOOLS_LINUX/tcl"
     "$WORKSPACE/openocd-rt58x/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
     "$WORKSPACE/openocd-rt58x/build/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
     "$HOME/openocd-rt58x/src/openocd:::$HOME/openocd-rt58x/tcl"
