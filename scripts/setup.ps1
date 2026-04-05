@@ -21,6 +21,9 @@
 .PARAMETER Build
     建置完成後執行 west build 驗證（需要約 5 分鐘）。
 
+.PARAMETER SkipDtc
+    跳過 DTC / Chocolatey 安裝步驟。
+
 .EXAMPLE
     # 使用預設路徑
     .\scripts\setup.ps1
@@ -30,12 +33,16 @@
 
     # 安裝完畢後直接編譯驗證
     .\scripts\setup.ps1 -Build
+
+    # 跳過 DTC 安裝
+    .\scripts\setup.ps1 -SkipDtc
 #>
 
 param(
     [string] $Workspace = "C:\zephyr-workspace",
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Build
+    [switch] $Build,
+    [switch] $SkipDtc
 )
 
 Set-StrictMode -Version Latest
@@ -96,7 +103,9 @@ if (Test-Path "$sevenZipPath\7z.exe") {
 }
 
 # DTC — Zephyr SDK 1.0.1 Windows 版不含 DTC，需透過 Chocolatey 安裝
-if (Assert-Command "dtc") {
+if ($SkipDtc) {
+    Write-Warning "略過 DTC 安裝（-SkipDtc）。若編譯時出現 DTC 錯誤，請手動執行：choco install dtc-msys2 -y"
+} elseif (Assert-Command "dtc") {
     Write-Skip "dtc"
 } else {
     if (-not (Assert-Command "choco")) {
