@@ -66,7 +66,7 @@ for name in "${DIR_ORDER[@]}"; do
     fi
 done
 
-APT_PKGS=(git cmake ninja-build python3 python3-pip python3-venv wget xz-utils)
+APT_PKGS=(cmake ninja-build python3 python3-pip python3-venv xz-utils)
 APT_TO_REMOVE=()
 for pkg in "${APT_PKGS[@]}"; do
     if dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
