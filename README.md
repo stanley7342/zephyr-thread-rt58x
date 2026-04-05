@@ -91,7 +91,7 @@ Set-Location zephyr-thread-rt58x
 
 | 參數 | 說明 |
 |------|------|
-| `-Workspace <路徑>` | West 工作區根目錄（預設：`C:\zephyr-workspace`） |
+| `-Workspace <路徑>` | West 工作區根目錄（預設：本專案的父目錄） |
 | `-SdkDir <路徑>` | Zephyr SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
 | `-Build` | 安裝完成後自動執行 `west build` 驗證（約 5 分鐘） |
 | `-SkipDtc` | 跳過 Chocolatey / DTC 安裝（Chocolatey 尚未安裝時可先略過） |
@@ -176,7 +176,7 @@ west update
 Zephyr SDK 提供官方 ARM 工具鏈（`arm-zephyr-eabi`），推薦使用。
 
 1. 從 [Zephyr SDK GitHub Releases](https://github.com/zephyrproject-rtos/sdk-ng/releases) 下載：
-   - 選擇 `zephyr-sdk-<version>_windows-x86_64.7z`
+   - 選擇 `zephyr-sdk-<version>_windows-x86_64_gnu.7z`（含所有 GNU toolchain，包含 `arm-zephyr-eabi`）
 
 2. 用 7-Zip 解壓縮至固定路徑（路徑不能有空格），例如：
    ```

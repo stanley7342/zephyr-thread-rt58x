@@ -47,7 +47,9 @@
 #>
 
 param(
-    [string] $Workspace = "C:\zephyr-workspace",
+    # West workspace = 本專案的父目錄（west 規範：manifest repo 的上一層）
+    # 例如：專案在 C:\Users\Stanley\zephyr-thread-rt58x → workspace = C:\Users\Stanley
+    [string] $Workspace = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
     [string] $SdkDir   = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
     [switch] $Build,
     [switch] $SkipDtc,
@@ -93,7 +95,7 @@ if ($Uninstall) {
     # 2. pip 移除 west
     if (Get-Command pip -ErrorAction SilentlyContinue) {
         Write-Host "  pip uninstall west ..."
-        pip uninstall west -y 2>$null
+        & $python312 -m pip uninstall west -y 2>$null
         Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
     }
 
@@ -148,6 +150,12 @@ function Install-WingetPackage([string]$id, [string]$name) {
     } else {
         Write-Skip $name
     }
+}
+
+# ── Python 3.12 實體路徑（避免 py launcher 或 3.14 壞掉的問題）─────────────────
+$python312 = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+if (-not (Test-Path $python312)) {
+    throw "找不到 Python 3.12：$python312`n請先安裝：winget install Python.Python.3.12"
 }
 
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
@@ -213,13 +221,11 @@ if ($SkipDtc) {
     Write-Ok "dtc 安裝完成"
 }
 
-# west
-if (-not (Assert-Command "west")) {
-    Write-Host "    安裝 west ..."
-    pip install west
-} else {
-    Write-Skip "west"
-}
+# west — 明確使用 Python 3.12（避免撿到 3.14 或其他壞掉的 launcher）
+Write-Host "    安裝 west（Python 3.12）..."
+& $python312 -m pip install --quiet west
+if ($LASTEXITCODE -ne 0) { throw "west 安裝失敗" }
+Write-Ok "west 安裝完成"
 
 # ── 步驟 2：Zephyr SDK ────────────────────────────────────────────────────────
 
@@ -231,7 +237,7 @@ if (Test-Path $sdkSetup) {
     Write-Skip "Zephyr SDK"
 } else {
     $sdkVer  = "1.0.1"
-    $sdkFile = "zephyr-sdk-${sdkVer}_windows-x86_64.7z"
+    $sdkFile = "zephyr-sdk-${sdkVer}_windows-x86_64_gnu.7z"
     $sdkUrl  = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${sdkVer}/${sdkFile}"
     $tmp     = Join-Path $env:TEMP $sdkFile
 
@@ -286,48 +292,59 @@ if (Test-Path $sdkSetup) {
 Write-Step "建立 west 工作區 → $Workspace"
 
 # 本專案路徑（此腳本在 <project>\scripts\setup.ps1）
+# West 規範：manifest repo 的父目錄即為 workspace root
+#   專案  : $projectDir  (e.g. C:\Users\Stanley\zephyr-thread-rt58x)
+#   Workspace: $Workspace = Split-Path $projectDir -Parent  (e.g. C:\Users\Stanley)
 $projectDir  = Split-Path $PSScriptRoot -Parent
-$projectName = "zephyr-thread"
-$projectDest = Join-Path $Workspace $projectName
+$projectName = Split-Path $projectDir -Leaf          # e.g. zephyr-thread-rt58x
 $westConfig  = Join-Path $Workspace ".west\config"
 
-if (-not (Test-Path $Workspace)) {
-    New-Item -ItemType Directory -Path $Workspace | Out-Null
-}
-
-# 若本腳本在工作區外執行，複製/symlink 專案目錄
-if (-not (Test-Path $projectDest)) {
-    Write-Host "    連結專案目錄 $projectDir → $projectDest ..."
-    New-Item -ItemType Junction -Path $projectDest -Target $projectDir | Out-Null
-}
+# west 指令不能有 ZEPHYR_BASE 干擾
+$savedZephyrBase = $env:ZEPHYR_BASE
+$env:ZEPHYR_BASE = $null
 
 if (-not (Test-Path $westConfig)) {
     Write-Host "    west init ..."
+    # $Workspace から相対パスで manifest 指定（junction 解決を避ける）
     Push-Location $Workspace
-    west init -l $projectName
+    & $python312 -m west init -l $projectName
+    $rc = $LASTEXITCODE
     Pop-Location
+    if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
+    if (-not (Test-Path $westConfig)) {
+        throw "west init 成功但找不到 $westConfig"
+    }
     Write-Ok "west init 完成"
 } else {
     Write-Skip "west init"
 }
 
 $zephyrDir = Join-Path $Workspace "zephyr"
-if (-not (Test-Path "$zephyrDir\.git")) {
+$req       = Join-Path $zephyrDir "scripts\requirements-base.txt"
+
+if (-not (Test-Path $req)) {
     Write-Host "    west update（下載 Zephyr，約 500 MB）..."
     Push-Location $Workspace
-    west update
+    & $python312 -m west update
+    $rc = $LASTEXITCODE
     Pop-Location
+    if ($rc -ne 0) { throw "west update 失敗（exit $rc）" }
     Write-Ok "west update 完成"
 } else {
     Write-Skip "zephyr（已下載）"
+}
+
+$env:ZEPHYR_BASE = $savedZephyrBase
+
+if (-not (Test-Path $req)) {
+    throw "west update 後仍找不到：$req`n請手動執行：`n  cd $Workspace`n  west update"
 }
 
 # ── 步驟 4：Python 依賴 ───────────────────────────────────────────────────────
 
 Write-Step "安裝 Zephyr Python 依賴"
 
-$req = Join-Path $zephyrDir "scripts\requirements-base.txt"
-pip install -r $req --quiet
+& $python312 -m pip install -r $req --quiet
 Write-Ok "Python 依賴安裝完成"
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
@@ -344,6 +361,14 @@ $sdkInstall = $SdkDir    -replace "\\", "/"
 `$env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:PATH                    += ";C:\Program Files\7-Zip"
+
+# west wrapper — 強制使用 Python 3.12，避免撿到 3.14 的壞 launcher
+`$python312 = (Get-Command python -ErrorAction SilentlyContinue)?.Source
+if (-not `$python312 -or `$python312 -notlike '*312*') {
+    `$python312 = 'C:\Users\Stanley\AppData\Local\Programs\Python\Python312\python.exe'
+}
+function west { & `$python312 -m west `@args }
+
 Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -ForegroundColor Green
 "@ | Set-Content $envPs1 -Encoding UTF8
 
@@ -357,9 +382,11 @@ Write-Host "    載入方式：. $envPs1" -ForegroundColor Yellow
 if ($Build) {
     Write-Step "west build（rt582_evb）"
     Push-Location $Workspace
-    west build -p always -b rt582_evb $projectName --build-dir "$projectName/build"
+    & $python312 -m west build -p always -b rt582_evb $projectName --build-dir "$projectName/build"
+    $rc = $LASTEXITCODE
     Pop-Location
-    $bin = Join-Path $Workspace "$projectName\build\zephyr\zephyr.bin"
+    if ($rc -ne 0) { throw "west build 失敗（exit $rc）" }
+    $bin = Join-Path $projectDir "build\zephyr\zephyr.bin"
     if (Test-Path $bin) {
         Write-Ok "編譯成功：$bin"
     }
