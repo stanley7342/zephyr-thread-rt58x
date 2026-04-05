@@ -92,21 +92,27 @@ $toInstall = @()
 $col1 = 14
 $col2 = 30
 
+$col3 = 16
+
 Write-Host ""
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "套件", "Package ID", "狀態")
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f "套件", "Package ID", "版本", "狀態")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f ("-" * $col1), ("-" * $col2), ("-" * $col3), "------")
 
 foreach ($pkg in $packages) {
-    $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
-    if ($installed) {
+    $installedLine = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
+    if ($installedLine) {
+        # winget list output: Name  Id  Version  Source
+        $ver = ($installedLine.Line -split '\s{2,}' | Select-Object -Index 2)
+        if (-not $ver) { $ver = "-" }
         $status = "已安裝"
         $color  = [ConsoleColor]::DarkGray
     } else {
+        $ver    = "-"
         $status = "待安裝"
         $color  = [ConsoleColor]::Yellow
         $toInstall += $pkg
     }
-    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $pkg.Name, $pkg.Id) -NoNewline
+    Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  " -f $pkg.Name, $pkg.Id, $ver) -NoNewline
     Write-Host $status -ForegroundColor $color
 }
 Write-Host ""

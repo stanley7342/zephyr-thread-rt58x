@@ -51,15 +51,16 @@ declare -A BREW_PKGS=(
 BREW_ORDER=(wget git cmake ninja "python@3.12" xz)
 TO_INSTALL=()
 
-printf "    %-20s  %-20s  %s\n" "套件" "brew 名稱" "狀態"
-printf "    %-20s  %-20s  %s\n" "--------------------" "--------------------" "------"
+printf "    %-20s  %-20s  %-16s  %s\n" "套件" "brew 名稱" "版本" "狀態"
+printf "    %-20s  %-20s  %-16s  %s\n" "--------------------" "--------------------" "----------------" "------"
 
 for pkg in "${BREW_ORDER[@]}"; do
     name="${BREW_PKGS[$pkg]}"
     if brew list --formula 2>/dev/null | grep -q "^${pkg%%@*}$"; then
-        printf "    %-20s  %-20s  \033[90m已安裝\033[0m\n" "$name" "$pkg"
+        ver="$(brew list --versions "${pkg%%@*}" 2>/dev/null | awk '{print $2}')"
+        printf "    %-20s  %-20s  %-16s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
     else
-        printf "    %-20s  %-20s  \033[33m待安裝\033[0m\n" "$name" "$pkg"
+        printf "    %-20s  %-20s  %-16s  \033[33m待安裝\033[0m\n" "$name" "$pkg" "-"
         TO_INSTALL+=("$pkg")
     fi
 done
