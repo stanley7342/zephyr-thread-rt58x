@@ -308,20 +308,9 @@ GPIO17 (RX)  ◄───  TX
 GND          ───── GND
 ```
 
-### 使用 OpenOCD（CMSIS-DAP / DAPLink，推薦）
+---
 
-**啟動 OpenOCD server（終端機 1）：**
-
-```powershell
-$OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
-
-& "$OPENOCD\bin\win\openocd.exe" `
-  -s "$OPENOCD\script" `
-  -f interface/cmsis-dap.cfg `
-  -f target/rt58x.cfg
-```
-
-**燒錄並重置（終端機 2）：**
+### 7-A. 燒錄（Windows）
 
 ```powershell
 $OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
@@ -333,6 +322,79 @@ $BIN     = "C:\Users\Stanley\zephyr-thread-rt58x\build\zephyr\zephyr.bin"
   -f target/rt58x.cfg `
   -c "init; halt; flash write_image erase `"$BIN`" 0x0; reset run; exit"
 ```
+
+---
+
+### 7-B. 燒錄（WSL / Linux）
+
+WSL2 無法直接存取 USB——需先用 **usbipd-win** 將 CMSIS-DAP 橋接至 WSL，再由 WSL 中的 OpenOCD 燒錄。
+
+#### 步驟 1：安裝 usbipd-win（Windows，只需一次）
+
+```powershell
+winget install usbipd
+```
+
+安裝後**重新開啟 PowerShell**。
+
+#### 步驟 2：設定 udev 規則（WSL，只需一次）
+
+```bash
+bash tools/linux/flash.sh --setup-udev
+```
+
+設定完後，若提示需重新登入 WSL：
+
+```powershell
+# PowerShell
+wsl --terminate Ubuntu
+# 再重新開啟 WSL
+```
+
+#### 步驟 3：每次燒錄流程
+
+```powershell
+# ── Windows PowerShell（以系統管理員執行）────
+# 橋接 CMSIS-DAP（自動偵測；或用 -BusId 2-3 指定）
+.\tools\windows\attach-usb.ps1
+```
+
+```bash
+# ── WSL（Bash）────────────────────────────────
+bash tools/linux/flash.sh
+```
+
+```powershell
+# ── Windows PowerShell（燒錄完成後）──────────
+# 中斷橋接（讓其他 Windows 工具可使用該裝置）
+.\tools\windows\attach-usb.ps1 -Detach
+```
+
+#### flash.sh 參數
+
+| 參數 | 說明 |
+|------|------|
+| `--bin <path>` | 指定 binary 路徑（預設：`build/zephyr/zephyr.bin`） |
+| `--setup-udev` | 安裝 CMSIS-DAP udev 規則（首次必須執行） |
+
+#### rt58x.cfg 搜尋順序
+
+`flash.sh` 會依下列順序尋找 OpenOCD scripts：
+
+1. `/mnt/c/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD/script`（掛載自 Windows SDK）
+2. `boards/arm/rt582_evb/support/rt58x.cfg`（本專案內）
+
+若兩處都找不到，會提示錯誤並說明如何手動指定路徑。
+
+#### 疑難排解（WSL 燒錄）
+
+| 症狀 | 解法 |
+|------|------|
+| `找不到 CMSIS-DAP 裝置` | 確認已在 PowerShell 執行 `attach-usb.ps1`；確認 WSL 已啟動 |
+| `usbipd: command not found` | `winget install usbipd`，重開 PowerShell |
+| `attach 失敗` | 以**系統管理員**執行 `attach-usb.ps1` |
+| OpenOCD `libusb` 錯誤 | 執行 `--setup-udev` 並重新登入 WSL |
+| `找不到 rt58x.cfg` | 確認 `C:\Rafael-IoT-SDK-Internal` 可從 `/mnt/c/` 存取 |
 
 ---
 
