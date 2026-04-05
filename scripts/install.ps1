@@ -27,22 +27,24 @@
     移除所有由本腳本安裝的元件（SDK 目錄、.west 目錄、west pip 套件）。
     winget 安裝的系統工具（Python、CMake 等）不會自動移除，需手動處理。
 
-.EXAMPLE
-    # 安裝
-    .\scripts\setup.ps1
+.PARAMETER Background
+    在背景執行，log 輸出至 <workspace>\install.log。
+    需在**系統管理員** PowerShell 內執行（背景模式無法自動提權）。
 
-    # 安裝完畢後直接編譯驗證
-    .\scripts\setup.ps1 -Build
+.EXAMPLE
+    # 安裝（前景）
+    .\scripts\install.ps1
+
+    # 安裝（背景，log 寫入 install.log）
+    .\scripts\install.ps1 -Background
 
     # 自訂 SDK 路徑
-    .\scripts\setup.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
-
-    # 移除所有安裝
-    .\scripts\setup.ps1 -Uninstall
+    .\scripts\install.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 #>
 
 param(
-    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1"
+    [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [switch] $Background
 )
 
 # West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
@@ -52,6 +54,20 @@ $Workspace = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# ── 背景模式 ──────────────────────────────────────────────────────────────────
+if ($Background) {
+    $logFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "install.log"
+    Write-Host "背景安裝中，log 輸出至：$logFile" -ForegroundColor Cyan
+    $job = Start-Job -ScriptBlock {
+        param($script, $sdkDir)
+        & $script -SdkDir $sdkDir 2>&1
+    } -ArgumentList $PSCommandPath, $SdkDir
+    Write-Host "Job ID: $($job.Id)  |  查看進度：Receive-Job $($job.Id) -Keep" -ForegroundColor DarkGray
+    $job | Wait-Job | Receive-Job | Tee-Object -FilePath $logFile
+    Write-Host "安裝完成，log：$logFile" -ForegroundColor Green
+    exit 0
+}
 
 # ── 輔助函式 ─────────────────────────────────────────────────────────────────
 
@@ -82,12 +98,6 @@ function Install-WingetPackage([string]$id, [string]$name) {
     }
 }
 
-# ── Python 3.12 實體路徑（避免 py launcher 或 3.14 壞掉的問題）─────────────────
-$python312 = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
-if (-not (Test-Path $python312)) {
-    throw "找不到 Python 3.12：$python312`n請先安裝：winget install Python.Python.3.12"
-}
-
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 
 Write-Step "安裝必要工具（winget）"
@@ -101,6 +111,22 @@ Install-WingetPackage "7zip.7zip"             "7-Zip"
 # 重新整理 PATH（winget 安裝後新路徑需要重讀）
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("PATH", "User")
+
+# ── Python 3.12 實體路徑（winget 安裝後才能確定）────────────────────────────────
+$python312 = @(
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    "C:\Program Files\Python312\python.exe",
+    "C:\Python312\python.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $python312) {
+    # 最後手段：從 PATH 搜尋 python3.12
+    $python312 = (Get-Command python3.12 -ErrorAction SilentlyContinue)?.Source
+}
+if (-not $python312) {
+    throw "找不到 Python 3.12 執行檔，請重新開啟 PowerShell 後再執行本腳本"
+}
+Write-Ok "Python 3.12：$python312"
 
 # 7z 需要明確加入（winget 安裝後不一定在 PATH）
 $sevenZipPath = "C:\Program Files\7-Zip"

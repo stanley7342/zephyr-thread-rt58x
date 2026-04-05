@@ -16,14 +16,20 @@
 .PARAMETER SdkDir
     Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 
+.PARAMETER Background
+    在背景執行（自動確認移除），log 輸出至 <workspace>\uninstall.log。
+    需在**系統管理員** PowerShell 內執行。
+
 .EXAMPLE
     .\scripts\uninstall.ps1
 
-    .\scripts\uninstall.ps1 -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+    # 背景執行（自動確認，不互動）
+    .\scripts\uninstall.ps1 -Background
 #>
 
 param(
-    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1"
+    [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [switch] $Background
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +38,21 @@ $ErrorActionPreference = "Stop"
 $projectDir = Split-Path $PSScriptRoot -Parent
 $Workspace  = Split-Path $projectDir -Parent
 $sdkParent  = Split-Path $SdkDir -Parent
+
+# ── 背景模式 ──────────────────────────────────────────────────────────────────
+if ($Background) {
+    $logFile = Join-Path $Workspace "uninstall.log"
+    Write-Host "背景移除中，log 輸出至：$logFile" -ForegroundColor Yellow
+    $job = Start-Job -ScriptBlock {
+        param($script, $sdkDir)
+        # 背景模式自動確認（跳過互動提示）
+        & $script -SdkDir $sdkDir -Confirm 2>&1
+    } -ArgumentList $PSCommandPath, $SdkDir
+    Write-Host "Job ID: $($job.Id)  |  查看進度：Receive-Job $($job.Id) -Keep" -ForegroundColor DarkGray
+    $job | Wait-Job | Receive-Job | Tee-Object -FilePath $logFile
+    Write-Host "移除完成，log：$logFile" -ForegroundColor Green
+    exit 0
+}
 
 # Python 3.12
 $python312 = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
@@ -42,10 +63,15 @@ Write-Host "  .west / zephyr : $Workspace"
 Write-Host "  SDK            : $sdkParent"
 Write-Host ""
 
-$confirm = Read-Host "確認移除上述目錄與套件？(y/N)"
-if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-    Write-Host "已取消。" -ForegroundColor DarkGray
-    exit 0
+if ($MyInvocation.BoundParameters.ContainsKey('Confirm')) {
+    # 背景模式：自動確認
+    Write-Host "（背景模式，自動確認）" -ForegroundColor DarkGray
+} else {
+    $confirm = Read-Host "確認移除上述目錄與套件？(y/N)"
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Host "已取消。" -ForegroundColor DarkGray
+        exit 0
+    }
 }
 
 # 1. .west、zephyr、env.ps1（workspace 內）
