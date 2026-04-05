@@ -235,19 +235,37 @@ if (Test-Path $sdkSetup) {
     $sdkUrl  = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${sdkVer}/${sdkFile}"
     $tmp     = Join-Path $env:TEMP $sdkFile
 
+    # 若快取檔存在但不是有效的 7z（例如上次下載到 HTML），先刪除
+    if (Test-Path $tmp) {
+        $magic = [System.IO.File]::ReadAllBytes($tmp)
+        $is7z  = $magic.Count -ge 6 -and
+                 $magic[0] -eq 0x37 -and $magic[1] -eq 0x7A -and
+                 $magic[2] -eq 0xBC -and $magic[3] -eq 0xAF -and
+                 $magic[4] -eq 0x27 -and $magic[5] -eq 0x1C
+        if (-not $is7z) {
+            Write-Warning "    快取檔 $tmp 不是有效的 7z，重新下載..."
+            Remove-Item $tmp -Force
+        }
+    }
+
     if (-not (Test-Path $tmp)) {
         Write-Host "    下載 $sdkFile ..."
+        Write-Host "    URL: $sdkUrl"
         # curl.exe（Windows 10+ 內建）比 Invoke-WebRequest 更可靠地跟隨 GitHub release 重定向
         curl.exe -L --progress-bar -o $tmp $sdkUrl
         if ($LASTEXITCODE -ne 0) {
             Remove-Item $tmp -ErrorAction SilentlyContinue
             throw "下載失敗（curl exit $LASTEXITCODE）：$sdkUrl"
         }
-        # 確認下載到的是二進位檔而非 HTML 錯誤頁
-        $header = [System.IO.File]::ReadAllBytes($tmp) | Select-Object -First 2
-        if ($header[0] -eq 0x3C) {   # '<' → HTML
-            Remove-Item $tmp -ErrorAction SilentlyContinue
-            throw "下載失敗：伺服器回傳 HTML 頁面，請確認 URL 是否正確：$sdkUrl"
+        # 再次驗證 7z magic bytes
+        $magic = [System.IO.File]::ReadAllBytes($tmp)
+        $is7z  = $magic.Count -ge 6 -and
+                 $magic[0] -eq 0x37 -and $magic[1] -eq 0x7A -and
+                 $magic[2] -eq 0xBC -and $magic[3] -eq 0xAF -and
+                 $magic[4] -eq 0x27 -and $magic[5] -eq 0x1C
+        if (-not $is7z) {
+            Remove-Item $tmp -Force
+            throw "下載失敗：收到的不是 7z 檔案（可能是 HTML 錯誤頁）。請確認 URL 是否正確：`n  $sdkUrl"
         }
     } else {
         Write-Skip "SDK 壓縮檔（$tmp）"
