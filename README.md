@@ -94,7 +94,7 @@ Set-Location zephyr-thread-rt58x
 | `env.ps1` | 刪除 |
 | Zephyr SDK（`C:\zephyr-sdk-1.0.1`） | 整個目錄刪除 |
 | `west`（pip 套件） | `pip uninstall west` |
-| Python / CMake / Ninja / Git / 7-Zip | **不自動移除**（系統共用工具） |
+| Python / CMake / Ninja / Git / 7-Zip | `winget uninstall` で自動移除 |
 
 > 若想重新安裝，重新執行 `.\scripts\install.ps1` 即可。
 

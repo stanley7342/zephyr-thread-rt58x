@@ -91,7 +91,26 @@ if (Test-Path $python312) {
     Write-Host "  [OK] west (pip) 已移除" -ForegroundColor Green
 }
 
+# 4. winget 移除系統工具
+Write-Host ""
+Write-Host "  移除系統工具（winget）..."
+$wingetPackages = @(
+    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
+    @{ Id = "Kitware.CMake";      Name = "CMake" },
+    @{ Id = "Ninja-build.Ninja";  Name = "Ninja" },
+    @{ Id = "Git.Git";            Name = "Git" },
+    @{ Id = "7zip.7zip";          Name = "7-Zip" }
+)
+foreach ($pkg in $wingetPackages) {
+    $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
+    if ($installed) {
+        Write-Host "  移除 $($pkg.Name) ..."
+        winget uninstall --id $pkg.Id -e --silent 2>$null
+        Write-Host "  [OK] $($pkg.Name) 已移除" -ForegroundColor Green
+    } else {
+        Write-Host "  [--] $($pkg.Name) 未安裝，略過" -ForegroundColor DarkGray
+    }
+}
+
 Write-Host ""
 Write-Host "移除完成。" -ForegroundColor Cyan
-Write-Host "注意：Python / CMake / Ninja / Git / 7-Zip 等系統工具" -ForegroundColor Yellow
-Write-Host "      為系統共用元件，請視需要透過 winget 或控制台手動移除。" -ForegroundColor Yellow
