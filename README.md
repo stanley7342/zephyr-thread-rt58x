@@ -16,15 +16,16 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 ## 目錄
 
 1. [Prerequisites](#1-prerequisites)
-2. [Clone 與 West 工作區設定](#2-clone-與-west-工作區設定)
-3. [安裝 Zephyr SDK Toolchain](#3-安裝-zephyr-sdk-toolchain)
-4. [設定環境變數](#4-設定環境變數)
-5. [編譯](#5-編譯)
-6. [燒錄](#6-燒錄)
-7. [驗證 — 序列終端機](#7-驗證--序列終端機)
-8. [OpenThread CLI 快速上手](#8-openthread-cli-快速上手)
-9. [疑難排解](#9-疑難排解)
-10. [專案結構](#10-專案結構)
+2. [快速開始（自動化腳本）](#快速開始自動化腳本)
+3. [Clone 與 West 工作區設定](#3-clone-與-west-工作區設定)
+4. [安裝 Zephyr SDK Toolchain](#4-安裝-zephyr-sdk-toolchain)
+5. [設定環境變數](#5-設定環境變數)
+6. [編譯](#6-編譯)
+7. [燒錄](#7-燒錄)
+8. [驗證 — 序列終端機](#8-驗證--序列終端機)
+9. [OpenThread CLI 快速上手](#9-openthread-cli-快速上手)
+10. [疑難排解](#10-疑難排解)
+11. [專案結構](#11-專案結構)
 
 ---
 
@@ -85,6 +86,39 @@ Set-Location zephyr-thread-rt58x
 ```
 
 腳本完成後會產生 `C:\zephyr-workspace\env.ps1`，之後每次開啟新 PowerShell 執行 `. C:\zephyr-workspace\env.ps1` 即可載入環境。
+
+### 腳本參數一覽
+
+| 參數 | 說明 |
+|------|------|
+| `-Workspace <路徑>` | West 工作區根目錄（預設：`C:\zephyr-workspace`） |
+| `-SdkDir <路徑>` | Zephyr SDK 安裝目錄（預設：`C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1`） |
+| `-Build` | 安裝完成後自動執行 `west build` 驗證（約 5 分鐘） |
+| `-SkipDtc` | 跳過 Chocolatey / DTC 安裝（Chocolatey 尚未安裝時可先略過） |
+| `-Uninstall` | 移除所有由腳本安裝的元件（見下方說明） |
+
+### 移除環境
+
+若需要清除整個開發環境，以 **系統管理員** 執行：
+
+```powershell
+.\scripts\setup.ps1 -Uninstall
+
+# 自訂路徑（需與安裝時一致）
+.\scripts\setup.ps1 -Uninstall -Workspace D:\zephyr-ws -SdkDir D:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+```
+
+腳本會顯示即將刪除的目錄並要求確認（輸入 `y`），然後執行：
+
+| 項目 | 動作 |
+|------|------|
+| West 工作區（`C:\zephyr-workspace`） | 整個目錄刪除 |
+| Zephyr SDK（`C:\zephyr-sdk-1.0.1`） | 整個目錄刪除 |
+| `west`（pip 套件） | `pip uninstall west` |
+| `dtc-msys2`（Chocolatey 套件） | `choco uninstall dtc-msys2` |
+| Python / CMake / Ninja / Git / 7-Zip | **不自動移除**（系統共用工具，請視需要透過 winget 或控制台手動移除） |
+
+> 若想重新安裝，重新執行 `.\scripts\setup.ps1` 即可。
 
 > 若想了解每個步驟的細節，繼續閱讀以下章節。
 
