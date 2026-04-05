@@ -106,9 +106,18 @@ if (Assert-Command "dtc") {
             [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
         Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
             'https://community.chocolatey.org/install.ps1'))
-        # 重讀 PATH
+        # 重讀 PATH（含 Chocolatey bin 目錄）
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                     [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    }
+    # 確保 choco 可執行（無論本次安裝或已存在）
+    $chocoBin = "C:\ProgramData\chocolatey\bin"
+    if ((Test-Path $chocoBin) -and ($env:PATH -notlike "*$chocoBin*")) {
+        $env:PATH = "$chocoBin;$env:PATH"
+    }
+    if (-not (Assert-Command "choco")) {
+        Write-Error "找不到 choco，請重新開啟 PowerShell（系統管理員）後再執行此腳本"
+        exit 1
     }
     Write-Host "    安裝 dtc-msys2 ..."
     choco install dtc-msys2 -y
