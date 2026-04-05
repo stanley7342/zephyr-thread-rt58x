@@ -61,11 +61,11 @@ void otrInitUser(otInstance *instance)
 
 int main(void)
 {
-    printk("======================================\n");
-    printk("  RT582-EVB  Zephyr + OpenThread CLI  \n");
-    printk("  Built: " __DATE__ " " __TIME__ "  \n");
-    printk("  Hash:  " BUILD_GIT_HASH "          \n");
-    printk("======================================\n");
+    (printk)("======================================\n");
+    (printk)("  RT582-EVB  Zephyr + OpenThread CLI  \n");
+    (printk)("  Built: " __DATE__ " " __TIME__ "  \n");
+    (printk)("  Hash:  " BUILD_GIT_HASH "          \n");
+    (printk)("======================================\n");
 
     k_thread_create(&wdog_thread_data, wdog_stack, K_THREAD_STACK_SIZEOF(wdog_stack),
                     wdog_thread_fn, NULL, NULL, NULL,
