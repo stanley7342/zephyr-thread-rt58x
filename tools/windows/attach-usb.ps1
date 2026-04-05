@@ -56,7 +56,7 @@ if (-not $usbipd) {
 
 if (-not $usbipd) {
     Write-Host "    未找到 usbipd，正在安裝..." -ForegroundColor Yellow
-    winget install --id Microsoft.usbipd -e --silent --accept-source-agreements --accept-package-agreements
+    winget install --id dorssel.usbipd-win -e --silent --accept-source-agreements --accept-package-agreements
     if ($LASTEXITCODE -ne 0) {
         Write-Host "usbipd 安裝失敗，請手動執行：winget install usbipd" -ForegroundColor Red
         exit 1
