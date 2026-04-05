@@ -46,7 +46,9 @@ jobs:
         id: cache-zephyr
         uses: actions/cache@v4
         with:
-          path: zephyr
+          path: |
+            zephyr
+            modules
           key: zephyr-${{ hashFiles('zephyr-thread/west.yml') }}
 
       - name: west init
