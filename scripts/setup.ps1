@@ -285,6 +285,7 @@ if (-not (Test-Path $req)) {
 
 Write-Step "安裝 Zephyr Python 依賴"
 
+& $python312 -m pip install --quiet --upgrade pip
 & $python312 -m pip install -r $req --quiet
 Write-Ok "Python 依賴安裝完成"
 
