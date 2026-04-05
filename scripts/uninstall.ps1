@@ -28,8 +28,9 @@
 #>
 
 param(
-    [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
-    [switch] $Bg
+    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [switch] $Bg,
+    [switch] $Force  # 跳過確認提示（-Bg 自動帶入）
 )
 
 Set-StrictMode -Version Latest
@@ -45,8 +46,7 @@ if ($Bg) {
     Write-Host "背景移除中，log 輸出至：$logFile" -ForegroundColor Yellow
     $job = Start-Job -ScriptBlock {
         param($script, $sdkDir)
-        # 背景模式自動確認（跳過互動提示）
-        & $script -SdkDir $sdkDir -Confirm 2>&1
+        & $script -SdkDir $sdkDir -Force 2>&1
     } -ArgumentList $PSCommandPath, $SdkDir
     Write-Host "Job ID: $($job.Id)  |  查看進度：Receive-Job $($job.Id) -Keep" -ForegroundColor DarkGray
     $job | Wait-Job | Receive-Job | Tee-Object -FilePath $logFile
@@ -63,9 +63,8 @@ Write-Host "  .west / zephyr : $Workspace"
 Write-Host "  SDK            : $sdkParent"
 Write-Host ""
 
-if ($MyInvocation.BoundParameters.ContainsKey('Confirm')) {
-    # 背景模式：自動確認
-    Write-Host "（背景模式，自動確認）" -ForegroundColor DarkGray
+if ($Force) {
+    Write-Host "（-Force，自動確認）" -ForegroundColor DarkGray
 } else {
     $confirm = Read-Host "確認移除上述目錄與套件？(y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
