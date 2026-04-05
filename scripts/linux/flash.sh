@@ -152,4 +152,4 @@ echo ""
     -c "init; halt; flash write_image erase \"$BIN\" 0x0; reset run; exit"
 
 echo ""
-ok "燒錄完成！請開啟序列終端機（115200 8N1）觀察輸出。"
+echo -e "\n\033[32m[OK] 燒錄完成！請開啟序列終端機（115200 8N1）觀察輸出。\033[0m"
