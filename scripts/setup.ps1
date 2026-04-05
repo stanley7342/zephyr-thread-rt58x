@@ -110,17 +110,20 @@ if (Assert-Command "dtc") {
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                     [System.Environment]::GetEnvironmentVariable("PATH", "User")
     }
-    # 確保 choco 可執行（無論本次安裝或已存在）
-    $chocoBin = "C:\ProgramData\chocolatey\bin"
-    if ((Test-Path $chocoBin) -and ($env:PATH -notlike "*$chocoBin*")) {
-        $env:PATH = "$chocoBin;$env:PATH"
+    # 找到 choco 可執行檔（優先用 PATH，其次用已知安裝路徑）
+    $chocoExe = (Get-Command choco -ErrorAction SilentlyContinue)?.Source
+    if (-not $chocoExe) {
+        $chocoExe = @(
+            "C:\ProgramData\chocolatey\bin\choco.exe",
+            "C:\ProgramData\chocolatey\choco.exe"
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     }
-    if (-not (Assert-Command "choco")) {
+    if (-not $chocoExe) {
         Write-Error "找不到 choco，請重新開啟 PowerShell（系統管理員）後再執行此腳本"
         exit 1
     }
     Write-Host "    安裝 dtc-msys2 ..."
-    choco install dtc-msys2 -y
+    & $chocoExe install dtc-msys2 -y
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("PATH", "User")
     Write-Ok "dtc 安裝完成"
