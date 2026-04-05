@@ -600,7 +600,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
                               otRadio_var.pTxFrame->mLength + 2,
                               tx_control,
                               otMacFrameGetSequence(aFrame)) != 0) {
-        printk("[ot_radio] TX failed!\n");
+        printk("[ot_radio] TX failed!");
         OT_NOTIFY(OT_SYSTEM_EVENT_RADIO_TX_NO_ACK);
     }
 

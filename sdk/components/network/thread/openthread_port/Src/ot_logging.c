@@ -25,5 +25,5 @@ void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion,
     va_start(args, aFormat);
     vsnprintf(buf, sizeof(buf), aFormat, args);
     va_end(args);
-    printk("%s\r\n", buf);
+    printk("%s", buf);
 }

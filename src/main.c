@@ -72,15 +72,15 @@ int main(void)
                     2, 0, K_NO_WAIT);
     k_thread_name_set(&wdog_thread_data, "wdog");
 
-    printk("[MAIN] wdog started\n");
+    printk("[MAIN] wdog started");
 
-    printk("[RF] hosal_rf_init...\n");
+    printk("[RF] hosal_rf_init...");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
-    printk("[RF] hosal_rf_init done\n");
+    printk("[RF] hosal_rf_init done");
 
-    printk("[RF] lmac15p4_init...\n");
+    printk("[RF] lmac15p4_init...");
     lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
-    printk("[RF] lmac15p4_init done\n");
+    printk("[RF] lmac15p4_init done");
 
     lmac15p4_phy_pib_set(PHY_PIB_TURNAROUND_TIMER, PHY_PIB_CCA_DETECT_MODE,
                          PHY_PIB_CCA_THRESHOLD, PHY_PIB_CCA_DETECTED_TIME);
@@ -89,10 +89,10 @@ int main(void)
                          MAC_PIB_MAC_MAX_CSMACA_BACKOFFS,
                          MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME,
                          MAC_PIB_MAC_MAX_FRAME_RETRIES, MAC_PIB_MAC_MIN_BE);
-    printk("[RF] PIB set done\n");
+    printk("[RF] PIB set done");
 
     otrStart();
-    printk("OpenThread FTD task started.\n");
+    printk("OpenThread FTD task started.");
 
     return 0;
 }

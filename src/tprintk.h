@@ -13,4 +13,4 @@
  */
 #undef printk
 #define printk(fmt, ...) \
-    (printk)("[%7u] %s:%d " fmt, k_uptime_get_32(), __FILE_NAME__, __LINE__, ##__VA_ARGS__)
+    (printk)("[%7u] " fmt " [%s:%d]\n", k_uptime_get_32(), ##__VA_ARGS__, __FILE_NAME__, __LINE__)

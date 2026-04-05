@@ -18,7 +18,7 @@
 void otPlatReset(otInstance *aInstance)
 {
     (void)aInstance;
-    printk("[OT] otPlatReset\n");
+    printk("[OT] otPlatReset");
 
     wdt_config_mode_t wdt_mode = {
         .int_enable    = 0,
@@ -50,7 +50,7 @@ void otPlatWakeHost(void) {}
 
 void otPlatAssertFail(const char *aFilename, int aLineNumber)
 {
-    printk("[OT] Assert failed: %s @ %d\n", aFilename, aLineNumber);
+    printk("[OT] Assert failed: %s @ %d", aFilename, aLineNumber);
 }
 
 /* ── CSL stubs ───────────────────────────────────────────────────────────── *
