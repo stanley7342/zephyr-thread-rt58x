@@ -125,6 +125,24 @@ if (-not $BusId) {
     exit 1
 }
 
+# ── 確保 WSL2 已啟動 ─────────────────────────────────────────────────────────
+Write-Host "確認 WSL2 狀態..." -ForegroundColor Cyan
+$wslRunning = wsl --list --running 2>&1 | Select-String "\S"
+if (-not $wslRunning) {
+    Write-Host "    WSL2 未啟動，正在喚醒..." -ForegroundColor Yellow
+    # 在背景啟動 WSL2 並等待就緒
+    Start-Job { wsl --exec sh -c "sleep 5" } | Out-Null
+    Start-Sleep -Seconds 3
+    $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
+    if (-not $wslRunning) {
+        Write-Host "    WSL2 啟動失敗，請手動開啟 WSL 視窗後再試。" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "    [OK] WSL2 已就緒" -ForegroundColor Green
+} else {
+    Write-Host "    [OK] WSL2 已在執行中" -ForegroundColor DarkGray
+}
+
 # ── Attach ────────────────────────────────────────────────────────────────────
 Write-Host "橋接 BusId $BusId 至 WSL2..." -ForegroundColor Cyan
 
@@ -136,7 +154,7 @@ if ($alreadyAttached) {
     usbipd bind --busid $BusId --force 2>$null
     usbipd attach --wsl --busid $BusId
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "attach 失敗（exit $LASTEXITCODE）。請確認 WSL2 已啟動。" -ForegroundColor Red
+        Write-Host "attach 失敗（exit $LASTEXITCODE）。" -ForegroundColor Red
         exit 1
     }
 }
