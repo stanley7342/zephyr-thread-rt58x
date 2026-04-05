@@ -39,7 +39,27 @@ Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 M
 | Ninja | 1.10 | `winget install Ninja-build.Ninja` |
 | Git | 任意 | `winget install Git.Git` |
 | 7-Zip | 任意 | `winget install 7zip.7zip` — 解壓縮 Zephyr SDK `.7z` 用 |
-| DTC | 1.4.6 | `choco install dtc-msys2` （需先安裝 [Chocolatey](https://chocolatey.org/install)） |
+| DTC | 1.4.6 | 透過 Chocolatey 安裝，見下方說明 |
+
+### 安裝 Chocolatey（DTC 前置步驟）
+
+Chocolatey 是 Windows 的套件管理器，用來安裝 DTC（Device Tree Compiler）。
+
+以 **系統管理員** 開啟 PowerShell，執行：
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol =
+    [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+    'https://community.chocolatey.org/install.ps1'))
+```
+
+安裝完成後，**關閉並重新以系統管理員開啟 PowerShell**，使 `choco` 生效，再執行：
+
+```powershell
+choco install dtc-msys2 -y
+```
 
 > 以下所有指令均在 **PowerShell 7+** 執行。
 
