@@ -60,48 +60,63 @@ if [[ $SETUP_UDEV -eq 1 ]]; then
     exit 0
 fi
 
-# ── 確認 OpenOCD 已安裝 ───────────────────────────────────────────────────────
-step "檢查 OpenOCD"
+# ── 尋找 openocd-rt58x（自行編譯版，優先使用）────────────────────────────────
+step "尋找 openocd-rt58x"
 
-if ! command -v openocd &>/dev/null; then
-    echo "    未找到 openocd，正在安裝..."
-    sudo apt-get update -qq
-    sudo apt-get install -y openocd
-fi
-ok "OpenOCD：$(openocd --version 2>&1 | head -1)"
+OCD_BIN=""
+OCD_SCRIPT_DIR=""
 
-# ── 找 Rafael SDK OpenOCD scripts（rt58x.cfg）────────────────────────────────
-step "尋找 rt58x.cfg"
-
-# 優先用 Rafael SDK（掛載自 Windows）
-RAFAEL_OCD_SCRIPT=""
-RAFAEL_CANDIDATES=(
-    "/mnt/c/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD/script"
-    "/mnt/c/Users/Stanley/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD/script"
+# openocd-rt58x 可能的位置（與本專案同層、home 目錄、workspace 同層）
+RT58X_OCD_CANDIDATES=(
+    "$WORKSPACE/openocd-rt58x"
+    "$HOME/openocd-rt58x"
+    "/opt/openocd-rt58x"
 )
-for cand in "${RAFAEL_CANDIDATES[@]}"; do
-    if [[ -f "$cand/target/rt58x.cfg" ]]; then
-        RAFAEL_OCD_SCRIPT="$cand"
-        break
-    fi
+
+for cand in "${RT58X_OCD_CANDIDATES[@]}"; do
+    # 編譯後二進位可能在 src/openocd 或 build/src/openocd
+    for bin_path in \
+        "$cand/src/openocd" \
+        "$cand/build/src/openocd" \
+        "$cand/install/bin/openocd"
+    do
+        if [[ -x "$bin_path" ]]; then
+            OCD_BIN="$bin_path"
+            # tcl scripts 位於 openocd-rt58x/tcl/
+            if [[ -d "$cand/tcl" ]]; then
+                OCD_SCRIPT_DIR="$cand/tcl"
+            fi
+            ok "openocd-rt58x：$OCD_BIN"
+            [[ -n "$OCD_SCRIPT_DIR" ]] && ok "Scripts   ：$OCD_SCRIPT_DIR"
+            break 2
+        fi
+    done
 done
 
-if [[ -n "$RAFAEL_OCD_SCRIPT" ]]; then
-    ok "使用 Rafael SDK scripts：$RAFAEL_OCD_SCRIPT"
-    OCD_SCRIPT_DIR="$RAFAEL_OCD_SCRIPT"
-else
-    # Fallback：在本專案找
-    LOCAL_CFG="$PROJECT_DIR/boards/arm/rt582_evb/support/rt58x.cfg"
-    if [[ -f "$LOCAL_CFG" ]]; then
-        OCD_SCRIPT_DIR="$(dirname "$LOCAL_CFG")"
-        ok "使用本專案 cfg：$LOCAL_CFG"
-    else
-        err "找不到 rt58x.cfg"
-        echo ""
-        echo "請指定 Rafael SDK 路徑，或確認已掛載 /mnt/c/Rafael-IoT-SDK-Internal"
-        echo "也可手動指定：OCD_SCRIPT_DIR=/path/to/openocd/script bash scripts/linux/flash.sh"
-        exit 1
-    fi
+if [[ -z "$OCD_BIN" ]]; then
+    err "找不到已編譯的 openocd-rt58x"
+    echo ""
+    echo "    請先編譯 openocd-rt58x 並放置於下列任一位置："
+    for cand in "${RT58X_OCD_CANDIDATES[@]}"; do
+        echo "      $cand"
+    done
+    echo ""
+    echo "    編譯方式："
+    echo "      git clone <openocd-rt58x-repo> $WORKSPACE/openocd-rt58x"
+    echo "      cd $WORKSPACE/openocd-rt58x"
+    echo "      ./bootstrap && ./configure && make -j\$(nproc)"
+    exit 1
+fi
+
+# 若 tcl/ 沒找到，嘗試從系統 openocd 抓 scripts
+if [[ -z "$OCD_SCRIPT_DIR" ]]; then
+    SYS_SHARE="/usr/share/openocd/scripts"
+    [[ -d "$SYS_SHARE" ]] && OCD_SCRIPT_DIR="$SYS_SHARE"
+fi
+
+if [[ -z "$OCD_SCRIPT_DIR" ]]; then
+    err "找不到 OpenOCD tcl scripts 目錄（期望在 openocd-rt58x/tcl/）"
+    exit 1
 fi
 
 # ── 確認 binary 存在 ──────────────────────────────────────────────────────────
@@ -135,7 +150,7 @@ echo "    Binary : $BIN"
 echo "    Scripts: $OCD_SCRIPT_DIR"
 echo ""
 
-openocd \
+"$OCD_BIN" \
     -s "$OCD_SCRIPT_DIR" \
     -f interface/cmsis-dap.cfg \
     -f target/rt58x.cfg \
