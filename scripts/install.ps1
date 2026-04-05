@@ -100,23 +100,34 @@ $packages = @(
     @{ Id = "7zip.7zip";          Name = "7-Zip"       }
 )
 
-# 先列出並檢查安裝狀態
+# 先列出並檢查安裝狀態（表格顯示）
 $toInstall = @()
+$col1 = 14   # 套件名稱欄寬
+$col2 = 30   # Package ID 欄寬
+
+Write-Host ""
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "套件", "Package ID", "狀態")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
+
 foreach ($pkg in $packages) {
     $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
     if ($installed) {
-        Write-Host "    [已安裝] $($pkg.Name)" -ForegroundColor DarkGray
+        $status = "已安裝"
+        $color  = [ConsoleColor]::DarkGray
     } else {
-        Write-Host "    [待安裝] $($pkg.Name)" -ForegroundColor Yellow
+        $status = "待安裝"
+        $color  = [ConsoleColor]::Yellow
         $toInstall += $pkg
     }
+    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $pkg.Name, $pkg.Id) -NoNewline
+    Write-Host $status -ForegroundColor $color
 }
+Write-Host ""
 
 # 再逐一安裝缺少的套件
 if ($toInstall.Count -eq 0) {
     Write-Ok "所有工具已安裝，略過"
 } else {
-    Write-Host ""
     Write-Step "安裝缺少的工具（共 $($toInstall.Count) 項）"
     foreach ($pkg in $toInstall) {
         Write-Host "    安裝 $($pkg.Name) ..."
