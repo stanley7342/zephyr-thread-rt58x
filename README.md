@@ -72,7 +72,7 @@ choco install dtc-msys2 -y
 
 ```powershell
 # 1. Clone 本專案
-git clone https://github.com/<your-org>/zephyr-thread-rt58x.git
+git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
 Set-Location zephyr-thread-rt58x
 
 # 2. 執行安裝腳本（需要系統管理員權限安裝 winget 套件）
@@ -142,7 +142,7 @@ New-Item -ItemType Directory -Path C:\zephyr-workspace
 Set-Location C:\zephyr-workspace
 
 # Clone 本專案至 zephyr-thread/（名稱必須與 west.yml self.path 一致）
-git clone https://github.com/<your-org>/zephyr-thread-rt58x.git zephyr-thread
+git clone https://github.com/stanley7342/zephyr-thread-rt58x.git zephyr-thread
 
 # 以本專案為 manifest 初始化 west 工作區
 west init -l zephyr-thread
