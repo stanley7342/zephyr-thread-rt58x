@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # RT582-EVB Zephyr + OpenThread — Linux/WSL 移除腳本
 #
-# 移除 install.sh 安裝的元件（SDK、.west、zephyr、Python venv、env.sh）。
-# apt 安裝的套件不會自動移除。
+# 移除 install.sh 安裝的元件（SDK、.west、zephyr、Python venv、env.sh、apt 套件）。
 #
 # 用法：
 #   bash scripts/linux/uninstall.sh
@@ -67,11 +66,14 @@ for name in "${DIR_ORDER[@]}"; do
     fi
 done
 
-
-APT_PKGS=(git cmake ninja-build python3 python3-pip wget xz-utils)
+APT_PKGS=(git cmake ninja-build python3 python3-pip python3-venv wget xz-utils)
+APT_TO_REMOVE=()
 for pkg in "${APT_PKGS[@]}"; do
-    if dpkg -s "$pkg" &>/dev/null 2>&1; then
-        print_row "$pkg (apt)" "$pkg" "已安裝（不自動移除）" "gray"
+    if dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
+        print_row "$pkg (apt)" "$pkg" "待移除" "yellow"
+        APT_TO_REMOVE+=("$pkg")
+    else
+        print_row "$pkg (apt)" "$pkg" "未安裝" "gray"
     fi
 done
 
@@ -97,9 +99,12 @@ for name in "${DIR_ORDER[@]}"; do
     fi
 done
 
+if [[ ${#APT_TO_REMOVE[@]} -gt 0 ]]; then
+    echo "  移除 apt 套件：${APT_TO_REMOVE[*]} ..."
+    sudo apt-get remove -y "${APT_TO_REMOVE[@]}"
+    sudo apt-get autoremove -y
+    echo -e "  \033[32m[OK] apt 套件已移除\033[0m"
+fi
 
 echo ""
 echo -e "\033[36m移除完成。\033[0m"
-echo ""
-echo "注意：apt 安裝的套件（git、cmake、ninja-build 等）需手動移除："
-echo "  sudo apt-get remove git cmake ninja-build python3-pip wget xz-utils"
