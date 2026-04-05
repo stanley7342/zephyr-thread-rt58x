@@ -125,7 +125,10 @@ else
 
     mkdir -p "$(dirname "$SDK_DIR")"
     echo "    解壓縮 SDK ..."
-    tar -xf "$TMP" -C "$(dirname "$SDK_DIR")"
+    tar -xvf "$TMP" -C "$(dirname "$SDK_DIR")" | while IFS= read -r line; do
+        printf "\r    \033[90m%-72s\033[0m" "${line:0:72}"
+    done
+    echo ""
     echo "    執行 setup.sh ..."
     bash "$SDK_SETUP"
     ok "Zephyr SDK 安裝完成"
