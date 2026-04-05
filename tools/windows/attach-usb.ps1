@@ -85,7 +85,7 @@ Set-Alias -Name usbipd -Value $usbipd -Scope Script -Force
 # ── Detach 模式 ───────────────────────────────────────────────────────────────
 if ($Detach) {
     Write-Host "中斷 CMSIS-DAP 橋接..." -ForegroundColor Cyan
-    $attached = usbipd list 2>&1 | Select-String "Attached" | Select-String -i "cmsis|dap|arm|keil|segger|jlink|mbed"
+    $attached = usbipd list 2>&1 | Select-String "Attached" | Select-String "cmsis|dap|arm|keil|segger|jlink|mbed"
     if (-not $attached) {
         Write-Host "找不到已 attach 的 CMSIS-DAP 裝置。" -ForegroundColor DarkGray
         exit 0
@@ -109,7 +109,7 @@ Write-Host ""
 # ── 若未指定 BusId，讓使用者選擇 ─────────────────────────────────────────────
 if (-not $BusId) {
     # 嘗試自動偵測 CMSIS-DAP
-    $auto = usbipd list 2>&1 | Select-String -i "cmsis|dap|mbed" | Select-Object -First 1
+    $auto = usbipd list 2>&1 | Select-String "cmsis|dap|mbed" | Select-Object -First 1
     if ($auto) {
         $BusId = ($auto.Line -split "\s+")[0].Trim()
         Write-Host "自動偵測到 CMSIS-DAP：BusId = $BusId" -ForegroundColor Green
