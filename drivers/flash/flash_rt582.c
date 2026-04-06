@@ -1,8 +1,14 @@
 /*
  * Zephyr flash driver for Rafael RT582
  *
- * Wraps the RT582 flashctl API (flash_read_n_bytes, flash_write_n_bytes,
- * flash_erase, flash_check_busy, flush_cache) into Zephyr's flash_driver_api.
+ * Wraps the RT582 flashctl API into Zephyr's flash_driver_api.
+ *
+ * IMPORTANT: We cannot #include "flashctl.h" here because it defines
+ * flash_erase(), flash_read(), etc. which conflict with Zephyr's
+ * flash.h syscall wrappers of the same names. Instead, we declare
+ * the raw hardware functions we need via extern with rt582_ prefixed
+ * wrapper names, and call the originals from a separate .c file
+ * (flash_rt582_hal.c) that does NOT include <zephyr/drivers/flash.h>.
  *
  * Key hardware constraints:
  *   - Write granularity: 256-byte pages (sub-page handled by flash_write_n_bytes)
@@ -19,16 +25,26 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-#include "flashctl.h"
-
 LOG_MODULE_REGISTER(flash_rt582, CONFIG_FLASH_LOG_LEVEL);
 
+/* ── HAL wrappers (defined in flash_rt582_hal.c to avoid symbol clash) ── */
+extern uint32_t rt582_hal_flash_read(uint32_t addr, uint32_t buf, uint32_t len);
+extern uint32_t rt582_hal_flash_write(uint32_t addr, uint32_t buf, uint32_t len);
+extern uint32_t rt582_hal_flash_erase_sector(uint32_t addr);
+extern uint32_t rt582_hal_flash_erase_32k(uint32_t addr);
+extern uint32_t rt582_hal_flash_erase_64k(uint32_t addr);
+extern int      rt582_hal_flash_busy(void);
+extern void     rt582_hal_flush_cache(void);
+extern void     rt582_hal_flash_init(void);
+
 /* ── Flash parameters ───────────────────────────────────────────────────── */
-#define RT582_FLASH_BASE    0x00000000
 #define RT582_FLASH_SIZE    DT_INST_REG_SIZE(0)
-#define RT582_PAGE_SIZE     256         /* write page size */
 #define RT582_SECTOR_SIZE   4096        /* smallest erase unit */
 #define RT582_ERASE_VALUE   0xFF
+#define LENGTH_32KB         (32 * 1024)
+#define LENGTH_64KB         (64 * 1024)
+
+#define STATUS_SUCCESS      0
 
 /* ── Driver data ────────────────────────────────────────────────────────── */
 struct flash_rt582_data {
@@ -39,11 +55,10 @@ static struct flash_rt582_data flash_data;
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 
-/* Busy-wait for flash to become idle. Returns 0 on success, -ETIMEDOUT. */
 static int flash_wait_idle(void)
 {
     uint32_t retries = 0;
-    while (flash_check_busy()) {
+    while (rt582_hal_flash_busy()) {
         if (++retries > 1000000) {
             LOG_ERR("flash busy timeout");
             return -ETIMEDOUT;
@@ -68,9 +83,9 @@ static int rt582_flash_read(const struct device *dev, off_t offset,
 
     k_mutex_lock(&ctx->lock, K_FOREVER);
 
-    uint32_t rc = flash_read_n_bytes((uint32_t)offset,
-                                     (uint32_t)(uintptr_t)data,
-                                     (uint32_t)len);
+    uint32_t rc = rt582_hal_flash_read((uint32_t)offset,
+                                       (uint32_t)(uintptr_t)data,
+                                       (uint32_t)len);
     k_mutex_unlock(&ctx->lock);
 
     return (rc == STATUS_SUCCESS) ? 0 : -EIO;
@@ -96,9 +111,9 @@ static int rt582_flash_write(const struct device *dev, off_t offset,
         goto out;
     }
 
-    uint32_t rc = flash_write_n_bytes((uint32_t)offset,
-                                      (uint32_t)(uintptr_t)data,
-                                      (uint32_t)len);
+    uint32_t rc = rt582_hal_flash_write((uint32_t)offset,
+                                        (uint32_t)(uintptr_t)data,
+                                        (uint32_t)len);
     if (rc != STATUS_SUCCESS) {
         ret = -EIO;
         goto out;
@@ -106,7 +121,7 @@ static int rt582_flash_write(const struct device *dev, off_t offset,
 
     ret = flash_wait_idle();
     if (ret == 0) {
-        flush_cache();
+        rt582_hal_flush_cache();
     }
 
 out:
@@ -115,8 +130,8 @@ out:
 }
 
 /* ── flash_driver_api: erase ────────────────────────────────────────────── */
-static int rt582_flash_erase(const struct device *dev, off_t offset,
-                             size_t size)
+static int rt582_flash_erase_op(const struct device *dev, off_t offset,
+                                size_t size)
 {
     struct flash_rt582_data *ctx = dev->data;
 
@@ -126,7 +141,6 @@ static int rt582_flash_erase(const struct device *dev, off_t offset,
     if (offset < 0 || (offset + size) > RT582_FLASH_SIZE) {
         return -EINVAL;
     }
-    /* Must be sector-aligned */
     if ((offset % RT582_SECTOR_SIZE) != 0 ||
         (size % RT582_SECTOR_SIZE) != 0) {
         return -EINVAL;
@@ -139,44 +153,41 @@ static int rt582_flash_erase(const struct device *dev, off_t offset,
     uint32_t addr = (uint32_t)offset;
 
     while (remaining > 0) {
-        flash_erase_mode_t mode;
+        uint32_t rc;
         size_t erase_len;
 
-        /* Pick largest aligned erase unit to minimize erase count */
         if (remaining >= LENGTH_64KB && (addr % LENGTH_64KB) == 0) {
-            mode = FLASH_ERASE_64K;
             erase_len = LENGTH_64KB;
+            ret = flash_wait_idle();
+            if (ret) break;
+            rc = rt582_hal_flash_erase_64k(addr);
         } else if (remaining >= LENGTH_32KB && (addr % LENGTH_32KB) == 0) {
-            mode = FLASH_ERASE_32K;
             erase_len = LENGTH_32KB;
+            ret = flash_wait_idle();
+            if (ret) break;
+            rc = rt582_hal_flash_erase_32k(addr);
         } else {
-            mode = FLASH_ERASE_SECTOR;
-            erase_len = LENGTH_4KB;
+            erase_len = RT582_SECTOR_SIZE;
+            ret = flash_wait_idle();
+            if (ret) break;
+            rc = rt582_hal_flash_erase_sector(addr);
         }
 
-        ret = flash_wait_idle();
-        if (ret) {
-            break;
-        }
-
-        uint32_t rc = flash_erase(mode, addr);
         if (rc != STATUS_SUCCESS) {
-            LOG_ERR("flash_erase(0x%x, mode=%d) failed: %u", addr, mode, rc);
+            LOG_ERR("erase failed at 0x%x: %u", addr, rc);
             ret = -EIO;
             break;
         }
 
         ret = flash_wait_idle();
-        if (ret) {
-            break;
-        }
+        if (ret) break;
 
         addr += erase_len;
         remaining -= erase_len;
     }
 
     if (ret == 0) {
-        flush_cache();
+        rt582_hal_flush_cache();
     }
 
     k_mutex_unlock(&ctx->lock);
@@ -185,7 +196,7 @@ static int rt582_flash_erase(const struct device *dev, off_t offset,
 
 /* ── flash_driver_api: get_parameters ───────────────────────────────────── */
 static const struct flash_parameters rt582_flash_params = {
-    .write_block_size = 1,      /* flash_write_n_bytes handles any alignment */
+    .write_block_size = 1,
     .erase_value = RT582_ERASE_VALUE,
 };
 
@@ -211,13 +222,13 @@ static void rt582_flash_page_layout(const struct device *dev,
     *layout = &rt582_flash_layout;
     *layout_size = 1;
 }
-#endif /* CONFIG_FLASH_PAGE_LAYOUT */
+#endif
 
 /* ── Driver API struct ──────────────────────────────────────────────────── */
 static const struct flash_driver_api rt582_flash_api = {
     .read = rt582_flash_read,
     .write = rt582_flash_write,
-    .erase = rt582_flash_erase,
+    .erase = rt582_flash_erase_op,
     .get_parameters = rt582_flash_get_parameters,
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
     .page_layout = rt582_flash_page_layout,
@@ -225,14 +236,12 @@ static const struct flash_driver_api rt582_flash_api = {
 };
 
 /* ── Init ───────────────────────────────────────────────────────────────── */
-static int rt582_flash_init(const struct device *dev)
+static int rt582_flash_init_fn(const struct device *dev)
 {
     struct flash_rt582_data *ctx = dev->data;
 
     k_mutex_init(&ctx->lock);
-    flash_timing_init();
-    flash_enable_qe();
-    flash_set_read_pagesize();
+    rt582_hal_flash_init();
 
     LOG_INF("RT582 flash driver ready (size=%u KB)", RT582_FLASH_SIZE / 1024);
     return 0;
@@ -240,10 +249,10 @@ static int rt582_flash_init(const struct device *dev)
 
 /* ── Device instantiation ───────────────────────────────────────────────── */
 DEVICE_DT_INST_DEFINE(0,
-                      rt582_flash_init,
-                      NULL,                     /* pm */
-                      &flash_data,              /* data */
-                      NULL,                     /* config */
+                      rt582_flash_init_fn,
+                      NULL,
+                      &flash_data,
+                      NULL,
                       POST_KERNEL,
                       CONFIG_FLASH_INIT_PRIORITY,
                       &rt582_flash_api);

@@ -20,11 +20,15 @@ if(CONFIG_UART_RT582)
 endif()
 
 # ── Flash driver (drivers__flash) ────────────────────────────────────────
+# flash_rt582.c includes <zephyr/drivers/flash.h> (Zephyr flash API).
+# flash_rt582_hal.c includes "flashctl.h" (RT582 HW API).
+# They MUST be separate TUs because both headers define flash_erase().
 if(CONFIG_FLASH_RT582)
     set(_RT582_PLATFORM ${CMAKE_SOURCE_DIR}/sdk/components/platform)
 
     target_sources(drivers__flash PRIVATE
         ${CMAKE_SOURCE_DIR}/drivers/flash/flash_rt582.c
+        ${CMAKE_SOURCE_DIR}/drivers/flash/flash_rt582_hal.c
     )
 
     target_include_directories(drivers__flash PRIVATE
