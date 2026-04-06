@@ -53,6 +53,13 @@
                 #address-cells = <1>;
                 #size-cells = <1>;
 
+                /*
+                 * Direct XIP layout (2 MB flash):
+                 *   MCUboot selects the newest valid image and
+                 *   executes it directly — no swap, no copy.
+                 *   Slot 0 and Slot 1 must be equal size.
+                 */
+
                 /* MCUboot bootloader: 64 KB */
                 boot_partition: partition@0 {
                     label = "mcuboot";
@@ -66,25 +73,19 @@
                     reg = <0x00010000 0x000c0000>;
                 };
 
-                /* Secondary image slot: 512 KB (LZMA compressed OTA) */
+                /* Secondary image slot: 768 KB (Direct XIP — equal to slot 0) */
                 slot1_partition: partition@d0000 {
                     label = "image-1";
-                    reg = <0x000d0000 0x00080000>;
+                    reg = <0x000d0000 0x000c0000>;
                 };
 
-                /* Scratch area for image swap: 64 KB */
-                scratch_partition: partition@150000 {
-                    label = "image-scratch";
-                    reg = <0x00150000 0x00010000>;
-                };
-
-                /* NV storage (OpenThread settings, etc.): 128 KB */
-                storage_partition: partition@160000 {
+                /* NV storage (OpenThread settings, Zephyr NVS): 128 KB */
+                storage_partition: partition@190000 {
                     label = "storage";
-                    reg = <0x00160000 0x00020000>;
+                    reg = <0x00190000 0x00020000>;
                 };
 
-                /* MP sector + factory data: 64 KB (flash 末段保留) */
+                /* MP sector + factory data: 64 KB (flash 末段) */
                 factory_partition: partition@1f0000 {
                     label = "factory";
                     reg = <0x001f0000 0x00010000>;
