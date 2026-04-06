@@ -84,7 +84,6 @@ jobs:
       - name: Install Zephyr Python requirements
         run: |
           pip install -r zephyr/scripts/requirements-base.txt
-          pip install -r zephyr/scripts/requirements-build.txt
           pip install imgtool
 
       # ── Zephyr SDK 1.0.1 (ARM toolchain) ─────────────────────────────────
