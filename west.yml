@@ -7,6 +7,8 @@ manifest:
   remotes:
     - name: zephyrproject
       url-base: https://github.com/zephyrproject-rtos
+    - name: mcuboot
+      url-base: https://github.com/mcu-tools
 
   projects:
     - name: zephyr
@@ -19,6 +21,10 @@ manifest:
       repo-path: CMSIS_6
       revision: 30a859f44ef8ab4dc8f84b03ed586fd16ccf9d74
       path: modules/hal/cmsis_6
+    - name: mcuboot
+      remote: mcuboot
+      revision: v2.1.0
+      path: bootloader/mcuboot
 
   self:
     path: zephyr-thread

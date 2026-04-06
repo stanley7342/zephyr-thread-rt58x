@@ -36,16 +36,61 @@
      *
      * For a standalone Zephyr image we occupy the full 1 MB.
      */
-    flash0: flash@0 {
-        compatible = "soc-nv-flash";
-        /*
-         * Place Zephyr at 0x00000000 so it runs without a bootloader.
-         * The bootloader lives at 0x0–0x7FFF; placing Zephyr here
-         * overwrites it (intentional for bare-metal debugging).
-         * Restore to <0x00008000 0x100000> once a proper flashing
-         * workflow (that preserves the bootloader) is established.
-         */
-        reg = <0x00000000 0x100000>;
+    flash_controller: flash-controller@40000000 {
+        compatible = "rafael,rt582-flash";
+        reg = <0x40000000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        flash0: flash@0 {
+            compatible = "soc-nv-flash";
+            reg = <0x00000000 0x200000>;    /* 2 MB */
+            write-block-size = <1>;
+            erase-block-size = <4096>;
+
+            partitions {
+                compatible = "fixed-partitions";
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                /* MCUboot bootloader: 64 KB */
+                boot_partition: partition@0 {
+                    label = "mcuboot";
+                    reg = <0x00000000 0x00010000>;
+                    read-only;
+                };
+
+                /* Primary image slot: 768 KB */
+                slot0_partition: partition@10000 {
+                    label = "image-0";
+                    reg = <0x00010000 0x000c0000>;
+                };
+
+                /* Secondary image slot: 512 KB (LZMA compressed OTA) */
+                slot1_partition: partition@d0000 {
+                    label = "image-1";
+                    reg = <0x000d0000 0x00080000>;
+                };
+
+                /* Scratch area for image swap: 64 KB */
+                scratch_partition: partition@150000 {
+                    label = "image-scratch";
+                    reg = <0x00150000 0x00010000>;
+                };
+
+                /* NV storage (OpenThread settings, etc.): 128 KB */
+                storage_partition: partition@160000 {
+                    label = "storage";
+                    reg = <0x00160000 0x00020000>;
+                };
+
+                /* MP sector + factory data: 64 KB (flash 末段保留) */
+                factory_partition: partition@1f0000 {
+                    label = "factory";
+                    reg = <0x001f0000 0x00010000>;
+                };
+            };
+        };
     };
 
     sram0: memory@20000000 {
