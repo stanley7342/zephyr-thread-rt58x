@@ -14,18 +14,37 @@ bash scripts/linux/install.sh          # installs deps, Zephyr SDK, west workspa
 ```
 This creates `~/zephyr-sdk-1.0.1`, a west workspace one level above this repo, and `../env.sh`.
 
-**Build:**
+**Build (Linux/WSL):**
 ```sh
 bash scripts/linux/build.sh            # clean build (default)
 bash scripts/linux/build.sh --incremental
 # Binary output: build/zephyr/zephyr.bin
 ```
-Equivalent scripts exist under `scripts/macos/` and `scripts/windows/` (PowerShell).
+
+**Build (macOS):**
+```sh
+bash scripts/macos/build.sh
+bash scripts/macos/build.sh --incremental
+```
+
+**Build (Windows — PowerShell 7+):**
+```powershell
+.\scripts\windows\build.ps1            # clean build
+.\scripts\windows\build.ps1 -NoPristine  # incremental
+```
 
 **Manual build** (after `source ../env.sh` from the workspace root):
 ```sh
 west build -p always -b rt582_evb .
 ```
+
+**Flash (WSL/Linux via OpenOCD + CMSIS-DAP):**
+```sh
+bash tools/linux/flash.sh                    # default: build/zephyr/zephyr.bin
+bash tools/linux/flash.sh --bin path/to.bin  # custom binary
+bash tools/linux/flash.sh --setup-udev       # first-time udev setup
+```
+Flash target address is **0x00000000** (not 0x8000). Binary contains its own vector table.
 
 **CI:** `.github/workflows/build.yml` — caches `zephyr/` and `modules/` keyed on `west.yml`.
 
@@ -68,9 +87,9 @@ west build -p always -b rt582_evb .
 
 ## Project Structure
 ```
-zephyr-thread/
+zephyr-thread-rt58x/
 ├── CMakeLists.txt          # Top-level; guards subsys/openthread with CONFIG_OPENTHREAD_RT582
-├── prj.conf                # Kconfig; CONFIG_UART_INTERRUPT_DRIVEN=n, CONFIG_SHELL disabled
+├── prj.conf                # Kconfig; CONFIG_UART_INTERRUPT_DRIVEN=y, CONFIG_SHELL disabled
 ├── Kconfig                 # Top-level Kconfig
 ├── boards/arm/rt582_evb/   # Board definition
 ├── dts/arm/rafael/         # rt582.dtsi: UART0@0xA0000000, TX=GPIO16, RX=GPIO17, 115200 baud
@@ -109,6 +128,11 @@ zephyr-thread/
   `--allow-multiple-definition` keeps our version.
 - `CHIP_TYPE=2` (RT582) must be passed as a compile definition.
   `CHIP_VERSION` defaults to `RT58X_MPB=2` in `chip_define.h` — correct for EVB boards.
+
+## RF Parameter Tuning
+PHY/MAC PIB constants (CCA threshold, backoff, retries, etc.) are configurable via Kconfig
+in `prj.conf` — prefixed `CONFIG_RT582_PHY_PIB_*` and `CONFIG_RT582_MAC_PIB_*`.
+See `Kconfig` for ranges and defaults. No application code changes needed.
 
 ## Diagnostics
 - **Bare UART test**: Set `CONFIG_OPENTHREAD_RT582=n`, use minimal `main.c` (just printk loop).
