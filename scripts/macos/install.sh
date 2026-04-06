@@ -7,7 +7,16 @@
 
 set -euo pipefail
 
-SDK_DIR="${HOME}/zephyr-sdk-1.0.1"
+# SDK version depends on architecture:
+#   Apple Silicon (aarch64): v1.0.1
+#   Intel (x86_64):          v0.17.0 (last version with x86_64 macOS support)
+_HOST_ARCH="$(uname -m)"
+if [[ "$_HOST_ARCH" == "arm64" || "$_HOST_ARCH" == "aarch64" ]]; then
+    _SDK_VER="1.0.1"
+else
+    _SDK_VER="0.17.0"
+fi
+SDK_DIR="${HOME}/zephyr-sdk-${_SDK_VER}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -105,18 +114,22 @@ pip install --quiet west
 ok "west：$(west --version 2>/dev/null || echo 已安裝)"
 
 # ── 步驟 3：Zephyr SDK ────────────────────────────────────────────────────────
-step "安裝 Zephyr SDK 1.0.1 → $SDK_DIR"
+step "安裝 Zephyr SDK ${_SDK_VER} → $SDK_DIR"
 
 SDK_SETUP="$SDK_DIR/setup.sh"
 
 if [[ -f "$SDK_SETUP" ]]; then
     skip "Zephyr SDK"
 else
-    SDK_VER="1.0.1"
+    SDK_VER="$_SDK_VER"
     ARCH="$(uname -m)"
     [[ "$ARCH" == "arm64" ]] && ARCH="aarch64"
-    # v1.0.1 bundle requires _gnu suffix
-    SDK_FILE="zephyr-sdk-${SDK_VER}_macos-${ARCH}_gnu.tar.xz"
+    # v1.0.1+ uses _gnu suffix; v0.17.0 does not
+    if [[ "$SDK_VER" == "1.0.1" ]]; then
+        SDK_FILE="zephyr-sdk-${SDK_VER}_macos-${ARCH}_gnu.tar.xz"
+    else
+        SDK_FILE="zephyr-sdk-${SDK_VER}_macos-${ARCH}.tar.xz"
+    fi
     SDK_URL="https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/${SDK_FILE}"
     TMP="/tmp/${SDK_FILE}"
 
@@ -150,8 +163,13 @@ else
     done
     echo ""
     echo "    執行 setup.sh ..."
-    bash "$SDK_SETUP"
-    ok "Zephyr SDK 安裝完成"
+    if [[ "$SDK_VER" == "1.0.1" ]]; then
+        bash "$SDK_SETUP"
+    else
+        # v0.17.0: register SDK and install only the ARM toolchain
+        bash "$SDK_SETUP" -c arm-zephyr-eabi
+    fi
+    ok "Zephyr SDK ${SDK_VER} 安裝完成"
 fi
 
 # ── 步驟 4：West 工作區 ───────────────────────────────────────────────────────
