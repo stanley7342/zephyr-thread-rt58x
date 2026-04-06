@@ -117,7 +117,18 @@ jobs:
         run: |
           export ZEPHYR_SDK_INSTALL_DIR="$HOME/zephyr-sdk"
           PROJECT="${GITHUB_WORKSPACE}/zephyr-thread"
+
+          # Pass imgtool's full path so CMake find_program() won't fail in
+          # a subprocess where the Python bin dir may not be on PATH.
+          IMGTOOL_BIN="$(python3 -c 'import shutil; print(shutil.which("imgtool") or "")')"
+          if [ -z "${IMGTOOL_BIN}" ]; then
+            echo "ERROR: imgtool not found after pip install" >&2
+            exit 1
+          fi
+          echo "imgtool: ${IMGTOOL_BIN}"
+
           CMAKE_ARGS="-DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake"
+          CMAKE_ARGS="${CMAKE_ARGS} -DIMGTOOL=${IMGTOOL_BIN}"
 
           if [ "${{ matrix.is_bootloader }}" = "true" ]; then
             CMAKE_ARGS="${CMAKE_ARGS} \
