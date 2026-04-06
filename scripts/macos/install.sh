@@ -40,22 +40,16 @@ ok "Homebrew：$(brew --version | head -1)"
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 step "檢查並安裝必要工具"
 
-declare -A BREW_PKGS=(
-    ["wget"]="wget"
-    ["git"]="Git"
-    ["cmake"]="CMake"
-    ["ninja"]="Ninja"
-    ["python@3.12"]="Python 3.12"
-    ["xz"]="xz"
-)
 BREW_ORDER=(wget git cmake ninja "python@3.12" xz)
+BREW_NAMES=("wget" "Git" "CMake" "Ninja" "Python 3.12" "xz")
 TO_INSTALL=()
 
 printf "    %-20s  %-20s  %-20s  %s\n" "Package" "brew name" "Version" "Status"
 printf "    %-20s  %-20s  %-20s  %s\n" "--------------------" "--------------------" "--------------------" "------"
 
-for pkg in "${BREW_ORDER[@]}"; do
-    name="${BREW_PKGS[$pkg]}"
+for i in "${!BREW_ORDER[@]}"; do
+    pkg="${BREW_ORDER[$i]}"
+    name="${BREW_NAMES[$i]}"
     if brew list --formula 2>/dev/null | grep -q "^${pkg%%@*}$"; then
         ver="$(brew list --versions "${pkg%%@*}" 2>/dev/null | awk '{print $2}')"
         printf "    %-20s  %-20s  %-16s  \033[90m已安裝\033[0m\n" "$name" "$pkg" "$ver"
