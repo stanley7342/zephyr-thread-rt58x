@@ -118,10 +118,28 @@ function Send-OtCmd {
             }
         } catch { }
 
-        $r = $resp.ToString()
-        if ($r -match "Done|Error") { break }
+        if ($resp.ToString() -match "Done|Error") {
+            # 繼續讀取直到 50 ms 內無新資料，確保回應完整
+            $quiet = (Get-Date).AddMilliseconds(50)
+            while ((Get-Date) -lt $quiet) {
+                Start-Sleep -Milliseconds 10
+                try {
+                    $tail = $S.ReadExisting()
+                    if ($tail.Length -gt 0) {
+                        [void]$resp.Append($tail)
+                        Write-Host $tail -NoNewline -ForegroundColor DarkYellow
+                        $quiet = (Get-Date).AddMilliseconds(50)  # 有新資料就重設靜默計時器
+                    }
+                } catch { }
+            }
+            break
+        }
+
         Start-Sleep -Milliseconds 80
     }
+
+    # 清除緩衝區，避免殘留位元組汙染下一個指令的回應
+    try { $S.DiscardInBuffer() } catch { }
 
     Write-Host ""
     return $resp.ToString()
@@ -130,7 +148,7 @@ function Send-OtCmd {
 # ══════════════════════════════════════════════════════════════════════════════
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════════╗" -ForegroundColor White
-Write-Host "║       RT582-EVB 自動化板測腳本                ║" -ForegroundColor White
+Write-Host "║       RT582-EVB 自動化板測腳本                 ║" -ForegroundColor White
 Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor White
 Write-Host "  目標      : $p"
 Write-Host "  Port      : $Port  (115200 8N1)"
@@ -251,17 +269,17 @@ if ($doOt) {
     Start-Sleep -Seconds 1
 
     # 組一個新的 Thread 網路
-    $r1 = Send-OtCmd $serial "dataset init new"
-    if ($r1 -notmatch "Done") { Write-Fail "'dataset init new' 失敗：$r1"; $serial.Close(); exit 4 }
+    $r1 = Send-OtCmd $serial "ot dataset init new"
+    if ($r1 -notmatch "Done") { Write-Fail "'ot dataset init new' 失敗：$r1"; $serial.Close(); exit 4 }
 
-    $r2 = Send-OtCmd $serial "dataset commit active"
-    if ($r2 -notmatch "Done") { Write-Fail "'dataset commit active' 失敗：$r2"; $serial.Close(); exit 4 }
+    $r2 = Send-OtCmd $serial "ot dataset commit active"
+    if ($r2 -notmatch "Done") { Write-Fail "'ot dataset commit active' 失敗：$r2"; $serial.Close(); exit 4 }
 
-    $r3 = Send-OtCmd $serial "ifconfig up"
-    if ($r3 -notmatch "Done") { Write-Fail "'ifconfig up' 失敗：$r3"; $serial.Close(); exit 4 }
+    $r3 = Send-OtCmd $serial "ot ifconfig up"
+    if ($r3 -notmatch "Done") { Write-Fail "'ot ifconfig up' 失敗：$r3"; $serial.Close(); exit 4 }
 
-    $r4 = Send-OtCmd $serial "thread start"
-    if ($r4 -notmatch "Done") { Write-Fail "'thread start' 失敗：$r4"; $serial.Close(); exit 4 }
+    $r4 = Send-OtCmd $serial "ot thread start"
+    if ($r4 -notmatch "Done") { Write-Fail "'ot thread start' 失敗：$r4"; $serial.Close(); exit 4 }
 
     Write-Info "Thread started，輪詢 state..."
 
@@ -273,7 +291,7 @@ if ($doOt) {
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 2
         $pollCount++
-        $resp = Send-OtCmd $serial "state" 4
+        $resp = Send-OtCmd $serial "ot state" 4
 
         if ($resp -match "leader") {
             $isLeader = $true

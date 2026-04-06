@@ -21,7 +21,9 @@ foreach ($t in $targets) {
     Write-Host "══════════════════════════════════════" -ForegroundColor DarkCyan
     Write-Host "  Building: $t" -ForegroundColor Cyan
     Write-Host "══════════════════════════════════════" -ForegroundColor DarkCyan
-    & pwsh.exe -NonInteractive -File $script -p $t 2>&1
+    # -NoPristine avoids ninja recompaction which fails with "Permission Denied"
+    # when VS Code or another process holds the build directory open on Windows.
+    & pwsh.exe -NonInteractive -File $script -p $t -NoPristine 2>&1
     $results[$t] = if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" }
 }
 
