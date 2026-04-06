@@ -9,6 +9,7 @@
  *   - log_info/warn/error → printk
  *   - OT_ENTER_CRITICAL/OT_EXIT_CRITICAL now use irq_lock via openthread_port.h
  *   - All lmac15p4_* calls kept as-is (binary library, no OS deps)
+ *   - EUI-64 now derived from flash unique ID (was hardcoded)
  */
 
 #include <string.h>
@@ -31,6 +32,7 @@
 #include "lmac15p4.h"
 #include "util_list.h"
 #include "flashctl.h"
+#include "hosal_trng.h"
 #include "tprintk.h"
 
 /* ── Constants ───────────────────────────────────────────────────────────── */
@@ -87,6 +89,8 @@ static bool     sIsSrcMatchEnabled = false;
 static int8_t   sCcaThresholdDbm   = CCA_THRESHOLD_DEFAULT;
 static otExtAddress sExtAddress;
 
+/* EUI-64: overwritten by ot_radioInit with OTP MAC or flash unique ID.
+ * Fallback value used only if both OTP and flash UID are unavailable. */
 static uint8_t  sIEEE_EUI64Addr[OT_EXT_ADDRESS_SIZE] = {
     0xAA, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
 };
@@ -860,6 +864,22 @@ void ot_radioInit(void)
         flash_get_unique_id((uint32_t)(uintptr_t)sIEEE_EUI64Addr,
                             OT_EXT_ADDRESS_SIZE);
     }
+
+    /* Set locally-administered bit (bit 1 of byte 0) if the address came
+     * from flash UID rather than a globally assigned OTP MAC address.
+     * This prevents collisions with manufacturer-assigned addresses. */
+    if (!memcmp(ff, sIEEE_EUI64Addr, OT_EXT_ADDRESS_SIZE)) {
+        /* Both OTP and flash UID returned all-0xFF — use TRNG fallback */
+        hosal_trng_get_random_number((uint32_t *)&sIEEE_EUI64Addr[0], 2);
+        sIEEE_EUI64Addr[0] |= 0x02;  /* locally administered */
+        sIEEE_EUI64Addr[0] &= ~0x01; /* unicast */
+    }
+
+    printk("[OT-RADIO] EUI-64: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+           sIEEE_EUI64Addr[0], sIEEE_EUI64Addr[1],
+           sIEEE_EUI64Addr[2], sIEEE_EUI64Addr[3],
+           sIEEE_EUI64Addr[4], sIEEE_EUI64Addr[5],
+           sIEEE_EUI64Addr[6], sIEEE_EUI64Addr[7]);
 
     memset(&otRadio_var, 0, offsetof(otRadio_t, buffPool));
 

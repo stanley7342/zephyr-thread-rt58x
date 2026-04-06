@@ -9,6 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/crc.h>
 #include "tprintk.h"
 
 #include <openthread/cli.h>
@@ -17,6 +18,10 @@
 #include "openthread_port.h"
 #include "hosal_rf.h"
 #include "lmac15p4.h"
+
+/* RF firmware blob — verify integrity before loading */
+extern const uint8_t  firmware_program_ruci[];
+extern const uint32_t firmware_size_ruci;
 
 extern volatile uint32_t rt582_comm_irq_count;
 extern volatile uint32_t ot_uart_rx_byte_count;
@@ -73,6 +78,18 @@ int main(void)
     k_thread_name_set(&wdog_thread_data, "wdog");
 
     printk("[MAIN] wdog started");
+
+    /* Verify RF firmware blob integrity before loading */
+    if (firmware_size_ruci > 0) {
+        uint32_t fw_crc = crc32_ieee(firmware_program_ruci, firmware_size_ruci);
+        printk("[RF] firmware CRC32: 0x%08x (size=%u)", fw_crc, firmware_size_ruci);
+#if CONFIG_RT582_RF_FW_EXPECTED_CRC32 != 0
+        if (fw_crc != CONFIG_RT582_RF_FW_EXPECTED_CRC32) {
+            printk("[RF] ERROR: firmware CRC mismatch! expected=0x%08x",
+                   CONFIG_RT582_RF_FW_EXPECTED_CRC32);
+        }
+#endif
+    }
 
     printk("[RF] hosal_rf_init...");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);

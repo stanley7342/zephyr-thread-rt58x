@@ -96,6 +96,9 @@ static void uart_rx_irq_cb(const struct device *dev, void *user_data)
         } else if (rx_work_len < RX_LINE_MAXLEN - 1) {
             rx_work_buf[rx_work_len++] = c;
             uart_poll_out(dev, c);  /* echo */
+        } else {
+            /* Buffer full — emit BEL to alert user, discard byte */
+            uart_poll_out(dev, '\a');
         }
     }
 }

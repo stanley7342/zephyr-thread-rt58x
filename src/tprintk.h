@@ -10,7 +10,15 @@
  *
  * To emit raw output (no timestamp) at a specific call site, write:
  *   (printk)("raw line\n");   <- parentheses bypass the macro
+ *
+ * ISR guard: __ASSERT_NO_MSG(!k_is_in_isr()) catches ISR-context printk
+ * at runtime. Single-core Cortex-M3 will deadlock on printk's spinlock
+ * if the main thread is also inside printk when the ISR fires.
  */
 #undef printk
 #define printk(fmt, ...) \
-    (printk)("[%7u] " fmt " [%s:%d]\n", k_uptime_get_32(), ##__VA_ARGS__, __FILE_NAME__, __LINE__)
+    do { \
+        __ASSERT_NO_MSG(!k_is_in_isr()); \
+        (printk)("[%7u] " fmt " [%s:%d]\n", \
+                 k_uptime_get_32(), ##__VA_ARGS__, __FILE_NAME__, __LINE__); \
+    } while (0)

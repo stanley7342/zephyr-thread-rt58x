@@ -3,8 +3,9 @@
 
 osource "$(ZEPHYR_BASE)/Kconfig"
 
-# Include the RT582 UART driver Kconfig so CONFIG_UART_RT582 is visible.
+# Include out-of-tree driver Kconfigs
 rsource "drivers/serial/Kconfig"
+rsource "drivers/flash/Kconfig"
 
 # OpenThread
 config OPENTHREAD_RT582
@@ -70,5 +71,13 @@ config RT582_MAC_PIB_MIN_BE
     range 0 8
 
 endmenu
+
+config RT582_RF_FW_EXPECTED_CRC32
+    hex "Expected CRC32 of RF firmware blob (0 = log only, no check)"
+    default 0x0
+    help
+      CRC32 (IEEE) of firmware_program_ruci[]. When non-zero, the firmware
+      blob is verified at boot. Set to 0 to print the CRC without checking.
+      Run once with 0, read the log, then set this value to lock it down.
 
 endif # OPENTHREAD_RT582
