@@ -38,13 +38,18 @@ extern void     rt582_hal_flush_cache(void);
 extern void     rt582_hal_flash_init(void);
 
 /* ── Flash parameters ───────────────────────────────────────────────────── */
-#define RT582_FLASH_SIZE    DT_INST_REG_SIZE(0)
+/*
+ * The flash controller node's reg (0x40000000, 0x1000) is the MMIO register
+ * space, NOT the flash memory size. Get the actual flash size from the
+ * soc-nv-flash child node (flash0: flash@0 { reg = <0 0x200000>; }).
+ */
+#define RT582_FLASH_SIZE    DT_REG_SIZE(DT_NODELABEL(flash0))
 #define RT582_SECTOR_SIZE   4096        /* smallest erase unit */
 #define RT582_ERASE_VALUE   0xFF
 #define LENGTH_32KB         (32 * 1024)
 #define LENGTH_64KB         (64 * 1024)
 
-#define STATUS_SUCCESS      0
+/* STATUS_SUCCESS already defined in status.h (pulled in via mcu.h → soc.h) */
 
 /* ── Driver data ────────────────────────────────────────────────────────── */
 struct flash_rt582_data {

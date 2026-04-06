@@ -2,22 +2,51 @@
 # RT582-EVB — macOS 燒錄腳本（CMSIS-DAP + OpenOCD）
 #
 # 用法：
-#   bash scripts/macos/flash.sh
-#   bash scripts/macos/flash.sh --bin path/to/zephyr.bin
+#   bash scripts/macos/flash.sh -p thread        # slot0 (0x10000)
+#   bash scripts/macos/flash.sh -p bootloader    # 0x00000000
+#   bash scripts/macos/flash.sh -p thread --addr 0x0   # 覆蓋位址
+#   bash scripts/macos/flash.sh --bin path/to/custom.bin --addr 0x0
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 TOOLS_LINUX="$PROJECT_DIR/tools/linux"
-BIN="${PROJECT_DIR}/build/zephyr/zephyr.bin"
+
+TARGET=""
+BIN=""
+ADDR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -p)    TARGET="$2"; shift 2 ;;
         --bin) BIN="$2"; shift 2 ;;
-        *)     echo "未知參數：$1"; exit 1 ;;
+        --addr) ADDR="$2"; shift 2 ;;
+        *) echo "用法：$0 -p <thread|bootloader> [--addr <hex>] [--bin <path>]" >&2; exit 1 ;;
     esac
 done
+
+if [[ -n "$TARGET" ]]; then
+    if [[ "$TARGET" != "thread" && "$TARGET" != "bootloader" ]]; then
+        echo "錯誤：不支援的 target '$TARGET'，請使用 thread 或 bootloader" >&2
+        exit 1
+    fi
+    if [[ -z "$BIN" ]]; then
+        if [[ "$TARGET" == "thread" ]]; then
+            BIN="$PROJECT_DIR/build/thread/zephyr/zephyr.signed.bin"
+        else
+            BIN="$PROJECT_DIR/build/$TARGET/${TARGET}_zephyr.bin"
+        fi
+    fi
+    if [[ -z "$ADDR" ]]; then
+        [[ "$TARGET" == "bootloader" ]] && ADDR="0x0" || ADDR="0x10000"
+    fi
+elif [[ -z "$BIN" ]]; then
+    echo "錯誤：請指定 -p <thread|bootloader> 或 --bin <path>" >&2
+    exit 1
+fi
+
+[[ -z "$ADDR" ]] && ADDR="0x0"
 
 # ── 顏色 ──────────────────────────────────────────────────────────────────────
 step()  { echo -e "\n\033[36m==> $*\033[0m"; }
@@ -31,7 +60,6 @@ OCD_BIN=""
 OCD_SCRIPT_DIR=""
 WORKSPACE="$(dirname "$PROJECT_DIR")"
 
-# 搜尋順序：1) 本專案 tools/macos  2) 原始碼旁  3) home  4) /opt  5) Homebrew openocd
 OCD_SEARCH=(
     "$PROJECT_DIR/tools/macos/openocd:::$PROJECT_DIR/tools/macos/tcl"
     "$WORKSPACE/openocd-rt58x/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
@@ -53,7 +81,6 @@ for entry in "${OCD_SEARCH[@]}"; do
     fi
 done
 
-# 最後嘗試 Homebrew / 系統 openocd（需搭配本專案 tcl scripts）
 if [[ -z "$OCD_BIN" ]]; then
     SYS_OCD="$(command -v openocd 2>/dev/null || true)"
     if [[ -n "$SYS_OCD" ]]; then
@@ -68,30 +95,23 @@ if [[ -z "$OCD_BIN" ]]; then
     echo ""
     echo "    安裝方式（擇一）："
     echo ""
-    echo "    1) Homebrew（通用 openocd，搭配本專案 rt58x.cfg）："
+    echo "    1) Homebrew："
     echo "       brew install openocd"
     echo ""
     echo "    2) 從原始碼編譯 openocd-rt58x："
     echo "       git clone <openocd-rt58x-repo> \$HOME/openocd-rt58x"
     echo "       cd \$HOME/openocd-rt58x"
     echo "       ./bootstrap && ./configure && make -j\$(sysctl -n hw.logicalcpu)"
-    echo ""
-    echo "    3) 將編譯好的 binary 複製到："
-    echo "       $PROJECT_DIR/tools/macos/openocd"
     exit 1
 fi
 
-# 若 tcl/ 沒找到，嘗試 Homebrew openocd scripts
 if [[ -z "${OCD_SCRIPT_DIR:-}" ]]; then
     BREW_SHARE="$(brew --prefix 2>/dev/null)/share/openocd/scripts"
-    if [[ -d "$BREW_SHARE" ]]; then
-        OCD_SCRIPT_DIR="$BREW_SHARE"
-    fi
+    [[ -d "$BREW_SHARE" ]] && OCD_SCRIPT_DIR="$BREW_SHARE"
 fi
 
 if [[ -z "${OCD_SCRIPT_DIR:-}" ]]; then
     err "找不到 OpenOCD tcl scripts 目錄"
-    echo "    期望位置：$TOOLS_LINUX/tcl/ 或 Homebrew share"
     exit 1
 fi
 
@@ -100,7 +120,7 @@ step "確認 binary"
 
 if [[ ! -f "$BIN" ]]; then
     err "找不到 binary：$BIN"
-    echo "    請先執行：bash scripts/macos/build.sh"
+    [[ -n "$TARGET" ]] && echo "    請先執行：bash scripts/macos/build.sh -p $TARGET"
     exit 1
 fi
 ok "Binary：$BIN（$(du -h "$BIN" | awk '{print $1}')）"
@@ -112,18 +132,13 @@ USB_INFO="$(system_profiler SPUSBDataType 2>/dev/null || true)"
 if ! echo "$USB_INFO" | grep -qi "cmsis.dap\|daplink\|mbed\|0d28"; then
     err "找不到 CMSIS-DAP 裝置"
     echo ""
-    echo "    請確認："
-    echo "      1. CMSIS-DAP 調試器已透過 USB 連接至 Mac"
-    echo "      2. RT582-EVB 已上電"
-    echo ""
-    echo "    目前 USB 裝置："
-    system_profiler SPUSBDataType 2>/dev/null | grep -E "^\s+(Product|Vendor)" | head -20 || true
+    echo "    請確認 CMSIS-DAP 調試器已透過 USB 連接至 Mac 並上電"
     exit 1
 fi
 ok "CMSIS-DAP 已偵測到"
 
 # ── 燒錄 ──────────────────────────────────────────────────────────────────────
-step "燒錄 → 0x00000000"
+step "燒錄 → $ADDR"
 echo "    Binary : $BIN"
 echo "    Scripts: $OCD_SCRIPT_DIR"
 echo ""
@@ -132,7 +147,7 @@ echo ""
     -s "$OCD_SCRIPT_DIR" \
     -f interface/cmsis-dap.cfg \
     -f target/rt58x.cfg \
-    -c "init; halt; flash write_image erase \"$BIN\" 0x0; reset run; exit"
+    -c "init; halt; flash write_image erase \"$BIN\" $ADDR; reset run; exit"
 
 echo ""
 echo -e "\n\033[32m[OK] 燒錄完成！請開啟序列終端機（115200 8N1）觀察輸出。\033[0m"

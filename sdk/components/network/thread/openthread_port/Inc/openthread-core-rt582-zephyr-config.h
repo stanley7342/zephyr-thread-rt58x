@@ -35,8 +35,8 @@
 /* Heap — use platform malloc (newlib) */
 #define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (8 * 1024)
 
-/* Disable features not yet ported */
-#define OPENTHREAD_CONFIG_COAP_API_ENABLE                0
+/* CoAP API — needed for OTA subsystem */
+#define OPENTHREAD_CONFIG_COAP_API_ENABLE                1
 #define OPENTHREAD_CONFIG_JOINER_ENABLE                  0
 
 /* NCP disabled */

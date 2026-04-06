@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include "mcu.h"
+#include "sysctrl.h"   /* sys_set_retention_reg — mcu.h guard prevents re-include */
 #include "wdt.h"
 #include "tprintk.h"
 

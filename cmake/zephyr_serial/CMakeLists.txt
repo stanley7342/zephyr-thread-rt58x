@@ -7,10 +7,11 @@
 # where out-of-tree sources can be contributed to drivers__serial cleanly.
 
 if(CONFIG_UART_RT582)
-    set(_RT582_PLATFORM ${CMAKE_SOURCE_DIR}/sdk/components/platform)
+    get_filename_component(_RT582_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+    set(_RT582_PLATFORM ${_RT582_REPO_ROOT}/sdk/components/platform)
 
     target_sources(drivers__serial PRIVATE
-        ${CMAKE_SOURCE_DIR}/drivers/serial/uart_rt582.c
+        ${_RT582_REPO_ROOT}/drivers/serial/uart_rt582.c
         ${_RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_uart.c
     )
 

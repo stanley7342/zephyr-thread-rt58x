@@ -1,10 +1,16 @@
 /*
- * main.c — RT582-EVB Zephyr + OpenThread CLI
+ * main.c — RT582-EVB OpenThread FTD CLI example
+ *
+ * Build:
+ *   west build -p always -b rt582_evb examples/thread
+ *
+ * Flash:
+ *   bash tools/linux/flash.sh --bin build/zephyr/zephyr.bin
  *
  * RULE: Never call printk from a k_timer expiry or any ISR.
  * k_timer expiry runs in SysTick ISR context. printk holds a spinlock;
- * if the main thread is also inside printk the ISR will spin forever
- * (single-core deadlock). Use k_work_submit to defer to thread context.
+ * on a single-core Cortex-M3 this causes deadlock if main thread is
+ * also inside printk when the ISR fires. Use k_work_submit instead.
  */
 
 #include <zephyr/kernel.h>
@@ -16,37 +22,30 @@
 #include <openthread/instance.h>
 
 #include "openthread_port.h"
+#if defined(CONFIG_OTA)
+#include "ota_app.h"
+#endif
 #include "hosal_rf.h"
 #include "lmac15p4.h"
 
-/* RF firmware blob — verify integrity before loading */
+/* RF firmware blob — integrity verified before loading */
 extern const uint8_t  firmware_program_ruci[];
 extern const uint32_t firmware_size_ruci;
 
-extern volatile uint32_t rt582_comm_irq_count;
-extern volatile uint32_t ot_uart_rx_byte_count;
-extern volatile uint32_t ot_uart_isr_count;
-extern volatile uint32_t ot_uart_line_count;
-
-/* ── Watchdog: dedicated thread (independent of system workqueue) ────────── *
- * k_msleep-based — does not rely on k_timer/k_work/system workqueue.        *
- * If this prints but k_work version does not → workqueue stack overflow.    *
- * If this does not print → scheduler not running (IRQs blocked).            */
+/* ── Watchdog thread (independent of system workqueue) ───────────────────── */
 #define WDOG_STACK_SIZE 1024
 K_THREAD_STACK_DEFINE(wdog_stack, WDOG_STACK_SIZE);
 static struct k_thread wdog_thread_data;
-static uint32_t        wdog_tick;
 
 static void wdog_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
     while (1) {
-        k_msleep(200);
-        wdog_tick++;
+        k_msleep(1000);
     }
 }
 
-/* PIB values — configured via Kconfig (RT582 IEEE 802.15.4 PHY/MAC PIB menu) */
+/* PHY/MAC PIB — tunable via Kconfig (prj.conf CONFIG_RT582_*_PIB_*) */
 #define PHY_PIB_TURNAROUND_TIMER          CONFIG_RT582_PHY_PIB_TURNAROUND_TIMER
 #define PHY_PIB_CCA_DETECTED_TIME         CONFIG_RT582_PHY_PIB_CCA_DETECTED_TIME
 #define PHY_PIB_CCA_DETECT_MODE           CONFIG_RT582_PHY_PIB_CCA_DETECT_MODE
@@ -62,6 +61,9 @@ static void wdog_thread_fn(void *p1, void *p2, void *p3)
 void otrInitUser(otInstance *instance)
 {
     otAppCliInit(instance);
+#if defined(CONFIG_OTA)
+    ota_app_init(instance);
+#endif
 }
 
 int main(void)
@@ -69,15 +71,12 @@ int main(void)
     (printk)("======================================\n");
     (printk)("  RT582-EVB  Zephyr + OpenThread CLI  \n");
     (printk)("  Built: " __DATE__ " " __TIME__ "  \n");
-    (printk)("  Hash:  " BUILD_GIT_HASH "          \n");
     (printk)("======================================\n");
 
     k_thread_create(&wdog_thread_data, wdog_stack, K_THREAD_STACK_SIZEOF(wdog_stack),
                     wdog_thread_fn, NULL, NULL, NULL,
                     2, 0, K_NO_WAIT);
     k_thread_name_set(&wdog_thread_data, "wdog");
-
-    printk("[MAIN] wdog started");
 
     /* Verify RF firmware blob integrity before loading */
     if (firmware_size_ruci > 0) {
@@ -106,10 +105,9 @@ int main(void)
                          MAC_PIB_MAC_MAX_CSMACA_BACKOFFS,
                          MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME,
                          MAC_PIB_MAC_MAX_FRAME_RETRIES, MAC_PIB_MAC_MIN_BE);
-    printk("[RF] PIB set done");
 
     otrStart();
-    printk("OpenThread FTD task started.");
+    printk("OpenThread FTD CLI started.");
 
     return 0;
 }

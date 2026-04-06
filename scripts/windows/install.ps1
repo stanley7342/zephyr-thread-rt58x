@@ -94,8 +94,16 @@ $col2 = 30
 
 $col3 = 16
 
+# Pad a string to a target *display* width, counting CJK/full-width chars as 2 columns.
+function Format-Cell([string]$s, [int]$displayWidth) {
+    $w = 0
+    foreach ($c in $s.ToCharArray()) { $w += if ([int]$c -ge 0x1100) { 2 } else { 1 } }
+    $pad = $displayWidth - $w
+    return $s + (' ' * [Math]::Max(0, $pad))
+}
+
 Write-Host ""
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f "套件", "Package ID", "版本", "狀態")
+Write-Host ("    " + (Format-Cell "套件" $col1) + "  " + (Format-Cell "Package ID" $col2) + "  " + (Format-Cell "版本" $col3) + "  狀態")
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f ("-" * $col1), ("-" * $col2), ("-" * $col3), "------")
 
 foreach ($pkg in $packages) {
@@ -148,6 +156,7 @@ if (-not $python312) {
     throw "找不到 Python 3.12 執行檔，請重新開啟 PowerShell 後再執行本腳本"
 }
 Write-Ok "Python 3.12：$python312"
+$sysPython312 = $python312   # 保留系統 Python 路徑供後續使用
 
 # 7z 路徑
 $sevenZipPath = "C:\Program Files\7-Zip"
@@ -283,7 +292,21 @@ if (-not (Test-Path $req)) {
 
 Write-Step "安裝 Zephyr Python 依賴"
 & $python312 -m pip install --quiet -r $req
-Write-Ok "Python 依賴安裝完成"
+Write-Ok "Zephyr Python 依賴安裝完成"
+
+# MCUboot imgtool 需要 cryptography 套件。
+# Zephyr CMake 以 WEST_PYTHON 呼叫 imgtool.py，該路徑在
+# 某些環境下仍解析為系統 Python，因此兩邊都需要安裝。
+$mcubootReq = Join-Path $Workspace "bootloader\mcuboot\scripts\requirements.txt"
+foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
+    if (-not (Test-Path $py)) { continue }
+    if (Test-Path $mcubootReq) {
+        & $py -m pip install --quiet -r $mcubootReq
+    } else {
+        & $py -m pip install --quiet cryptography
+    }
+}
+Write-Ok "cryptography 安裝完成（MCUboot imgtool）"
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
@@ -308,7 +331,132 @@ Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -Foregrou
 Write-Ok "env.ps1 產生完成"
 Write-Host "    載入方式：. $envPs1" -ForegroundColor Yellow
 
-# ── 步驟 6：載入環境 ──────────────────────────────────────────────────────────
+# ── 步驟 6：設定 tools\windows\openocd ───────────────────────────────────────
+
+Write-Step "設定 tools\windows\openocd"
+
+$toolsWin  = Join-Path $projectDir "tools\windows"
+$toolsOcd  = Join-Path $toolsWin   "openocd.exe"
+$toolsTcl  = Join-Path $toolsWin   "tcl"
+$srcOcd    = "$env:USERPROFILE\openocd-rt58x"
+
+New-Item -ItemType Directory -Path $toolsWin -Force | Out-Null
+
+# 複製 openocd.exe
+if (Test-Path $toolsOcd) {
+    Write-Skip "openocd.exe（$toolsOcd）"
+} elseif (Test-Path "$srcOcd\openocd.exe") {
+    Copy-Item "$srcOcd\openocd.exe" $toolsOcd
+    Write-Ok  "openocd.exe 複製自 $srcOcd"
+} else {
+    Write-Warning "找不到 $srcOcd\openocd.exe，請手動複製 openocd-rt58x Windows binary"
+}
+
+# 複製 tcl/
+if (Test-Path $toolsTcl) {
+    Write-Skip "tcl/（$toolsTcl）"
+} elseif (Test-Path "$srcOcd\tcl") {
+    Copy-Item "$srcOcd\tcl" $toolsTcl -Recurse
+    Write-Ok  "tcl/ 複製自 $srcOcd\tcl"
+} else {
+    Write-Warning "找不到 $srcOcd\tcl，請手動複製 tcl scripts"
+}
+
+# 下載 xPack OpenOCD 0.11.x 取得完整 DLL（含 libhidapi-0.dll, libftdi1.dll）
+$requiredDlls = @("libusb-1.0.dll", "libhidapi-0.dll", "libftdi1.dll")
+$missingDlls  = @($requiredDlls | Where-Object { -not (Test-Path "$toolsWin\$_") })
+
+if ($missingDlls.Count -eq 0) {
+    Write-Skip "DLL（libusb-1.0.dll, libhidapi-0.dll, libftdi1.dll）"
+} else {
+    Write-Host "    下載 xPack OpenOCD 0.11.0-5（取得 DLL：$($missingDlls -join ', ')）..."
+    $xpackVer = "0.11.0-5"
+    $xpackUrl = "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v${xpackVer}/xpack-openocd-${xpackVer}-win32-x64.zip"
+    $xpackZip = Join-Path $env:TEMP "xpack-openocd-${xpackVer}.zip"
+    $xpackDir = Join-Path $env:TEMP "xpack-openocd-${xpackVer}"
+
+    if (-not (Test-Path $xpackZip)) {
+        curl.exe -L --progress-bar -o $xpackZip $xpackUrl
+        if ($LASTEXITCODE -ne 0) { throw "下載 xPack OpenOCD 失敗（exit $LASTEXITCODE）" }
+    } else {
+        Write-Skip "xPack 壓縮檔（已快取）"
+    }
+
+    Expand-Archive $xpackZip $xpackDir -Force
+
+    $xpackBin = Get-ChildItem $xpackDir -Recurse -Filter "openocd.exe" |
+                Select-Object -First 1 -ExpandProperty DirectoryName
+
+    if (-not $xpackBin) { throw "解壓後找不到 openocd.exe" }
+
+    $copied = 0
+    foreach ($dll in $missingDlls) {
+        $src = Join-Path $xpackBin $dll
+        if (Test-Path $src) {
+            Copy-Item $src $toolsWin -Force
+            Write-Ok "$dll 已複製（xPack）"
+            $copied++
+        }
+    }
+
+    Remove-Item $xpackDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# libhidapi-0.dll / libftdi1.dll — MinGW 版，從 MSYS2 套件庫取得（Python 解壓）
+$msys2Pkgs = @{
+    "libhidapi-0.dll" = "mingw-w64-x86_64-hidapi"
+    "libftdi1.dll"    = "mingw-w64-x86_64-libftdi"
+}
+
+$needMsys2 = @($msys2Pkgs.Keys | Where-Object { -not (Test-Path "$toolsWin\$_") })
+if ($needMsys2.Count -gt 0) {
+    & $python312 -m pip install --quiet zstandard | Out-Null
+}
+
+$pyScript = Join-Path $env:TEMP "extract_dll.py"
+@"
+import zstandard, tarfile, io, os, sys, urllib.request, re
+
+base  = "https://repo.msys2.org/mingw/mingw64/"
+pkg   = sys.argv[1]   # e.g. mingw-w64-x86_64-hidapi
+dll   = sys.argv[2]   # e.g. libhidapi-0.dll
+out   = sys.argv[3]
+
+# 查詢最新版本
+html = urllib.request.urlopen(base).read().decode()
+pat  = re.escape(pkg) + r'-[\d\.]+-\d+-any\.pkg\.tar\.zst'
+hits = re.findall(pat, html)
+if not hits:
+    print('ERROR: package not found in index', file=sys.stderr); sys.exit(1)
+filename = sorted(hits)[-1]
+url = base + filename
+print('Downloading', url)
+
+data = urllib.request.urlopen(url).read()
+dctx = zstandard.ZstdDecompressor()
+with dctx.stream_reader(io.BytesIO(data)) as r:
+    tar_bytes = r.read()
+with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tf:
+    for m in tf.getmembers():
+        if os.path.basename(m.name) == dll:
+            m.name = dll
+            tf.extract(m, out)
+            print('OK:', dll); sys.exit(0)
+print('NOT FOUND:', dll, file=sys.stderr); sys.exit(1)
+"@ | Set-Content $pyScript -Encoding UTF8
+
+foreach ($dll in $needMsys2) {
+    $pkg = $msys2Pkgs[$dll]
+    Write-Host "    下載 $dll（MSYS2）..."
+    & $python312 $pyScript $pkg $dll $toolsWin
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "$dll 已複製"
+    } else {
+        Write-Warning "找不到 $dll，請手動複製至 $toolsWin"
+    }
+}
+
+# ── 步驟 7：載入環境 ──────────────────────────────────────────────────────────
 
 $env:ZEPHYR_BASE              = $zephyrBase
 $env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"

@@ -1,2 +1,5 @@
 zephyr_library()
-zephyr_library_sources_ifdef(CONFIG_FLASH_RT582 flash_rt582.c)
+zephyr_library_sources_ifdef(CONFIG_FLASH_RT582
+    flash_rt582.c
+    flash_rt582_hal.c
+)

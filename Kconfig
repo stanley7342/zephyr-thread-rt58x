@@ -7,6 +7,9 @@ osource "$(ZEPHYR_BASE)/Kconfig"
 rsource "drivers/serial/Kconfig"
 rsource "drivers/flash/Kconfig"
 
+# OTA subsystem
+rsource "subsys/ota/Kconfig"
+
 # OpenThread
 config OPENTHREAD_RT582
     bool "OpenThread for Rafael RT582"

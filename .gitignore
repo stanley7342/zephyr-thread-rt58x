@@ -6,4 +6,7 @@ build/
 .claude/settings.json
 tools/linux/openocd
 tools/macos/openocd
+tools/windows/openocd.exe
+tools/windows/*.dll
+tools/windows/tcl/
 .DS_Store

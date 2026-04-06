@@ -6,25 +6,55 @@
 #   2. .\scripts\windows\attach-usb.ps1
 #
 # 用法：
-#   bash scripts/linux/flash.sh
-#   bash scripts/linux/flash.sh --bin path/to/zephyr.bin
-#   bash scripts/linux/flash.sh --setup-udev   # 首次：安裝 udev 規則
+#   bash scripts/linux/flash.sh -p thread        # slot0 (0x10000)
+#   bash scripts/linux/flash.sh -p bootloader    # 0x00000000
+#   bash scripts/linux/flash.sh -p thread --addr 0x0   # 覆蓋位址
+#   bash scripts/linux/flash.sh --bin path/to/custom.bin --addr 0x0
+#   bash scripts/linux/flash.sh --setup-udev     # 首次：安裝 udev 規則
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 TOOLS_LINUX="$PROJECT_DIR/tools/linux"
-BIN="${PROJECT_DIR}/build/zephyr/zephyr.bin"
+
+TARGET=""
+BIN=""
+ADDR=""
 SETUP_UDEV=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -p)           TARGET="$2"; shift 2 ;;
         --bin)        BIN="$2"; shift 2 ;;
+        --addr)       ADDR="$2"; shift 2 ;;
         --setup-udev) SETUP_UDEV=1; shift ;;
-        *) echo "未知參數：$1"; exit 1 ;;
+        *) echo "用法：$0 -p <thread|bootloader> [--addr <hex>] [--bin <path>] [--setup-udev]" >&2; exit 1 ;;
     esac
 done
+
+# 根據 target 決定預設 binary 和燒錄位址
+if [[ -n "$TARGET" ]]; then
+    if [[ "$TARGET" != "thread" && "$TARGET" != "bootloader" ]]; then
+        echo "錯誤：不支援的 target '$TARGET'，請使用 thread 或 bootloader" >&2
+        exit 1
+    fi
+    if [[ -z "$BIN" ]]; then
+        if [[ "$TARGET" == "thread" ]]; then
+            BIN="$PROJECT_DIR/build/thread/zephyr/zephyr.signed.bin"
+        else
+            BIN="$PROJECT_DIR/build/$TARGET/${TARGET}_zephyr.bin"
+        fi
+    fi
+    if [[ -z "$ADDR" ]]; then
+        [[ "$TARGET" == "bootloader" ]] && ADDR="0x0" || ADDR="0x10000"
+    fi
+elif [[ -z "$BIN" ]]; then
+    echo "錯誤：請指定 -p <thread|bootloader> 或 --bin <path>" >&2
+    exit 1
+fi
+
+[[ -z "$ADDR" ]] && ADDR="0x0"
 
 # ── 顏色 ──────────────────────────────────────────────────────────────────────
 step()  { echo -e "\n\033[36m==> $*\033[0m"; }
@@ -45,7 +75,6 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="0d28", MODE="0666", GROUP="plugdev"
 EOF
     sudo udevadm control --reload-rules
     sudo udevadm trigger
-    # 確認目前使用者在 plugdev 群組
     if ! groups | grep -q plugdev; then
         sudo usermod -aG plugdev "$USER"
         echo ""
@@ -68,7 +97,6 @@ OCD_BIN=""
 OCD_SCRIPT_DIR=""
 WORKSPACE="$(dirname "$PROJECT_DIR")"
 
-# 搜尋順序：1) 本專案內建  2) 原始碼旁  3) home  4) /opt
 OCD_SEARCH=(
     "$TOOLS_LINUX/openocd:::$TOOLS_LINUX/tcl"
     "$WORKSPACE/openocd-rt58x/src/openocd:::$WORKSPACE/openocd-rt58x/tcl"
@@ -103,7 +131,6 @@ if [[ -z "$OCD_BIN" ]]; then
     exit 1
 fi
 
-# 若 tcl/ 沒找到，嘗試從系統 openocd 抓 scripts
 if [[ -z "$OCD_SCRIPT_DIR" ]]; then
     SYS_SHARE="/usr/share/openocd/scripts"
     [[ -d "$SYS_SHARE" ]] && OCD_SCRIPT_DIR="$SYS_SHARE"
@@ -119,7 +146,7 @@ step "確認 binary"
 
 if [[ ! -f "$BIN" ]]; then
     err "找不到 binary：$BIN"
-    echo "    請先執行：bash scripts/linux/build.sh"
+    [[ -n "$TARGET" ]] && echo "    請先執行：bash scripts/linux/build.sh -p $TARGET"
     exit 1
 fi
 ok "Binary：$BIN（$(du -h "$BIN" | cut -f1)）"
@@ -140,7 +167,7 @@ fi
 ok "CMSIS-DAP 已偵測到"
 
 # ── 燒錄 ──────────────────────────────────────────────────────────────────────
-step "燒錄 → 0x00000000"
+step "燒錄 → $ADDR"
 echo "    Binary : $BIN"
 echo "    Scripts: $OCD_SCRIPT_DIR"
 echo ""
@@ -149,7 +176,7 @@ echo ""
     -s "$OCD_SCRIPT_DIR" \
     -f interface/cmsis-dap.cfg \
     -f target/rt58x.cfg \
-    -c "init; halt; flash write_image erase \"$BIN\" 0x0; reset run; exit"
+    -c "init; halt; flash write_image erase \"$BIN\" $ADDR; reset run; exit"
 
 echo ""
 echo -e "\n\033[32m[OK] 燒錄完成！請開啟序列終端機（115200 8N1）觀察輸出。\033[0m"

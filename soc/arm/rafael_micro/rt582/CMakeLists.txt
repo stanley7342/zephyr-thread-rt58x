@@ -6,7 +6,11 @@ set(SOC_LINKER_SCRIPT
 zephyr_sources(soc.c)
 
 # Platform drivers are compiled from source under drivers/ (no pre-built .a needed).
+# CMAKE_SOURCE_DIR points to the app source dir, not the repo root.
+# Use CMAKE_CURRENT_LIST_DIR to derive the repo root (soc/arm/rafael_micro/rt582/ → ../../../../)
+get_filename_component(_RT582_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+
 zephyr_include_directories(
-    ${CMAKE_SOURCE_DIR}/sdk/components/platform/soc/rt582/rt582_driver/Inc
-    ${CMAKE_SOURCE_DIR}/sdk/components/platform/soc/rt582/rt582_system/Include
+    ${_RT582_REPO_ROOT}/sdk/components/platform/soc/rt582/rt582_driver/Inc
+    ${_RT582_REPO_ROOT}/sdk/components/platform/soc/rt582/rt582_system/Include
 )
