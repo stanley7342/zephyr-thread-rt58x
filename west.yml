@@ -23,7 +23,7 @@ manifest:
       path: modules/hal/cmsis_6
     - name: mcuboot
       remote: mcuboot
-      revision: v2.1.0
+      revision: cf5810201c84d6e266aeda2abdab80854066ac08
       path: bootloader/mcuboot
 
   self:
