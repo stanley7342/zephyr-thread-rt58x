@@ -4,6 +4,7 @@ build/
 *.hex
 *.map
 .claude/settings.json
+.claude/settings.local.json
 tools/linux/openocd
 tools/macos/openocd
 tools/windows/openocd.exe
