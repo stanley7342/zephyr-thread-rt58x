@@ -71,6 +71,7 @@ jobs:
           path: |
             zephyr
             modules
+            bootloader
           key: zephyr-${{ hashFiles('zephyr-thread/west.yml') }}
 
       - name: west init
