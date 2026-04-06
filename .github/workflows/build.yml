@@ -82,7 +82,9 @@ jobs:
         run: west update --narrow --fetch-opt=--depth=1
 
       - name: Install Zephyr Python requirements
-        run: pip install -r zephyr/scripts/requirements-base.txt
+        run: |
+          pip install -r zephyr/scripts/requirements-base.txt
+          pip install -r zephyr/scripts/requirements-build.txt
 
       # ── Zephyr SDK 1.0.1 (ARM toolchain) ─────────────────────────────────
       - name: Cache Zephyr SDK
