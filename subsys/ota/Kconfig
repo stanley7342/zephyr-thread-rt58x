@@ -1,0 +1,44 @@
+config OTA
+    bool "OTA firmware update subsystem"
+    depends on FLASH && FLASH_MAP && BOOTLOADER_MCUBOOT
+    depends on OPENTHREAD_RT582
+    depends on SETTINGS
+    help
+      Enables CoAP Block-wise OTA download + LZ4 decompression
+      to the secondary MCUboot slot.
+
+if OTA
+
+config OTA_LZ4_BLOCK_SZ
+    int "LZ4 block size (bytes)"
+    default 4096
+    range 1024 8192
+    help
+      Compressed and decompressed block size. Must match the value
+      used by ota_pack.py on the server side. Larger blocks improve
+      compression ratio but use more RAM.
+
+config OTA_CURRENT_VERSION_MAJOR
+    int "Current image major version"
+    default 1
+
+config OTA_CURRENT_VERSION_MINOR
+    int "Current image minor version"
+    default 0
+
+config OTA_CURRENT_VERSION_PATCH
+    int "Current image patch version"
+    default 0
+
+config OTA_COAP_PORT
+    int "OTA server CoAP port"
+    default 5683
+
+config OTA_APPLY_THREAD_STACK_SIZE
+    int "OTA apply thread stack size"
+    default 4096
+    help
+      Stack for the thread that runs ota_flash_apply().
+      Must accommodate LZ4 + mbedTLS SHA-256.
+
+endif # OTA
