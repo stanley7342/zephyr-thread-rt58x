@@ -11,8 +11,32 @@ env:
 
 jobs:
   build:
-    name: rt582_evb
+    name: ${{ matrix.target }}
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false   # keep building other targets even if one fails
+      matrix:
+        include:
+          - target: thread
+            source: examples/thread
+            build_dir: build/thread
+
+          - target: blinky
+            source: examples/blinky
+            build_dir: build/blinky
+
+          - target: hello_world
+            source: examples/hello_world
+            build_dir: build/hello_world
+
+          - target: test_flash
+            source: tests/flash
+            build_dir: build/test_flash
+
+          - target: bootloader
+            source: ../bootloader/mcuboot/boot/zephyr
+            build_dir: build/bootloader
+            is_bootloader: true
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
@@ -40,8 +64,6 @@ jobs:
         run: pip install west==1.5.0
 
       # ── Zephyr workspace ──────────────────────────────────────────────────
-      # Cache key is derived from west.yml content — automatically invalidates
-      # when the Zephyr revision changes.
       - name: Cache Zephyr
         id: cache-zephyr
         uses: actions/cache@v4
@@ -62,7 +84,6 @@ jobs:
         run: pip install -r zephyr/scripts/requirements-base.txt
 
       # ── Zephyr SDK 1.0.1 (ARM toolchain) ─────────────────────────────────
-      # Cache includes the minimal SDK + downloaded arm-zephyr-eabi toolchain.
       - name: Cache Zephyr SDK
         id: cache-sdk
         uses: actions/cache@v4
@@ -78,31 +99,41 @@ jobs:
           wget -q "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v${SDK_VER}/${FILE}"
           mkdir -p ~/zephyr-sdk
           tar xf "${FILE}" -C ~/zephyr-sdk --strip-components=1
-          # Download ARM toolchain and register CMake package
           ~/zephyr-sdk/setup.sh -t arm-zephyr-eabi -c
 
-      # Re-register cmake package on every run (path is runner-specific).
       - name: Register Zephyr SDK
         run: ~/zephyr-sdk/setup.sh -c
 
       # ── Build ─────────────────────────────────────────────────────────────
-      - name: Build rt582_evb
+      - name: Build ${{ matrix.target }}
         working-directory: zephyr-thread
         env:
           ZEPHYR_BASE: ${{ github.workspace }}/zephyr
           ZEPHYR_TOOLCHAIN_VARIANT: zephyr
         run: |
-          # $HOME expands correctly in the shell; runner.home is not a valid GHA context.
           export ZEPHYR_SDK_INSTALL_DIR="$HOME/zephyr-sdk"
-          west build -p always -b rt582_evb -d build . \
-            -- -DZephyr_DIR="$ZEPHYR_BASE/share/zephyr-package/cmake"
+          PROJECT="${GITHUB_WORKSPACE}/zephyr-thread"
+          CMAKE_ARGS="-DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake"
+
+          if [ "${{ matrix.is_bootloader }}" = "true" ]; then
+            CMAKE_ARGS="${CMAKE_ARGS} \
+              -DOVERLAY_CONFIG=${PROJECT}/examples/bootloader/mcuboot.conf \
+              -DBOARD_ROOT=${PROJECT} \
+              -DSOC_ROOT=${PROJECT} \
+              -DDTS_ROOT=${PROJECT}"
+          fi
+
+          west build -p always -b rt582_evb \
+            -d ${{ matrix.build_dir }} \
+            ${{ matrix.source }} \
+            -- ${CMAKE_ARGS}
 
       # ── Upload binary ─────────────────────────────────────────────────────
-      - name: Upload build artifacts
+      - name: Upload ${{ matrix.target }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zephyr-rt582-${{ github.sha }}
+          name: ${{ matrix.target }}-${{ github.sha }}
           path: |
-            zephyr-thread/build/zephyr/zephyr.bin
-            zephyr-thread/build/zephyr/zephyr.elf
+            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.bin
+            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.elf
           retention-days: 30
