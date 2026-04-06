@@ -37,6 +37,14 @@ if ! command -v brew &>/dev/null; then
 fi
 ok "Homebrew：$(brew --version | head -1)"
 
+step "更新 Homebrew"
+brew update 2>/dev/null || {
+    warn "brew update 失敗，嘗試清除快取後重試..."
+    rm -rf "$(brew --cache)" 2>/dev/null
+    brew update
+}
+ok "Homebrew 已更新"
+
 # ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
 step "檢查並安裝必要工具"
 
@@ -62,7 +70,14 @@ echo ""
 
 if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
     step "安裝缺少的工具（共 ${#TO_INSTALL[@]} 項）"
-    brew install "${TO_INSTALL[@]}"
+    for pkg in "${TO_INSTALL[@]}"; do
+        echo "    安裝 $pkg ..."
+        brew install "$pkg" 2>&1 || {
+            warn "$pkg 安裝失敗，清除快取後重試..."
+            rm -rf "$(brew --cache)" 2>/dev/null
+            brew install "$pkg"
+        }
+    done
     ok "工具安裝完成"
 else
     ok "所有工具已安裝，略過"
