@@ -166,8 +166,8 @@ else
     if [[ "$SDK_VER" == "1.0.1" ]]; then
         bash "$SDK_SETUP"
     else
-        # v0.17.0: register SDK and install only the ARM toolchain
-        bash "$SDK_SETUP" -c arm-zephyr-eabi
+        # v0.17.0: -t <toolchain> to install, -c to register CMake package
+        bash "$SDK_SETUP" -t arm-zephyr-eabi -h -c
     fi
     ok "Zephyr SDK ${SDK_VER} 安裝完成"
 fi
