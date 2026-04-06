@@ -78,7 +78,7 @@ done
 echo ""
 
 if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
-    step "安裝缺少的工具（共 ${#TO_INSTALL[@]} 項）"
+    step "安裝缺少的工具 (共 ${#TO_INSTALL[@]} 項)"
     for pkg in "${TO_INSTALL[@]}"; do
         echo "    安裝 $pkg ..."
         brew install "$pkg" 2>&1 || {
@@ -104,7 +104,7 @@ if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
     "$PYTHON3" -m venv "$VENV_DIR"
     ok "venv 建立於 $VENV_DIR"
 else
-    skip "venv（$VENV_DIR）"
+    skip "venv ($VENV_DIR)"
 fi
 
 source "$VENV_DIR/bin/activate"
@@ -153,7 +153,7 @@ else
             rm -f "$TMP"; echo "下載失敗：非有效的 tar.xz 檔案" >&2; exit 1
         fi
     else
-        skip "SDK 壓縮檔（$TMP）"
+        skip "SDK 壓縮檔 ($TMP)"
     fi
 
     mkdir -p "$(dirname "$SDK_DIR")"
@@ -217,7 +217,7 @@ export ZEPHYR_BASE="$ZEPHYR_DIR"
 export ZEPHYR_TOOLCHAIN_VARIANT="zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
 
-echo "Zephyr 環境已載入（ZEPHYR_BASE=\$ZEPHYR_BASE）"
+echo "Zephyr 環境已載入 (ZEPHYR_BASE=\$ZEPHYR_BASE)"
 EOF
 chmod +x "$ENV_SH"
 ok "env.sh 產生完成"
