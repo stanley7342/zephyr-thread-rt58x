@@ -3,9 +3,8 @@
 
 osource "$(ZEPHYR_BASE)/Kconfig"
 
-# Include out-of-tree driver Kconfigs
-rsource "drivers/serial/Kconfig"
-rsource "drivers/flash/Kconfig"
+# Driver Kconfigs are loaded via Kconfig.module (zephyr/module.yml),
+# so they must NOT be rsourced here to avoid duplicate symbol definitions.
 
 # OTA subsystem
 rsource "subsys/ota/Kconfig"
