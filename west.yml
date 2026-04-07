@@ -27,6 +27,10 @@ manifest:
     - name: tf-psa-crypto
       revision: 6820f1dadc67c289d2dc63aec495519c9d589d8e
       path: modules/crypto/mbedtls/tf-psa-crypto
+    - name: openthread
+      revision: e4d97681c53ec1cc34af1404ad2960adda4ba691
+      path: modules/lib/openthread
+
     - name: mcuboot
       remote: mcuboot
       revision: cf5810201c84d6e266aeda2abdab80854066ac08
