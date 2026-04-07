@@ -1,0 +1,7 @@
+config BLE_RT582
+	bool "Rafael RT582 BLE HCI driver"
+	depends on BT
+	help
+	  Enable the Rafael RT582 integrated BLE controller HCI driver.
+	  Bridges the HOSAL RF interface to Zephyr's BLE host stack via
+	  shared-memory queues on the COMM_SUBSYSTEM co-processor.

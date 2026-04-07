@@ -56,6 +56,21 @@ if(CONFIG_UART_RT582)
     )
 endif()
 
+# ── BLE HCI driver (drivers__bluetooth) ─────────────────────────────────
+if(CONFIG_BLE_RT582 AND TARGET drivers__bluetooth)
+    target_sources(drivers__bluetooth PRIVATE
+        ${_RT582_MODULE_ROOT}/drivers/bluetooth/hci_rt582.c
+        ${_RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_rf.c
+        ${_RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_lpm.c
+    )
+
+    target_include_directories(drivers__bluetooth PRIVATE
+        ${_RT582_PLATFORM}/soc/rt582/rt582_driver/Inc
+        ${_RT582_PLATFORM}/soc/rt582/rt582_system/Include
+        ${_RT582_PLATFORM}/hosal/rt582_hosal/Inc
+    )
+endif()
+
 # ── Flash driver (drivers__flash) ────────────────────────────────────────
 # flash_rt582.c includes <zephyr/drivers/flash.h> (Zephyr flash API).
 # flash_rt582_hal.c includes "flashctl.h" (RT582 HW API).

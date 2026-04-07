@@ -6,6 +6,7 @@
 
 rsource "drivers/serial/Kconfig"
 rsource "drivers/flash/Kconfig"
+rsource "drivers/bluetooth/Kconfig"
 
 # MCUboot's Kconfig defines MBEDTLS_CONFIG_FILE without a type (it expects
 # Zephyr's mbedTLS Kconfig to provide the 'string' declaration first).

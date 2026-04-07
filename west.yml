@@ -33,4 +33,4 @@ manifest:
       path: bootloader/mcuboot
 
   self:
-    path: zephyr-thread
+    path: zephyr-thread-rt58x

@@ -1,3 +1,7 @@
 build:
   cmake: cmake/zephyr_module
   kconfig: Kconfig.module
+  settings:
+    board_root: .
+    soc_root: .
+    dts_root: .
