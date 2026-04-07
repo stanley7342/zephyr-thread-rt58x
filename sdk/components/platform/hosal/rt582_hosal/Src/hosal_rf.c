@@ -1192,3 +1192,12 @@ void hosal_rf_init(hosal_rf_mode_t mode)
 
     __rf_tx_data_queue_init();
 }
+
+/* Force-reset the command semaphore to "available" state.
+ * Used by test harnesses after a command timeout to unblock
+ * subsequent hosal_rf_write_command() calls. */
+void hosal_rf_cmd_sem_reset(void)
+{
+    k_sem_reset(&g_rf_cmd_sem);
+    k_sem_give(&g_rf_cmd_sem);
+}

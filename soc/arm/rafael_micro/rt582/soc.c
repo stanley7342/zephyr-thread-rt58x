@@ -17,7 +17,7 @@ extern void SystemInit(void);
 #define RT582_COMM_SUBSYSTEM_IRQN   20
 #define RT582_COMM_SUBSYSTEM_IRQPRI 2
 
-#ifdef CONFIG_OPENTHREAD_RT582
+#if defined(CONFIG_OPENTHREAD_RT582) || defined(CONFIG_BLE_RT582)
 extern void RfMcu_IsrHandler(void);
 
 volatile uint32_t rt582_comm_irq_count;
@@ -28,7 +28,7 @@ static void comm_subsystem_isr(const void *arg)
     rt582_comm_irq_count++;
     RfMcu_IsrHandler();
 }
-#endif /* CONFIG_OPENTHREAD_RT582 */
+#endif /* CONFIG_OPENTHREAD_RT582 || CONFIG_BLE_RT582 */
 
 static int rt582_soc_init(void)
 {
@@ -36,13 +36,13 @@ static int rt582_soc_init(void)
                    * Without this the UART peripheral has no clock and
                    * hosal_uart_send_complete spins on LSR.TEMT forever. */
 
-#ifdef CONFIG_OPENTHREAD_RT582
+#if defined(CONFIG_OPENTHREAD_RT582) || defined(CONFIG_BLE_RT582)
     IRQ_CONNECT(RT582_COMM_SUBSYSTEM_IRQN,
                 RT582_COMM_SUBSYSTEM_IRQPRI,
                 comm_subsystem_isr,
                 NULL, 0);
     irq_enable(RT582_COMM_SUBSYSTEM_IRQN);
-#endif /* CONFIG_OPENTHREAD_RT582 */
+#endif /* CONFIG_OPENTHREAD_RT582 || CONFIG_BLE_RT582 */
 
     return 0;
 }

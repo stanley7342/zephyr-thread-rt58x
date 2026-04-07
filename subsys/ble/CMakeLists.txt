@@ -1,0 +1,77 @@
+# subsys/ble/CMakeLists.txt — RT582 BLE platform sources
+# Included by example CMakeLists.txt when CONFIG_BLE_RT582=y.
+#
+# Expects RAFAEL_SDK and RT582_PROJECT_DIR to be set by the caller.
+
+set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt582)
+set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt582)
+set(RUCI_INC      ${RAFAEL_SDK}/components/network/ruci/Inc)
+set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Inc)
+set(RT582_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_driver/Inc)
+set(RT582_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_system/Include)
+set(UTIL_INC      ${RAFAEL_SDK}/components/utility/utility/Inc)
+set(LOG_INC       ${RAFAEL_SDK}/components/utility/log)
+
+# ── RF MCU + firmware + RUCI + utility ────────────────────────────────────────
+target_sources(app PRIVATE
+    # HOSAL RF (Zephyr port) + LPM
+    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_rf.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_lpm.c
+    ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_driver/Src/lpm.c
+
+    # RF MCU
+    ${RT569_RF_DIR}/Src/rf_mcu.c
+    ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
+    ${RT569_RF_DIR}/Src/rf_common_init.c
+    ${RT569_FW_DIR}/Src/rt569mp_fw.c
+    ${RT569_FW_DIR}/Src/rt569mp_init.c
+
+    # RUCI (command protocol)
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_cmn_event.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_cmn_hal_cmd.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_cmn_sys_cmd.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_pci_ble_cmd.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_pci_common_cmd.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_pci_event.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_sf_event.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_sf_host_cmd.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_sf_host_event.c
+    ${RAFAEL_SDK}/components/network/ruci/Src/ruci_sf_host_sys_cmd.c
+
+    # Utility
+    ${RAFAEL_SDK}/components/utility/utility/Src/util_queue.c
+    ${RAFAEL_SDK}/components/utility/utility/Src/util_string.c
+
+    # Log
+    ${RAFAEL_SDK}/components/utility/log/log.c
+    ${RAFAEL_SDK}/components/network/thread/openthread_port/Src/log_shim.c
+
+    # HCI driver (only when Zephyr BT host stack is enabled)
+    $<$<BOOL:${CONFIG_BT}>:${RT582_PROJECT_DIR}/drivers/bluetooth/hci_rt582.c>
+)
+
+target_include_directories(app PRIVATE
+    ${HOSAL_INC}
+    ${RT582_DRV_INC}
+    ${RT582_SYS_INC}
+    ${UTIL_INC}
+    ${LOG_INC}
+    ${RT569_RF_DIR}/Inc
+    ${RT569_FW_DIR}/Inc
+    ${RUCI_INC}
+)
+
+target_compile_definitions(app PRIVATE
+    CONFIG_RT582=1
+    CHIP_TYPE=2
+    "CONFIG_RF_FW_INCLUDE_BLE=TRUE"
+    "CONFIG_RF_FW_INCLUDE_PCI=FALSE"
+)
+
+# Suppress warnings in vendored SDK sources we don't own
+set_source_files_properties(
+    ${RT569_RF_DIR}/Src/rf_common_init.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_lpm.c
+    PROPERTIES COMPILE_FLAGS "-Wno-unused-variable"
+)

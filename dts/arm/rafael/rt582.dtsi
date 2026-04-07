@@ -142,6 +142,11 @@
          *   Base : PERIPH_BASE2 + 0x500000 = 0xA0500000
          *   IRQ  : Uart1_IRQn = 7
          */
+        bt_hci_rt582: bt-hci {
+            compatible = "rafael,rt582-bt-hci";
+            status = "disabled";
+        };
+
         uart1: uart@a0500000 {
             compatible = "rafael,rt582-uart";
             reg = <0xa0500000 0x1000>;

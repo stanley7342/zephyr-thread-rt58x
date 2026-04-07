@@ -83,3 +83,12 @@ config RT582_RF_FW_EXPECTED_CRC32
       Run once with 0, read the log, then set this value to lock it down.
 
 endif # OPENTHREAD_RT582
+
+# BLE
+config BLE_RT582
+    bool "Bluetooth LE for Rafael RT582"
+    depends on SOC_RT582
+    select BT_HCI_SETUP if BT
+    help
+      Enables the BLE stack on the RT582 SoC via the integrated
+      BLE controller firmware and Zephyr's BLE host stack.

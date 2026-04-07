@@ -24,7 +24,7 @@
 
 param(
     [Parameter(Mandatory)]
-    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash")]
+    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci")]
     [string] $p,
     [switch] $NoPristine,
     [switch] $NoMCUboot,  # 略過 MCUboot，直接燒到 0x0（blinky / hello_world / test）
@@ -106,6 +106,39 @@ if ($p -eq "bootloader") {
             "-DSOC_ROOT=$projectDirFwd",
             "-DDTS_ROOT=$projectDirFwd"
         )
+    Push-Location $Workspace
+    & $python312 @westArgs
+    $rc = $LASTEXITCODE
+    Pop-Location
+
+} elseif ($p -eq "ble_hrs") {
+    Write-Host ""
+    Write-Host "==> west build（BLE HRS / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "    Mode    : $modeLabel"
+    Write-Host "    BuildDir: $buildDir"
+    Write-Host ""
+
+    $cmake = [System.Collections.Generic.List[string]]@()
+    $westArgs = Build-WestArgs `
+        -Source      "$projectName/examples/ble/peripheral/hrs" `
+        -BuildSubdir "$projectName/build/${p}${slotSuffix}" `
+        -ExtraCmake  $cmake
+    Push-Location $Workspace
+    & $python312 @westArgs
+    $rc = $LASTEXITCODE
+    Pop-Location
+
+} elseif ($p -eq "test_hci") {
+    Write-Host ""
+    Write-Host "==> west build（HCI Test / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "    Mode    : $modeLabel"
+    Write-Host "    BuildDir: $buildDir"
+    Write-Host ""
+
+    $westArgs = Build-WestArgs `
+        -Source      "$projectName/examples/ble/test_hci" `
+        -BuildSubdir "$projectName/build/${p}" `
+        -ExtraCmake  @()
     Push-Location $Workspace
     & $python312 @westArgs
     $rc = $LASTEXITCODE

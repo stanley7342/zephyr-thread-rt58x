@@ -12,7 +12,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"   # keep going even if one target fails
 
-$targets = @("bootloader", "blinky", "hello_world", "test_flash", "thread")
+$targets = @("bootloader", "blinky", "hello_world", "test_flash", "thread", "ble_hrs")
 $results = [ordered]@{}
 $script  = Join-Path $PSScriptRoot "build.ps1"
 
@@ -29,15 +29,15 @@ foreach ($t in $targets) {
 
 Write-Host ""
 Write-Host "╔══════════════════════════════════╗" -ForegroundColor White
-Write-Host "║        Build Summary             ║" -ForegroundColor White
+Write-Host "║          Build Summary            ║" -ForegroundColor White
 Write-Host "╠══════════════════════════════════╣" -ForegroundColor White
 
 $allPass = $true
 foreach ($kv in $results.GetEnumerator()) {
     if ($kv.Value -eq "PASS") {
-        Write-Host ("║  {0,-18} [ PASS ] ║" -f $kv.Key) -ForegroundColor Green
+        Write-Host ("║  {0,-22} [ PASS ] ║" -f $kv.Key) -ForegroundColor Green
     } else {
-        Write-Host ("║  {0,-18} [ FAIL ] ║" -f $kv.Key) -ForegroundColor Red
+        Write-Host ("║  {0,-22} [ FAIL ] ║" -f $kv.Key) -ForegroundColor Red
         $allPass = $false
     }
 }
