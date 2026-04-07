@@ -24,7 +24,7 @@
 
 param(
     [Parameter(Mandatory)]
-    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci")]
+    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci", "matter_lighting")]
     [string] $p,
     [switch] $NoPristine,
     [switch] $NoMCUboot,  # 略過 MCUboot，直接燒到 0x0（blinky / hello_world / test）
@@ -148,6 +148,31 @@ if ($p -eq "bootloader") {
 
     $westArgs = Build-WestArgs `
         -Source      "$projectName/examples/ble/test_hci" `
+        -BuildSubdir "$projectName/build/${p}" `
+        -ExtraCmake  @()
+    Push-Location $Workspace
+    & $python312 @westArgs
+    $rc = $LASTEXITCODE
+    Pop-Location
+
+} elseif ($p -eq "matter_lighting") {
+    # Matter requires GN build system and connectedhomeip to be available.
+    # Set CHIP_ROOT env var to override the default <workspace>/connectedhomeip path.
+    $chipRoot = if ($env:CHIP_ROOT) { $env:CHIP_ROOT } else { Join-Path $Workspace "connectedhomeip" }
+    Write-Host ""
+    Write-Host "==> west build（Matter Lighting / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "    Mode    : $modeLabel"
+    Write-Host "    BuildDir: $buildDir"
+    Write-Host "    CHIP_ROOT: $chipRoot"
+    Write-Host ""
+
+    if (-not (Test-Path (Join-Path $chipRoot "src\lib\core\CHIPError.h"))) {
+        throw "connectedhomeip not found at $chipRoot.`nClone it or set `$env:CHIP_ROOT."
+    }
+
+    $env:CHIP_ROOT = $chipRoot
+    $westArgs = Build-WestArgs `
+        -Source      "$projectName/examples/matter/lighting-app" `
         -BuildSubdir "$projectName/build/${p}" `
         -ExtraCmake  @()
     Push-Location $Workspace
