@@ -92,7 +92,21 @@
       "Bash(export ZEPHYR_SDK_INSTALL_DIR=/c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1)",
       "Bash(grep -v \"^$\")",
       "Bash(git mv:*)",
-      "Read(//c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1//**)"
+      "Read(//c/zephyr-sdk-1.0.1/zephyr-sdk-1.0.1//**)",
+      "Bash(git -C /c/Users/Stanley/modules/crypto/mbedtls submodule status)",
+      "Bash(git -C /c/Users/Stanley/modules/crypto/mbedtls log --oneline -3)",
+      "Bash(git -C /c/Users/Stanley/modules/crypto/mbedtls submodule update --init)",
+      "Bash(ls /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/*.bin)",
+      "Bash(ls /c/Users/Stanley/zephyr-thread-rt58x/build/thread/zephyr/*.bin)",
+      "Bash(ls /c/Users/Stanley/zephyr-thread-rt58x/build/blinky/zephyr/*.bin)",
+      "Bash(python3 -c \"import shutil; print\\(shutil.which\\('imgtool'\\)\\)\")",
+      "Bash(ls /c/Users/Stanley/.zephyr-venv/Scripts/imgtool*)",
+      "Bash(python3 /c/Users/Stanley/bootloader/mcuboot/scripts/imgtool.py sign --pad-header --align 4 --version 1.1.1 --header-size 0x200 --slot-size 0x80000 /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
+      "Bash(/c/Users/Stanley/.zephyr-venv/Scripts/python.exe /c/Users/Stanley/bootloader/mcuboot/scripts/imgtool.py sign --pad-header --align 4 --version 1.1.1 --header-size 0x200 --slot-size 0x80000 C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
+      "Bash(xxd /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
+      "Bash(xxd /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin)",
+      "Bash(/c/Users/Stanley/.zephyr-venv/Scripts/python.exe /c/Users/Stanley/bootloader/mcuboot/scripts/imgtool.py sign --align 4 --version 1.1.1 --header-size 0x200 --slot-size 0x80000 C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
+      "Bash(grep -n \"lpm_init\\\\b\" /c/Users/Stanley/zephyr-thread-rt58x/sdk/components/platform/soc/rt582/rt582_driver/Src/*.c)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Stanley\\stbuild\\src"
