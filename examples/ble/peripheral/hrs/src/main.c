@@ -31,7 +31,35 @@ static const struct bt_data sd[] = {
 		sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
+/* ── Connection state ──────────────────────────────────────────────────── */
+
+static bool is_connected;
+
+/* ── Advertising helpers ───────────────────────────────────────────────── */
+
+static void start_advertising(struct k_work *work)
+{
+	int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad),
+				  sd, ARRAY_SIZE(sd));
+	if (err) {
+		printk("[BLE] Re-advertise failed (err %d)\n", err);
+	} else {
+		printk("[BLE] Re-advertising as \"%s\"\n", CONFIG_BT_DEVICE_NAME);
+	}
+}
+
+static K_WORK_DELAYABLE_DEFINE(adv_work, start_advertising);
+
 /* ── Connection callbacks ──────────────────────────────────────────────── */
+
+static void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
+{
+	printk("[BLE] MTU updated: TX=%u RX=%u\n", tx, rx);
+}
+
+static struct bt_gatt_cb gatt_cb = {
+	.att_mtu_updated = mtu_updated,
+};
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -39,12 +67,19 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		printk("[BLE] Connection failed (err 0x%02x)\n", err);
 		return;
 	}
+	is_connected = true;
 	printk("[BLE] Connected\n");
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
+	is_connected = false;
 	printk("[BLE] Disconnected (reason 0x%02x)\n", reason);
+
+	/* Delay re-advertising by 100 ms: the BLE stack releases the
+	 * advertising set asynchronously after disconnect, so calling
+	 * bt_le_adv_start() immediately returns -ENOMEM. */
+	k_work_schedule(&adv_work, K_MSEC(100));
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
@@ -108,7 +143,10 @@ int main(void)
 
 	printk("========================================\n");
 	printk("  RT58x BLE Peripheral — Heart Rate\n");
+	printk("  Build: " __DATE__ " " __TIME__ "\n");
 	printk("========================================\n");
+
+	bt_gatt_cb_register(&gatt_cb);
 
 	err = bt_enable(bt_ready);
 	if (err) {
@@ -116,21 +154,26 @@ int main(void)
 		return 0;
 	}
 
-	/* Main loop: update simulated sensor values every second */
+	/* Main loop: update simulated sensor values every second.
+	 * Only notify/print when connected AND client has subscribed.
+	 * bt_hrs_notify / bt_bas_set_battery_level return 0 only when
+	 * the notification was actually sent to a subscriber. */
 	while (1) {
-		k_sleep(K_SECONDS(100));
+		k_sleep(K_SECONDS(1));
+
+		if (!is_connected) {
+			continue;
+		}
 
 		simulate_heart_rate();
-		int rc = bt_hrs_notify(sim_heart_rate);
-		if (rc == 0) {
-			printk("[HRS] notify OK: HR=%u bpm  BAT=%u%%\n",
-			       sim_heart_rate, sim_battery);
-		} else {
-			printk("[HRS] notify rc=%d (no subscription?)\n", rc);
+		if (bt_hrs_notify(sim_heart_rate) == 0) {
+			printk("[HRS] HR=%u bpm\n", sim_heart_rate);
 		}
 
 		simulate_battery();
-		bt_bas_set_battery_level(sim_battery);
+		if (bt_bas_set_battery_level(sim_battery) == 0) {
+			printk("[BAS] BAT=%u%%\n", sim_battery);
+		}
 	}
 
 	return 0;

@@ -39,6 +39,8 @@ extern volatile uint32_t rt582_comm_irq_count;
 #define H4_ACL  0x02
 #define H4_EVT  0x04
 
+#define RT582_COMM_SUBSYSTEM_IRQN 20
+
 /* Rafael vendor HCI command: Set Controller Info (OGF=0x3F, OCF=0x01) */
 #define RT58X_VS_SET_CTRL_INFO_PLEN    9
 #define RT58X_BLE_VERSION              0x0C    /* Bluetooth 5.3 */
@@ -64,7 +66,7 @@ __weak void     _crit_relock(uint32_t nest) { ARG_UNUSED(nest); }
 
 /* ── Debug helpers (disabled — enable by setting HCI_RT58X_DEBUG to 1) ── */
 
-#define HCI_RT58X_DEBUG 1
+#define HCI_RT58X_DEBUG 0
 
 #if HCI_RT58X_DEBUG
 static void dump_hex(const char *dir, const uint8_t *data, uint16_t len)
@@ -173,7 +175,7 @@ static int hci_acl_cb(void *p_arg)
 	/* bt_buf_get_rx() prepends the H:4 type byte (0x02),
 	 * so skip buf_raw[0] to avoid duplication. */
 	net_buf_add_mem(buf, &buf_raw[1], total - 1);
-	printk(LOG_PREFIX "ACL-IN len=%u\n", buf->len);
+	/* printk(LOG_PREFIX "ACL-IN len=%u\n", buf->len); */
 	k_fifo_put(&rx_fifo, buf);
 	return 0;
 }
@@ -222,10 +224,48 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 			return -EIO;
 		}
 		break;
-	case H4_ACL:
-		printk(LOG_PREFIX "ACL-OUT len=%u\n", buf->len);
+	case H4_ACL: {
+		/*
+		 * Rafael BLE controller wire format (hosal_rf_write_tx_data):
+		 *   [0]   transport_id  (0x02)
+		 *   [1-2] sequence      (uint16 LE, per-connection TX counter)
+		 *   [3-4] handle:12 + pb_flag:2 + bc_flag:2  (uint16 LE)
+		 *   [5-6] length        (uint16 LE, payload byte count)
+		 *   [7+]  payload
+		 *
+		 * Standard HCI ACL (buf->data):
+		 *   [0]   H4 type (0x02)
+		 *   [1-2] handle+flags (uint16 LE)
+		 *   [3-4] length       (uint16 LE)
+		 *   [5+]  payload
+		 *
+		 * We must repack to insert the sequence field.
+		 */
+		static uint16_t tx_sn;
+
+		uint16_t hci_handle_flags = sys_get_le16(&buf->data[1]);
+		uint16_t hci_len          = sys_get_le16(&buf->data[3]);
+		uint8_t *payload          = &buf->data[5];
+		uint16_t total            = 7u + hci_len;
+
+		uint8_t *raf_buf = k_malloc(total);
+		if (!raf_buf) {
+			printk(LOG_PREFIX "ACL alloc failed\n");
+			net_buf_unref(buf);
+			return -ENOMEM;
+		}
+
+		raf_buf[0] = H4_ACL;
+		sys_put_le16(tx_sn++,           &raf_buf[1]);
+		sys_put_le16(hci_handle_flags,  &raf_buf[3]);
+		sys_put_le16(hci_len,           &raf_buf[5]);
+		memcpy(&raf_buf[7], payload, hci_len);
+
+		/* printk(LOG_PREFIX "ACL-OUT len=%u seq=%u\n", total, tx_sn - 1); */
+		dump_hex("TX-ACL", raf_buf, total);
+
 		for (int i = 0; i < SEND_RETRY_MAX; i++) {
-			rc = hosal_rf_write_tx_data(buf->data, buf->len);
+			rc = hosal_rf_write_tx_data(raf_buf, total);
 			if (rc == 0) {
 				break;
 			}
@@ -233,12 +273,16 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 			       i, rc, RfMcu_PowerStateCheck());
 			k_sleep(SEND_RETRY_DELAY);
 		}
+
+		k_free(raf_buf);
+
 		if (rc != 0) {
 			printk(LOG_PREFIX "ACL send failed rc=%d\n", rc);
 			net_buf_unref(buf);
 			return -EIO;
 		}
 		break;
+	}
 	default:
 		net_buf_unref(buf);
 		return -EINVAL;
@@ -313,7 +357,13 @@ static int hci_rt58x_open(const struct device *dev, bt_hci_recv_t recv)
 	hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL,
 			 HOSAL_LOW_POWER_LEVEL_SLEEP0);
 
+	/* Disable IRQ while hosal_rf_init() sets gRfMcuIsrCfg.commsubsystem_isr.
+	 * Without this, a spurious COMM_SUBSYSTEM interrupt (e.g. from RF MCU
+	 * waking up during MCUboot's longer boot window) fires before the ISR
+	 * callback pointer is set, calling isr_cb(NULL) → PC=0x0 crash. */
+	irq_disable(RT582_COMM_SUBSYSTEM_IRQN);
 	hosal_rf_init(HOSAL_RF_MODE_BLE_CONTROLLER);
+	irq_enable(RT582_COMM_SUBSYSTEM_IRQN);
 	k_sleep(K_MSEC(50));
 
 	k_thread_create(&rx_thread_data, rx_thread_stack,

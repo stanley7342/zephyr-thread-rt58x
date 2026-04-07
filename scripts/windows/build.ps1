@@ -58,6 +58,17 @@ if (-not (Test-Path $venvPython)) {
 }
 $python312 = $venvPython
 
+# Ensure tf-psa-crypto west module is present (needed by mbedTLS 3.6+).
+# Clone on first use; subsequent builds are instant (directory already exists).
+$tfPsaCrypto = Join-Path $Workspace "modules\crypto\mbedtls\tf-psa-crypto"
+if (-not (Test-Path $tfPsaCrypto)) {
+    Write-Host "==> west update tf-psa-crypto（首次執行，需要網路）" -ForegroundColor Yellow
+    Push-Location $Workspace
+    & $python312 -m west update tf-psa-crypto
+    if ($LASTEXITCODE -ne 0) { throw "west update tf-psa-crypto 失敗" }
+    Pop-Location
+}
+
 $pristineFlag  = if ($NoPristine) { "auto" } else { "always" }
 $modeLabel     = if ($NoPristine) { "增量" } else { "Clean" }
 $slotSuffix    = if ($Slot1) { "_slot1" } else { "" }
@@ -212,8 +223,14 @@ if ($rc -ne 0) {
     throw "west build 失敗（exit $rc）"
 }
 
-$zephyrBin = Join-Path $buildDir "zephyr\zephyr.bin"
-if (Test-Path $zephyrBin) {
+# Prefer signed binary (MCUboot); fall back to unsigned.
+$zephyrSigned = Join-Path $buildDir "zephyr\zephyr.signed.bin"
+$zephyrBin    = Join-Path $buildDir "zephyr\zephyr.bin"
+if (Test-Path $zephyrSigned) {
+    Copy-Item $zephyrSigned $outBin
+    Write-Host ""
+    Write-Host "    [OK] 編譯成功（signed）：$outBin" -ForegroundColor Green
+} elseif (Test-Path $zephyrBin) {
     Copy-Item $zephyrBin $outBin
     Write-Host ""
     Write-Host "    [OK] 編譯成功：$outBin" -ForegroundColor Green

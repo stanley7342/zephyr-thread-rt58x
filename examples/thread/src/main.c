@@ -14,6 +14,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/irq.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/crc.h>
 #include "tprintk.h"
@@ -92,6 +93,7 @@ int main(void)
 
     printk("[RF] hosal_rf_init...");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
+    irq_enable(20); /* COMM_SUBSYSTEM IRQ — must enable after hosal_rf_init sets isr callback */
     printk("[RF] hosal_rf_init done");
 
     printk("[RF] lmac15p4_init...");

@@ -41,7 +41,11 @@ static int rt582_soc_init(void)
                 RT582_COMM_SUBSYSTEM_IRQPRI,
                 comm_subsystem_isr,
                 NULL, 0);
-    irq_enable(RT582_COMM_SUBSYSTEM_IRQN);
+    /* Do NOT irq_enable here. gRfMcuIsrCfg.commsubsystem_isr is still NULL
+     * until hosal_rf_init() is called by the subsystem driver. Enabling the
+     * IRQ here causes a NULL function-pointer crash on warm reset when the
+     * RF MCU has a pending interrupt (e.g. from the previous boot session).
+     * Each subsystem enables IRQ_20 itself after hosal_rf_init(). */
 #endif /* CONFIG_OPENTHREAD_RT582 || CONFIG_BLE_RT582 */
 
     return 0;

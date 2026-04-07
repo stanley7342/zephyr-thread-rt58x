@@ -63,10 +63,10 @@ if ($p) {
         }
     }
     if (-not $Addr) {
-        if ($NoMCUboot)              { $Addr = "0x0" }
-        elseif ($Slot1)              { $Addr = "0x90000" }
-        elseif ($p -eq "bootloader") { $Addr = "0x0" }
-        else                         { $Addr = "0x10000" }
+        if ($NoMCUboot)                          { $Addr = "0x0" }
+        elseif ($Slot1)                          { $Addr = "0x90000" }
+        elseif ($p -eq "bootloader")             { $Addr = "0x0" }
+        else                                     { $Addr = "0x10000" }
     }
 } elseif (-not $Bin) {
     Write-Host "用法：.\scripts\windows\flash.ps1 -p <thread|bootloader>" -ForegroundColor Red

@@ -11,7 +11,7 @@ set(KCONFIG_ROOT ${RT582_PROJECT_DIR}/Kconfig)
 list(APPEND ZEPHYR_EXTRA_MODULES ${RT582_PROJECT_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(rt582_ble_hrs VERSION 1.0.0)
+project(rt582_ble_hrs VERSION 1.1.1)
 
 target_sources(app PRIVATE src/main.c)
 
