@@ -33,6 +33,10 @@ jobs:
             source: tests/flash
             build_dir: build/test_flash
 
+          - target: ble_hrs
+            source: examples/ble/peripheral/hrs
+            build_dir: build/ble_hrs
+
           - target: bootloader
             source: ../bootloader/mcuboot/boot/zephyr
             build_dir: build/bootloader
@@ -149,5 +153,7 @@ jobs:
           name: ${{ matrix.target }}-${{ github.sha }}
           path: |
             zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.bin
+            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.signed.bin
             zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.elf
+          if-no-files-found: ignore
           retention-days: 30
