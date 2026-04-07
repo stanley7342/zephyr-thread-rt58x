@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config ENTROPY_RT583
+	bool "Rafael RT583 hardware TRNG entropy driver"
+	default y
+	depends on DT_HAS_RAFAEL_RT583_TRNG_ENABLED && ENTROPY_GENERATOR
+	select ENTROPY_HAS_DRIVER
+	help
+	  Enable the RT583 TRNG-based hardware entropy driver.
+	  Requires ENTROPY_GENERATOR=y (set in board defconfig).
+	  Selects ENTROPY_HAS_DRIVER to signal a real entropy source is present,
+	  enabling CSPRNG_ENABLED for BLE and OpenThread.
