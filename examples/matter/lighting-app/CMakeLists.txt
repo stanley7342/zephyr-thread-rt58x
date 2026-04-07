@@ -31,13 +31,13 @@ set(KCONFIG_ROOT ${RT582_PROJECT_DIR}/Kconfig)
 list(APPEND ZEPHYR_EXTRA_MODULES ${RT582_PROJECT_DIR})
 
 # Matter chip-module (nrfconnect variant — most complete Zephyr BT+OpenThread support)
-list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/nrfconnect/chip-module)
+list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt582-matter-lighting VERSION 1.0.0)
 
 # ── C++17 (required by Matter) ───────────────────────────────────────────────
-include(${CHIP_ROOT}/config/nrfconnect/app/enable-gnu-std.cmake)
+include(${CHIP_ROOT}/config/zephyr/app/enable-gnu-std.cmake)
 
 # ── Matter data model (ZAP-generated code + cluster implementations) ─────────
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
