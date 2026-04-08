@@ -30,7 +30,7 @@
 #>
 
 param(
-    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs")]
+    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "matter_lighting")]
     [string] $p      = "",
     [string] $Bin    = "",
     [string] $Addr   = "",
@@ -56,8 +56,9 @@ if ($p) {
                 "blinky"      { $Bin = Join-Path $projectDir "build\blinky${slotSuffix}\zephyr\zephyr.signed.bin" }
                 "hello_world" { $Bin = Join-Path $projectDir "build\hello_world${slotSuffix}\zephyr\zephyr.signed.bin" }
                 "test_flash"  { $Bin = Join-Path $projectDir "build\test_flash${slotSuffix}\zephyr\zephyr.signed.bin" }
-                "ble_hrs"     { $Bin = Join-Path $projectDir "build\ble_hrs${slotSuffix}\zephyr\zephyr.signed.bin" }
-                "bootloader"  { $Bin = Join-Path $projectDir "build\bootloader\bootloader_zephyr.bin" }
+                "ble_hrs"          { $Bin = Join-Path $projectDir "build\ble_hrs${slotSuffix}\zephyr\zephyr.signed.bin" }
+                "matter_lighting"  { $Bin = Join-Path $projectDir "build\matter_lighting\matter_lighting_zephyr.bin" }
+                "bootloader"       { $Bin = Join-Path $projectDir "build\bootloader\bootloader_zephyr.bin" }
                 default       { $Bin = Join-Path $projectDir "build\${p}${slotSuffix}\zephyr\zephyr.bin" }
             }
         }
@@ -66,6 +67,7 @@ if ($p) {
         if ($NoMCUboot)                          { $Addr = "0x0" }
         elseif ($Slot1)                          { $Addr = "0x90000" }
         elseif ($p -eq "bootloader")             { $Addr = "0x0" }
+        elseif ($p -eq "matter_lighting")        { $Addr = "0x0" }
         else                                     { $Addr = "0x10000" }
     }
 } elseif (-not $Bin) {

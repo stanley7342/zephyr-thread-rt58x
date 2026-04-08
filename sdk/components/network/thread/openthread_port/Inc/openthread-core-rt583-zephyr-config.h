@@ -13,6 +13,28 @@
 /* Use otPlatSettings* API (SDK libopenthread-ftd.a calls these directly) */
 /* OPENTHREAD_CONFIG_PLATFORM_FLASH_API_ENABLE is NOT set */
 
+/* Route OT_ASSERT through otPlatAssertFail() so failures print file+line
+ * instead of silently spinning in while(1). */
+#define OPENTHREAD_CONFIG_PLATFORM_ASSERT_MANAGEMENT 1
+
+/* Crypto backend: use OT's bundled mbedTLS (NOT Zephyr's PSA).
+ *
+ * Zephyr's crypto_psa.c (compiled from modules/openthread/platform/) checks
+ * mContextSize >= sizeof(psa_mac_operation_t) from mbedTLS 4.0, but OT core
+ * allocates sizeof(mbedtls_md_context_t) from the bundled mbedTLS 3.6.0.
+ * These sizes differ (4.0 includes CMAC context in the union), so Zephyr's
+ * checkContext() assertion fires.
+ *
+ * Fix: keep OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS (default).
+ * OT's own crypto_platform.cpp (compiled from OT_CORE_SOURCES) provides all
+ * otPlatCrypto* functions using OT's bundled mbedTLS — context sizes match.
+ * With --allow-multiple-definition, crypto_platform.cpp (in libapp.a) takes
+ * precedence over crypto_psa.c (in Zephyr's platform library).
+ *
+ * NOTE: OPENTHREAD_CONFIG_CRYPTO_LIB defaults to MBEDTLS(=0) so this line
+ * is informational; the #ifndef guard in config/crypto.h handles the default. */
+/* #define OPENTHREAD_CONFIG_CRYPTO_LIB OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS */
+
 /* Microsecond alarm — TIMER3 hardware on RT583 */
 #define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE     1
 

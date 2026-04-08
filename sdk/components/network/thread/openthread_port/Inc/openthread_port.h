@@ -100,21 +100,28 @@ static ALWAYS_INLINE void _ot_exit_critical(void) {
 #define OT_ENTER_CRITICAL_ISR() ((void)0)
 #define OT_EXIT_CRITICAL_ISR(x) ((void)(x))
 
-/* ── Task-notification (wake the OT thread) ──────────────────────────────── */
-extern struct k_sem ot_task_sem;
+/* ── Task-notification (wake the OT thread / work queue) ────────────────── */
 
-/* Signal from task context */
+/* Forward declaration — implementation varies by build:
+ *   Thread CLI build (ot_zephyr.c): k_sem_give(&ot_task_sem) → wakes OT thread
+ *   Matter build (ot_matter_sysq.c not defining it): Zephyr's openthread.c
+ *     version calls otTaskletsSignalPending() → submits to openthread_work_q */
+void otSysEventSignalPending(void);
+
+/* Signal from task context — routes through otSysEventSignalPending so that:
+ *   - Thread CLI: semaphore give wakes the custom OT thread
+ *   - Matter:     work queue submission wakes Zephyr's OT work queue thread */
 static ALWAYS_INLINE void _ot_notify(ot_system_event_t bit) {
     OT_ENTER_CRITICAL();
     ot_system_event_var |= bit;
     OT_EXIT_CRITICAL();
-    k_sem_give(&ot_task_sem);
+    otSysEventSignalPending();
 }
 
-/* Signal from ISR context (k_sem_give is ISR-safe in Zephyr) */
+/* Signal from ISR context — otSysEventSignalPending is ISR-safe in both modes */
 static ALWAYS_INLINE void _ot_notify_isr(ot_system_event_t bit) {
-    ot_system_event_var |= bit;   /* atomic not strictly needed: IRQs are off */
-    k_sem_give(&ot_task_sem);
+    ot_system_event_var |= bit;   /* IRQs already disabled in ISR on Cortex-M */
+    otSysEventSignalPending();
 }
 
 #define OT_NOTIFY(ebit)     _ot_notify((ot_system_event_t)(ebit))

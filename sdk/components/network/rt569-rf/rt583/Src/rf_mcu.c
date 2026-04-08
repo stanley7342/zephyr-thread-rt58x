@@ -810,31 +810,23 @@ void RfMcu_ImageLoad(const uint8_t *fw_image, uint32_t image_size)
     if (image_size > 2 * COMM_SUBSYS_FW_PAGE_SIZE)
     {
         RfMcu_MemorySet(COMM_SUBSYS_PROGRAM_START_ADDR, fw_image, COMM_SUBSYS_FW_PAGE_SIZE);
-
         RfMcu_PmPageSelect(RF_MCU_PM_PAGE_SEL_1);
-
         RfMcu_MemorySet(COMM_SUBSYS_PROGRAM_START_ADDR,
                         &fw_image[COMM_SUBSYS_FW_PAGE_SIZE],
                         COMM_SUBSYS_FW_PAGE_SIZE);
-
         RfMcu_PmPageSelect(RF_MCU_PM_PAGE_SEL_2);
-
         RfMcu_MemorySet(COMM_SUBSYS_PROGRAM_START_ADDR,
                         &fw_image[2 * COMM_SUBSYS_FW_PAGE_SIZE],
                         image_size - 2 * COMM_SUBSYS_FW_PAGE_SIZE);
-
         RfMcu_PmPageSelect(RF_MCU_PM_PAGE_SEL_0);
     }
     else if (image_size > COMM_SUBSYS_FW_PAGE_SIZE)
     {
         RfMcu_MemorySet(COMM_SUBSYS_PROGRAM_START_ADDR, fw_image, COMM_SUBSYS_FW_PAGE_SIZE);
-
         RfMcu_PmPageSelect(RF_MCU_PM_PAGE_SEL_1);
-
         RfMcu_MemorySet(COMM_SUBSYS_PROGRAM_START_ADDR,
                         &fw_image[COMM_SUBSYS_FW_PAGE_SIZE],
                         image_size - COMM_SUBSYS_FW_PAGE_SIZE);
-
         RfMcu_PmPageSelect(RF_MCU_PM_PAGE_SEL_0);
     }
     else

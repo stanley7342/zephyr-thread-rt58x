@@ -16,6 +16,7 @@
 #include "mcu.h"
 #include "rf_mcu_ahb.h"
 #include "stdio.h"
+#include <zephyr/sys/printk.h>
 
 #define RF_MCU_USING_REG_FIELD (TRUE)
 
@@ -183,7 +184,9 @@ void RfMcu_DmaBusyCheck(void)
      * HostWakeUpMcuAhb writes 0x100 (WAKE_UP) to COMM_SUBSYSTEM_HOST,
      * which is a 32-bit write that zeros DMA_EN (bit16), aborting any
      * DMA currently in progress.  Reference rt584 does the same. */
-    while (RF_MCU_AHB_INTR_STATUS_PTR->DMA_BUSY != 0);
+    while (RF_MCU_AHB_INTR_STATUS_PTR->DMA_BUSY != 0) {
+        /* busy-wait for DMA completion */
+    }
 #else
     volatile uint32_t dma_is_busy;
     do

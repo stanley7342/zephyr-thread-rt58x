@@ -30,7 +30,23 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/random/random.h>
 #include <zephyr/sys/printk.h>
+#include <psa/crypto.h>
+
+extern "C" {
+#include "hosal_rf.h"
+#include "hosal_lpm.h"
+extern bool hci_rt58x_rf_already_init;
+void ot_radioInit(void);
+void ot_alarmInit(void);
+void ot_entropy_init(void);
+void ot_set_instance(struct otInstance *inst);
+}
+
+#ifdef CONFIG_NET_L2_OPENTHREAD
+#include <zephyr/net/openthread.h>  /* openthread_init(), openthread_get_default_instance() */
+#endif
 
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
@@ -190,15 +206,95 @@ CHIP_ERROR AppTask::Init()
 {
     CHIP_ERROR err;
 
+    /* Initialize RF MCU in multi-protocol mode (BLE + 802.15.4/Thread).
+     * Must be called once before InitChipStack() triggers either BLE or OT
+     * radio init.  The BLE HCI driver (hci_rt58x_open) and OT radio layer
+     * both require an initialized RF MCU; MULTI_PROTOCOL loads firmware that
+     * supports both simultaneously. */
+    {
+        uintptr_t sp_before;
+        __asm__ volatile("mov %0, sp" : "=r"(sp_before));
+        printk("[STACK] before hosal_rf_init SP=0x%08x\n", (unsigned)sp_before);
+    }
+    printk("[APP] hosal_rf_init MULTI_PROTOCOL...\n");
+    hosal_lpm_init();
+    hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
+    hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
+    {
+        uintptr_t sp_after;
+        __asm__ volatile("mov %0, sp" : "=r"(sp_after));
+        printk("[STACK] after hosal_rf_init SP=0x%08x\n", (unsigned)sp_after);
+    }
+    /* IRQ 20 (COMM_SUBSYSTEM) is enabled inside hosal_rf_init → RfMcu_DmaInit
+     * → NVIC_EnableIRQ AFTER SysRdySignalWait.  Do NOT enable it before
+     * hosal_rf_init: gRfMcuIsrCfg.commsubsystem_isr is NULL until
+     * rf_common_init_by_fw sets it, and a spurious IRQ with null isr_cb
+     * corrupts RF MCU register state (RfMcu_SysRdySignalWait never exits). */
+    k_sleep(K_MSEC(50));
+    hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
+    printk("[APP] hosal_rf_init done\n");
+
+    /* Initialise lmac15p4 radio layer for OpenThread (sets up RUCI callbacks,
+     * channel, and MAC address from OTP/flash).  Must be called after
+     * hosal_rf_init() so the RF MCU RUCI interface is ready. */
+    printk("[APP] ot_radioInit...\n");
+    ot_radioInit();
+    printk("[APP] ot_radioInit done\n");
+
+    /* Initialise the hardware alarm timer (TIMER3) used for OT microsecond
+     * alarms.  Called here so TIMER3 is configured before openthread_init()
+     * starts the OT work queue and may schedule the first alarm. */
+    printk("[APP] ot_alarmInit...\n");
+    ot_alarmInit();
+    printk("[APP] ot_alarmInit done\n");
+
+    /* Warm up the TRNG before otInstanceInitSingle() calls otPlatEntropyGet().
+     * hosal_trng_get_random_number() requires the TRNG clock to be running;
+     * this call exercises it once so any first-access latency is absorbed here
+     * rather than deep inside otInstanceInitSingle(). */
+    printk("[APP] ot_entropy_init...\n");
+    ot_entropy_init();
+    printk("[APP] ot_entropy_init done\n");
+
+#ifdef CONFIG_NET_L2_OPENTHREAD
+    /* Explicitly initialise the OT instance on this thread (14 KB stack).
+     * openthread_init() calls otInstanceInitSingle() which needs ~4 KB of
+     * stack — far more than the 2 KB main thread used during POST_KERNEL
+     * device init.  After this call openthread_get_default_instance() returns
+     * a valid pointer and InitThreadStack() no longer asserts. */
+    printk("[APP] openthread_init...\n");
+    {
+        int ot_err = openthread_init();
+        printk("[APP] openthread_init done, err=%d\n", ot_err);
+    }
+    /* Sync our ot_instance accessor (used by ot_alarmTask / ot_radioTask)
+     * with Zephyr's openthread_instance set by openthread_init(). */
+    ot_set_instance(openthread_get_default_instance());
+    printk("[APP] ot_set_instance done\n");
+#endif
+
+    /* PSA entropy diagnostic — test before InitChipStack */
+    {
+        psa_status_t s1 = psa_crypto_init();
+        printk("[PSA] psa_crypto_init status=%d\n", (int)s1);
+        uint8_t rbuf[4] = {0};
+        psa_status_t s2 = psa_generate_random(rbuf, sizeof(rbuf));
+        printk("[PSA] psa_generate_random status=%d bytes=%02x%02x%02x%02x\n",
+               (int)s2, rbuf[0], rbuf[1], rbuf[2], rbuf[3]);
+        int cs = sys_csrand_get(rbuf, sizeof(rbuf));
+        printk("[CSRAND] sys_csrand_get ret=%d\n", cs);
+    }
+
     printk("[APP] MemoryInit...\n");
     /* Initialise CHIP memory allocator */
     err = chip::Platform::MemoryInit();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("MemoryInit failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    printk("[APP] InitChipStack...\n");
+    printk("[APP] InitChipStack — enter...\n");
     /* Initialise CHIP device layer (BLE + OpenThread) */
     err = PlatformMgr().InitChipStack();
+    printk("[APP] InitChipStack — returned err=%d\n", err.AsInteger());
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitChipStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
@@ -211,6 +307,7 @@ CHIP_ERROR AppTask::Init()
 #ifdef CONFIG_NET_L2_OPENTHREAD
     printk("[APP] InitThreadStack...\n");
     err = ThreadStackMgr().InitThreadStack();
+    printk("[APP] InitThreadStack returned err=%d\n", err.AsInteger());
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitThreadStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 

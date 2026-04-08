@@ -39,7 +39,13 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 # The shim directory re-exports them from mbedtls/private/ so the GN build
 # compiles without source patches.  The -I flag has higher priority than the
 # -isystem flags that chip-module later injects from Zephyr's cflags.
-set(CHIP_CFLAGS "-I${CMAKE_CURRENT_LIST_DIR}/mbedtls_shim")
+set(CHIP_CFLAGS
+    "-I${CMAKE_CURRENT_LIST_DIR}/mbedtls_shim"
+    # PSA crypto provides its own entropy; PlatformManagerImpl.cpp must not call
+    # add_entropy_source() (the PSA backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE).
+    # Defining CONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR suppresses that code path.
+    "-DCONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR=1"
+)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt583-matter-lighting VERSION 1.0.0)
@@ -92,6 +98,27 @@ endif()
 # comm_subsystem_drv.c — RF MCU communication (needed by both BLE and OT)
 target_sources(app PRIVATE
     ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
+)
+
+# RF firmware selection for multi-protocol (BLE + 802.15.4) coexistence.
+# rf_common_init_by_fw() checks CONFIG_RF_FW_INCLUDE_* at compile time.
+# MULTI_2P4G loads a combined firmware that supports both BLE and Thread
+# simultaneously — required for a Matter over Thread device.
+# PCI (RUCI/MAC path) and BLE are included so the OT and BLE CMakeLists
+# sub-includes below do not override with conflicting FALSE settings.
+target_compile_definitions(app PRIVATE
+    # MULTI_2P4G: combined BLE+802.15.4 firmware — required for Matter over Thread.
+    # PCI and BLE are already defined (with proper -U/-D sequencing) by
+    # subsys/openthread/CMakeLists.txt and subsys/ble/CMakeLists.txt; defining
+    # them again here causes "redefined" warnings without changing behaviour.
+    CONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
+    # CONFIG_RF_MCU_CONST_LOAD_SUPPORTED is required for the multi-protocol
+    # firmware to boot: without the const calibration data, the RF MCU never
+    # asserts SYS_RDY after firmware load.  The readback verification in
+    # RfMcu_ConstLoad was patched to skip the check (it spuriously fails on
+    # Zephyr even though the write succeeds via the same AHB DMA path used
+    # for firmware image load).
+    CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
 )
 
 # Suppress warnings in vendored SDK sources

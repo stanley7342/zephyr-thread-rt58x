@@ -51,11 +51,13 @@ list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "net_sockets\\.c$")
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "entropy_poll\\.c$")
 
 target_sources(app PRIVATE
+    # RT583 OT system overrides (must come before libopenthread_platform.a in
+    # link order so --allow-multiple-definition picks our platformRadioInit/Process)
+    ${CMAKE_CURRENT_LIST_DIR}/platform/rt583_otsys.c
+
     # OT platform port
-    ${OT_PORT_SRC}/ot_zephyr.c
     ${OT_PORT_SRC}/ot_alarm.c
     ${OT_PORT_SRC}/ot_radio.c
-    ${OT_PORT_SRC}/ot_uart.c
     ${OT_PORT_SRC}/ot_entropy.c
     ${OT_PORT_SRC}/ot_settings.c
     ${OT_PORT_SRC}/ot_misc.c
@@ -132,6 +134,25 @@ target_sources(app PRIVATE
     # spinel (was in libopenthread-platform-utils-static.a)
     ${OT_ROOT}/src/lib/spinel/spinel.c
 )
+
+# OT thread management: ot_zephyr.c for the Thread CLI example;
+# ot_matter_sysq.c for the Matter build.
+#
+#   Thread CLI (OT_INCLUDE_CLI=1):
+#     ot_zephyr.c — creates a dedicated otrStackTask thread; defines
+#     otTaskletsSignalPending/otSysEventSignalPending to give ot_task_sem.
+#
+#   Matter (OT_INCLUDE_CLI=0):
+#     ot_matter_sysq.c — no custom thread; lets Zephyr's openthread_work_q
+#     process tasklets.  otSysEventSignalPending() (Zephyr's) submits to the
+#     work queue, so OT_NOTIFY from alarm/radio ISRs wakes the right thread.
+if(NOT DEFINED OT_INCLUDE_CLI OR OT_INCLUDE_CLI)
+    target_sources(app PRIVATE ${OT_PORT_SRC}/ot_zephyr.c)
+    target_sources(app PRIVATE ${OT_PORT_SRC}/ot_uart.c)
+else()
+    target_sources(app PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/platform/ot_matter_sysq.c)
+endif()
 
 target_include_directories(app PRIVATE
     ${OT_PORT_INC}

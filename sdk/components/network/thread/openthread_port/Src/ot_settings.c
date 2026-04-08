@@ -15,6 +15,7 @@
 
 #include <openthread/error.h>
 #include <openthread/platform/settings.h>
+#include <zephyr/sys/printk.h>
 
 /* ── Store limits ────────────────────────────────────────────────────────── *
  * RT583 has 144 KB of SRAM.  Keep the settings store small.  128 bytes     *
@@ -38,6 +39,7 @@ void otPlatSettingsInit(otInstance *aInstance,
                         const uint16_t *aSensitiveKeys,
                         uint16_t        aSensitiveKeysLength)
 {
+    printk("[OT-SETTINGS] otPlatSettingsInit\n");
     (void)aInstance;
     (void)aSensitiveKeys;
     (void)aSensitiveKeysLength;

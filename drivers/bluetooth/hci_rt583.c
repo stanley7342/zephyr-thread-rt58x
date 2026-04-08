@@ -60,13 +60,19 @@ struct hci_rt58x_data {
 
 static struct hci_rt58x_data hci_data;
 
+/* Set to true by external code (e.g. AppTask) when hosal_rf_init() has
+ * already been called with HOSAL_RF_MODE_MULTI_PROTOCOL before bt_enable().
+ * In that case hci_rt58x_open() must skip its own hosal_rf_init() call to
+ * avoid re-loading the RF MCU firmware and losing OT state. */
+bool hci_rt58x_rf_already_init = false;
+
 /* FreeRTOS critical-section shim */
 __weak uint32_t _crit_unlock(void) { return 0; }
 __weak void     _crit_relock(uint32_t nest) { ARG_UNUSED(nest); }
 
 /* ── Debug helpers (disabled — enable by setting HCI_RT58X_DEBUG to 1) ── */
 
-#define HCI_RT58X_DEBUG 0
+#define HCI_RT58X_DEBUG 1
 
 #if HCI_RT58X_DEBUG
 static void dump_hex(const char *dir, const uint8_t *data, uint16_t len)
@@ -325,6 +331,7 @@ static int hci_rt58x_setup(const struct device *dev,
 		if (rc == 0) {
 			break;
 		}
+		printk(LOG_PREFIX "setup: write_cmd retry %d rc=%d\n", i, rc);
 		k_sleep(SEND_RETRY_DELAY);
 	}
 	if (rc != 0) {
@@ -333,8 +340,15 @@ static int hci_rt58x_setup(const struct device *dev,
 		return -EIO;
 	}
 
+	printk(LOG_PREFIX "setup: cmd sent, sleeping 100ms for response...\n");
 	k_sleep(K_MSEC(100));
+	/* Use arch_printk to bypass LOG subsystem entirely */
+	printk(LOG_PREFIX "setup: sleep done irq=%u\n", rt583_comm_irq_count);
+	/* Busy-wait 10ms to let UART flush completely */
+	k_busy_wait(10000);
+	printk(LOG_PREFIX "setup: A\n");
 	hci_data.setup_in_progress = false;
+	printk(LOG_PREFIX "setup: B\n");
 
 	printk(LOG_PREFIX "setup: done irq=%u\n", rt583_comm_irq_count);
 	return 0;
@@ -353,21 +367,22 @@ static int hci_rt58x_open(const struct device *dev, bt_hci_recv_t recv)
 	hosal_rf_callback_set(HOSAL_RF_BLE_RX_CALLBACK,
 			      (hosal_rf_callback_t)hci_acl_cb, NULL);
 
-	hosal_lpm_init();
-	hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL,
-			 HOSAL_LOW_POWER_LEVEL_SLEEP0);
-
-	/* Disable IRQ while hosal_rf_init() sets gRfMcuIsrCfg.commsubsystem_isr.
-	 * Without this, a spurious COMM_SUBSYSTEM interrupt (e.g. from RF MCU
-	 * waking up during MCUboot's longer boot window) fires before the ISR
-	 * callback pointer is set, calling isr_cb(NULL) → PC=0x0 crash. */
-	printk(LOG_PREFIX "hosal_rf_init...\n");
-	irq_disable(RT583_COMM_SUBSYSTEM_IRQN);
-	hosal_rf_init(HOSAL_RF_MODE_BLE_CONTROLLER);
-	irq_enable(RT583_COMM_SUBSYSTEM_IRQN);
-	printk(LOG_PREFIX "hosal_rf_init done, sleep 50ms\n");
-	k_sleep(K_MSEC(50));
-	printk(LOG_PREFIX "sleep done\n");
+	if (hci_rt58x_rf_already_init) {
+		/* RF MCU was already initialized (e.g. in MULTI_PROTOCOL mode by
+		 * the application before bt_enable()).  Skip re-init to avoid
+		 * overwriting the firmware and losing OT state. */
+		printk(LOG_PREFIX "RF already init — skipping hosal_rf_init\n");
+	} else {
+		/* Standalone BLE (no OT): initialize RF MCU in BLE-only mode. */
+		printk(LOG_PREFIX "hosal_rf_init BLE_CONTROLLER...\n");
+		hosal_lpm_init();
+		hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL,
+				 HOSAL_LOW_POWER_LEVEL_SLEEP0);
+		hosal_rf_init(HOSAL_RF_MODE_BLE_CONTROLLER);
+		printk(LOG_PREFIX "hosal_rf_init done, sleep 50ms\n");
+		k_sleep(K_MSEC(50));
+		printk(LOG_PREFIX "sleep done\n");
+	}
 
 	k_thread_create(&rx_thread_data, rx_thread_stack,
 			K_THREAD_STACK_SIZEOF(rx_thread_stack),

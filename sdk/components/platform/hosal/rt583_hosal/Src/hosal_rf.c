@@ -932,7 +932,10 @@ static hosal_rf_status_t __rf_15p4_op_pan_idx_set(uint32_t pan_idx) {
 int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     /* Release FreeRTOS irq_lock before blocking so __rf_proc can run. */
     uint32_t nest = _crit_unlock();
+    printk("[RF-CMD] write_command: taking sem (count=%d)\n",
+           k_sem_count_get(&g_rf_cmd_sem));
     k_sem_take(&g_rf_cmd_sem, K_FOREVER);
+    printk("[RF-CMD] write_command: sem taken\n");
     _crit_relock(nest);
     RfMcu_HostWakeUpMcu();
     if (RfMcu_PowerStateCheck() != 0x03) {

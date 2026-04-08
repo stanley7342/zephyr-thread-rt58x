@@ -182,6 +182,37 @@ $python312 = "$venvDir\Scripts\python.exe"
 if ($LASTEXITCODE -ne 0) { throw "west 安裝失敗" }
 Write-Ok "west：$(& $python312 -m west --version 2>$null)"
 
+# ── ZAP CLI（Matter 代碼生成工具） ────────────────────────────────────────────
+
+Write-Step "安裝 ZAP CLI（Matter 代碼生成）"
+
+$zapInstallDir = Join-Path $env:USERPROFILE "zap-cli"
+$zapExe        = Join-Path $zapInstallDir "zap-cli.exe"
+
+if (Test-Path $zapExe) {
+    Write-Skip "ZAP CLI（$zapExe）"
+} else {
+    $zapVersion = "v2025.10.23-nightly"
+    $zapUrl     = "https://github.com/project-chip/zap/releases/download/$zapVersion/zap-win-x64.zip"
+    $zapZip     = Join-Path $env:TEMP "zap-win-x64.zip"
+
+    Write-Host "    下載 ZAP $zapVersion ..."
+    curl.exe -L --progress-bar -o $zapZip $zapUrl
+    if ($LASTEXITCODE -ne 0) { throw "下載 ZAP CLI 失敗（exit $LASTEXITCODE）" }
+
+    Write-Host "    解壓縮 ZAP CLI ..."
+    New-Item -ItemType Directory -Path $zapInstallDir -Force | Out-Null
+    Expand-Archive $zapZip -DestinationPath $zapInstallDir -Force
+
+    $foundZap = Get-ChildItem $zapInstallDir -Recurse -Filter "zap-cli.exe" |
+                Select-Object -First 1
+    if (-not $foundZap) { throw "解壓後找不到 zap-cli.exe" }
+    if ($foundZap.FullName -ne $zapExe) {
+        Copy-Item $foundZap.FullName $zapExe -Force
+    }
+    Write-Ok "ZAP CLI 安裝完成：$zapExe"
+}
+
 # ── 步驟 2：Zephyr SDK ────────────────────────────────────────────────────────
 
 Write-Step "安裝 Zephyr SDK 1.0.1 → $SdkDir"
@@ -323,6 +354,7 @@ $venvActivate = "$venvDir\Scripts\Activate.ps1"
 `$env:ZEPHYR_BASE              = "$zephyrBase"
 `$env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
+`$env:ZAP_INSTALL_PATH         = "$zapInstallDir"
 `$env:PATH                    += ";C:\Program Files\7-Zip"
 
 Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -ForegroundColor Green

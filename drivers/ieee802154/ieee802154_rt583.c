@@ -3,14 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Stub IEEE 802.15.4 device driver for the RT583.
- * This driver exists solely to provide a valid DEVICE_DT_DEFINE so that
- * Zephyr's openthread/platform/radio.c can compile with:
+ *
+ * This driver satisfies Zephyr's compile-time requirement:
  *   static const struct device *const radio_dev =
  *       DEVICE_DT_GET(DT_CHOSEN(zephyr_ieee802154));
+ * in modules/openthread/platform/radio.c.
  *
- * The actual 802.15.4 radio access is handled by subsys/openthread/platform/
- * ot_radio.c via the lmac15p4 library — those functions override radio.c's
- * weak implementations at link time via --allow-multiple-definition.
+ * The actual 802.15.4 radio access is handled by
+ * subsys/openthread/platform/ot_radio.c via the lmac15p4 library.
+ * platformRadioInit() / platformRadioProcess() are overridden with no-ops in
+ * subsys/openthread/platform/rt583_otsys.c (earlier in link order than
+ * libopenthread_platform.a, with --allow-multiple-definition).
+ *
+ * openthread_init() is NOT triggered automatically via this driver; instead,
+ * AppTask::Init() calls openthread_init() explicitly after hosal_rf_init() so
+ * that otInstanceInitSingle() runs on the app thread's 14 KB stack (not on
+ * the 2 KB main stack used during POST_KERNEL device init, which overflows).
  */
 
 #include <zephyr/kernel.h>
@@ -23,13 +31,30 @@
 static int ieee802154_rt583_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
-	/* Actual radio init is done by ot_radio.c / lmac15p4. */
+	/* Actual radio init is done by ot_radioInit() / lmac15p4. */
 	return 0;
 }
+
+/* ── IEEE 802.15.4 radio API callbacks ───────────────────────────────────── */
 
 static enum ieee802154_hw_caps ieee802154_rt583_get_capabilities(
 	const struct device *dev)
 {
+	/* Report IEEE802154_HW_TX_RX_ACK so that Zephyr's platformRadioInit()
+	 * in modules/openthread/platform/radio.c does not call k_panic().
+	 * Our override of platformRadioInit() (rt583_otsys.c) is a no-op so
+	 * the capability value is never actually used for hardware control. */
+	return IEEE802154_HW_TX_RX_ACK;
+}
+
+static int ieee802154_rt583_configure(const struct device *dev,
+				      enum ieee802154_config_type type,
+				      const struct ieee802154_config *config)
+{
+	/* No-op: radio is controlled via lmac15p4, not the ieee802154 driver API. */
+	ARG_UNUSED(dev);
+	ARG_UNUSED(type);
+	ARG_UNUSED(config);
 	return 0;
 }
 
@@ -75,8 +100,9 @@ static int ieee802154_rt583_stop(const struct device *dev)
 }
 
 static struct ieee802154_radio_api ieee802154_rt583_api = {
-	.iface_api.init = NULL,
+	.iface_api.init   = NULL,
 	.get_capabilities = ieee802154_rt583_get_capabilities,
+	.configure        = ieee802154_rt583_configure,
 	.cca              = ieee802154_rt583_cca,
 	.set_channel      = ieee802154_rt583_set_channel,
 	.filter           = ieee802154_rt583_filter,
@@ -86,6 +112,13 @@ static struct ieee802154_radio_api ieee802154_rt583_api = {
 	.stop             = ieee802154_rt583_stop,
 };
 
+/* ── Device registration ─────────────────────────────────────────────────── */
+
+/* Use DEVICE_DT_INST_DEFINE (not NET_DEVICE_DT_INST_DEFINE) so that Zephyr
+ * does NOT create a net_if for this stub.  Creating a net_if would trigger
+ * openthread_init() during POST_KERNEL device init, which runs on the 2 KB
+ * main thread stack — too small for otInstanceInitSingle() (FTD needs ~4 KB).
+ * AppTask::Init() calls openthread_init() explicitly on the 14 KB app stack. */
 #define IEEE802154_RT583_INIT(n)					\
 	DEVICE_DT_INST_DEFINE(n,					\
 			      ieee802154_rt583_init,			\

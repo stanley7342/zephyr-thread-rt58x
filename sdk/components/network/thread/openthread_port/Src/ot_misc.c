@@ -51,7 +51,10 @@ void otPlatWakeHost(void) {}
 
 void otPlatAssertFail(const char *aFilename, int aLineNumber)
 {
-    printk("[OT] Assert failed: %s @ %d", aFilename, aLineNumber);
+    printk("[OT] ASSERT FAILED: %s @ %d\n", aFilename, aLineNumber);
+    /* Flush UART and halt — we want the location visible before spin */
+    k_busy_wait(10000);
+    while (1) {}
 }
 
 /* ── CSL stubs ───────────────────────────────────────────────────────────── *
