@@ -1040,7 +1040,12 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
     RfMcu_InterruptDisableAll();
 #endif
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
-    RfMcu_DmaInit();
+    /* After HostModeEnable the RF MCU is halted for firmware programming.
+     * RfMcu_DmaInit() would wrongly issue WAKE_UP+RESET and hang in
+     * SysRdySignalWait because SYS_RDY is not re-asserted while HOST_MODE
+     * is active.  Only the NVIC and DMA interrupt enable are needed here. */
+    NVIC_EnableIRQ(CommSubsystem_IRQn);
+    RfMcu_InterruptEnSetAhb(COMM_SUBSYSTEM_DMA_INT_ENABLE);
 #endif
     printk("[RF-MCU] DmaInit done\n");
 
