@@ -55,3 +55,12 @@ endif()
 if(CONFIG_OTA)
     include(${RT583_PROJECT_DIR}/subsys/ota/CMakeLists.txt)
 endif()
+
+# ── Linker: suppress multiple-definition conflicts ────────────────────────────
+# CONFIG_OPENTHREAD=y activates Zephyr's OT module glue (libopenthread_utils,
+# libopenthread_platform) even when OPENTHREAD_RT583 is the choice selection and
+# OPENTHREAD_SOURCES=n.  Our SDK OT port (ot_alarm.c, ot_zephyr.c, ot_entropy.c,
+# ot_misc.c, ot_settings.c, ot_logging.c, ot_crypto.c, crypto_platform.cpp) and
+# OT-bundled mbedTLS overlap with those stubs and with Zephyr's TF-PSA-Crypto.
+# hosal_trng_get_random_number appears in both drivers__entropy and the OT subsystem.
+zephyr_ld_options(-Wl,--allow-multiple-definition)
