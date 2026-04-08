@@ -1,4 +1,4 @@
-# Top-level Kconfig for rt582-zephyr-helloworld.
+# Top-level Kconfig for rt583-zephyr-helloworld.
 # Zephyr's Kconfig tree is sourced first, then we add our custom driver.
 
 osource "$(ZEPHYR_BASE)/Kconfig"
@@ -9,72 +9,77 @@ osource "$(ZEPHYR_BASE)/Kconfig"
 # OTA subsystem
 rsource "subsys/ota/Kconfig"
 
-# OpenThread
-config OPENTHREAD_RT582
-    bool "OpenThread for Rafael RT582"
-    depends on SOC_RT582
+# OpenThread — extend Zephyr's OPENTHREAD_IMPLEMENTATION choice with the RT583 option.
+# When OPENTHREAD_RT583 is selected, CONFIG_OPENTHREAD_SOURCES=n so Zephyr does NOT
+# compile modules/lib/openthread core or its platform stubs (entropy.c, radio.c …).
+# Our subsys/openthread/CMakeLists.txt compiles the SDK OT from source instead.
+choice OPENTHREAD_IMPLEMENTATION
+config OPENTHREAD_RT583
+    bool "Rafael RT583 SDK OpenThread"
+    depends on SOC_RT583 && OPENTHREAD
     help
-      Enables the OpenThread stack on the RT582 SoC.
-      Links the pre-built Rafael SDK OpenThread FTD library and the
-      RT582-specific Zephyr platform layer (replaces FreeRTOS with
-      Zephyr kernel primitives).
+      Build OpenThread from the vendored Rafael IoT SDK sources in sdk/.
+      Provides FTD functionality with hardware-backed radio, TRNG, and
+      Cortex-M3 alarm via the RT583 HOSAL/LMAC15P4 layer.
+      Replaces Zephyr's modules/lib/openthread and its platform stubs.
+endchoice
 
-if OPENTHREAD_RT582
+if OPENTHREAD_RT583
 
-menu "RT582 IEEE 802.15.4 PHY/MAC PIB"
+menu "RT583 IEEE 802.15.4 PHY/MAC PIB"
 
-config RT582_PHY_PIB_TURNAROUND_TIMER
+config RT583_PHY_PIB_TURNAROUND_TIMER
     int "PHY turnaround time (symbols)"
     default 192
 
-config RT582_PHY_PIB_CCA_DETECTED_TIME
+config RT583_PHY_PIB_CCA_DETECTED_TIME
     int "PHY CCA detected time (symbols)"
     default 128
 
-config RT582_PHY_PIB_CCA_DETECT_MODE
+config RT583_PHY_PIB_CCA_DETECT_MODE
     int "PHY CCA detection mode (0=ED, 1=CS, 2=ED+CS)"
     default 0
     range 0 2
 
-config RT582_PHY_PIB_CCA_THRESHOLD
+config RT583_PHY_PIB_CCA_THRESHOLD
     int "PHY CCA energy threshold"
     default 85
 
-config RT582_MAC_PIB_UNIT_BACKOFF_PERIOD
+config RT583_MAC_PIB_UNIT_BACKOFF_PERIOD
     int "MAC unit backoff period (symbols)"
     default 320
 
-config RT582_MAC_PIB_ACK_WAIT_DURATION
+config RT583_MAC_PIB_ACK_WAIT_DURATION
     int "MAC ACK wait duration (symbols)"
     default 544
 
-config RT582_MAC_PIB_MAX_BE
+config RT583_MAC_PIB_MAX_BE
     int "MAC maximum backoff exponent"
     default 8
     range 0 8
 
-config RT582_MAC_PIB_MAX_FRAME_TOTAL_WAIT_TIME
+config RT583_MAC_PIB_MAX_FRAME_TOTAL_WAIT_TIME
     int "MAC max frame total wait time (symbols)"
     default 16416
 
-config RT582_MAC_PIB_MAX_FRAME_RETRIES
+config RT583_MAC_PIB_MAX_FRAME_RETRIES
     int "MAC max frame retries"
     default 4
     range 0 7
 
-config RT582_MAC_PIB_MAX_CSMACA_BACKOFFS
+config RT583_MAC_PIB_MAX_CSMACA_BACKOFFS
     int "MAC max CSMA-CA backoffs"
     default 10
     range 0 10
 
-config RT582_MAC_PIB_MIN_BE
+config RT583_MAC_PIB_MIN_BE
     int "MAC minimum backoff exponent"
     default 5
     range 0 8
 
 endmenu
 
-config RT582_RF_FW_EXPECTED_CRC32
+config RT583_RF_FW_EXPECTED_CRC32
     hex "Expected CRC32 of RF firmware blob (0 = log only, no check)"
     default 0x0
     help
@@ -82,13 +87,13 @@ config RT582_RF_FW_EXPECTED_CRC32
       blob is verified at boot. Set to 0 to print the CRC without checking.
       Run once with 0, read the log, then set this value to lock it down.
 
-endif # OPENTHREAD_RT582
+endif # OPENTHREAD_RT583
 
 # BLE
-config BLE_RT582
-    bool "Bluetooth LE for Rafael RT582"
-    depends on SOC_RT582
+config BLE_RT583
+    bool "Bluetooth LE for Rafael RT583"
+    depends on SOC_RT583
     select BT_HCI_SETUP if BT
     help
-      Enables the BLE stack on the RT582 SoC via the integrated
+      Enables the BLE stack on the RT583 SoC via the integrated
       BLE controller firmware and Zephyr's BLE host stack.
