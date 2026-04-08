@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB Zephyr + OpenThread — macOS 編譯腳本
+# RT583-EVB Zephyr + OpenThread — macOS 編譯腳本
 #
 # 用法：
 #   bash scripts/macos/build.sh -p thread                  # Thread FTD CLI（Clean）
@@ -64,14 +64,14 @@ if [[ "$TARGET" == "bootloader" ]]; then
     OVERLAY="$PROJECT_DIR/examples/bootloader/mcuboot.conf"
 
     echo ""
-    echo -e "\033[36m==> west build（MCUboot / rt582_evb）\033[0m"
+    echo -e "\033[36m==> west build（MCUboot / rt583_evb）\033[0m"
     echo "    Mode    : $MODE"
     echo "    BuildDir: $BUILD_DIR"
     echo "    Overlay : $OVERLAY"
     echo ""
 
     cd "$WORKSPACE"
-    west build -p "$PRISTINE" -b rt582_evb \
+    west build -p "$PRISTINE" -b rt583_evb \
         bootloader/mcuboot/boot/zephyr \
         --build-dir "$PROJECT_NAME/build/$TARGET" \
         -- -DOVERLAY_CONFIG="$OVERLAY" \
@@ -81,13 +81,13 @@ if [[ "$TARGET" == "bootloader" ]]; then
 
 else
     echo ""
-    echo -e "\033[36m==> west build（Thread FTD CLI / rt582_evb）\033[0m"
+    echo -e "\033[36m==> west build（Thread FTD CLI / rt583_evb）\033[0m"
     echo "    Mode    : $MODE"
     echo "    BuildDir: $BUILD_DIR"
     echo ""
 
     cd "$WORKSPACE"
-    west build -p "$PRISTINE" -b rt582_evb \
+    west build -p "$PRISTINE" -b rt583_evb \
         "$PROJECT_NAME/examples/thread" \
         --build-dir "$PROJECT_NAME/build/$TARGET"
 fi

@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(*)",
       "Bash(node -e \"const p=require\\(''c:/Users/Stanley/stbuild/package.json''\\); console.log\\(''Scripts:'', JSON.stringify\\(p.scripts,null,2\\)\\); console.log\\(''Main:'', p.main\\)\")",
       "Bash(npm install:*)",
       "Bash(npm run:*)",
@@ -106,10 +107,36 @@
       "Bash(xxd /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
       "Bash(xxd /c/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin)",
       "Bash(/c/Users/Stanley/.zephyr-venv/Scripts/python.exe /c/Users/Stanley/bootloader/mcuboot/scripts/imgtool.py sign --align 4 --version 1.1.1 --header-size 0x200 --slot-size 0x80000 C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.bin C:/Users/Stanley/zephyr-thread-rt58x/build/ble_hrs/zephyr/zephyr.signed.bin)",
-      "Bash(grep -n \"lpm_init\\\\b\" /c/Users/Stanley/zephyr-thread-rt58x/sdk/components/platform/soc/rt582/rt582_driver/Src/*.c)"
+      "Bash(grep -n \"lpm_init\\\\b\" /c/Users/Stanley/zephyr-thread-rt58x/sdk/components/platform/soc/rt582/rt582_driver/Src/*.c)",
+      "Bash(git -C /c/Users/Stanley/connectedhomeip log --oneline -3)",
+      "Bash(git -C /c/Users/Stanley/modules/lib/openthread log --oneline -1)",
+      "Bash(git -C /c/Users/Stanley/modules/lib/openthread rev-parse HEAD)",
+      "Bash(python3 c:/Users/Stanley/zephyr/scripts/kconfig/kconfig.py --zephyr-base=c:/Users/Stanley/zephyr --board-dir=c:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt582_evb --arch=arm --board=rt582_evb --board-qualifiers=rt582 --kconfig-binary=c:/Users/Stanley/zephyr/scripts/kconfig/kconfiglib c:/Users/Stanley/zephyr-thread-rt58x/Kconfig c:/Users/Stanley/zephyr-thread-rt58x/build/matter_lighting/zephyr/.config c:/Users/Stanley/zephyr-thread-rt58x/build/matter_lighting/zephyr/include/generated/zephyr/autoconf.h c:/Users/Stanley/zephyr-thread-rt58x/build/matter_lighting/zephyr/kconfig/.config.old ZEPHYR_MODULES=c:/Users/Stanley/connectedhomeip/config/zephyr/chip-module)",
+      "Bash(python3 -W all -c ':*)",
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0,'c:/Users/Stanley/zephyr/scripts/kconfig'\\); import kconfiglib; print\\(kconfiglib.__file__\\)\")",
+      "Bash(python3 \"c:/Users/Stanley/zephyr/scripts/kconfig/menuconfig.py\" --help)",
+      "Bash(python3 -c \"print\\('hello'\\)\")",
+      "Bash(ls /c/Users/Stanley/zephyr/scripts/kconfig/*.py)",
+      "Bash(cmd /c \"C:\\\\Users\\\\Stanley\\\\.zephyr-venv\\\\Scripts\\\\python.exe -c \\\\\"print\\('ok'\\)\\\\\"\")",
+      "Bash(cmd /c \"C:\\\\Users\\\\Stanley\\\\.zephyr-venv\\\\Scripts\\\\python.exe C:\\\\Users\\\\Stanley\\\\zephyr\\\\scripts\\\\kconfig\\\\kconfig.py --help\")",
+      "Bash(cmd /c \"cd C:\\\\Users\\\\Stanley\\\\connectedhomeip\\\\config\\\\zephyr\\\\chip-module && C:\\\\Users\\\\Stanley\\\\.zephyr-venv\\\\Scripts\\\\python.exe -c \\\\\"import sys; sys.path.insert\\(0,'C:/Users/Stanley/zephyr/scripts/kconfig'\\); import kconfiglib; kconf = kconfiglib.Kconfig\\('Kconfig'\\); print\\('ok'\\)\\\\\" 2>&1\")",
+      "Read(//c//**)",
+      "Bash(sed -i 's/rt582_evb/rt583_evb/g; s/RT582 EVB/RT583 EVB/g' C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/board.yml)",
+      "Bash(sed -i 's/rt582_evb/rt583_evb/g; s/RT582 EVB/RT583 EVB/g' C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/rt583_evb.yaml)",
+      "Bash(sed -i 's/RT582_EVB/RT583_EVB/g; s/RT582 EVB/RT583 EVB/g' C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/Kconfig.board)",
+      "Bash(sed -i 's/RT582_EVB/RT583_EVB/g; s/rt582_evb/rt583_evb/g' C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/Kconfig.defconfig)",
+      "Bash(sed -i 's/RT582 EVB/RT583 EVB/g; s/rafael,rt582-evb/rafael,rt583-evb/g' C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/rt583_evb.dts)",
+      "Bash(xargs -0 sed -i -e s/rt582/rt583/g -e s/RT582/RT583/g)",
+      "Bash(mv rt582_crypto rt583_crypto)",
+      "Bash(mv rt582_driver rt583_driver)",
+      "Bash(mv rt582_system rt583_system)",
+      "Bash(xxd \"C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/rt583_evb_defconfig\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\Stanley\\stbuild\\src"
+      "c:\\Users\\Stanley\\stbuild\\src",
+      "C:\\Users\\Stanley\\connectedhomeip\\build\\chip",
+      "C:\\Users\\Stanley\\connectedhomeip\\scripts",
+      "C:\\Users\\Stanley"
     ]
   }
 }

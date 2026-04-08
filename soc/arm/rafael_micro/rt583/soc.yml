@@ -1,0 +1,4 @@
+series:
+- name: rt583
+  socs:
+  - name: rt583

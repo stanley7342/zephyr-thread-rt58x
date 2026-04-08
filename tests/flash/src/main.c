@@ -1,5 +1,5 @@
 /*
- * RT582 Flash Driver Unit Test
+ * RT583 Flash Driver Unit Test
  *
  * 測試區域：storage_partition（label "storage"，0x190000，128 KB）
  *

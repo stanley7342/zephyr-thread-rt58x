@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB Zephyr + OpenThread — Linux/WSL 移除腳本
+# RT583-EVB Zephyr + OpenThread — Linux/WSL 移除腳本
 #
 # 移除 install.sh 安裝的元件（SDK、.west、zephyr、Python venv、env.sh、apt 套件）。
 #

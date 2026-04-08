@@ -1,5 +1,5 @@
 /*
- * RT582 Matter Lighting App — Entry point.
+ * RT583 Matter Lighting App — Entry point.
  *
  * Starts the AppTask which initialises the Matter stack and enters the
  * main event loop.

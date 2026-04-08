@@ -1,5 +1,5 @@
 /*
- * RT582 HCI Command Probe
+ * RT583 HCI Command Probe
  *
  * Uses hosal_rf_write_command() (proper HOSAL flow control) but runs
  * the send in a worker thread so that the main thread can time out
@@ -160,7 +160,7 @@ int main(void)
 {
 	printk("\n");
 	printk("============================================\n");
-	printk("  RT582 HCI Command Probe\n");
+	printk("  RT583 HCI Command Probe\n");
 	printk("============================================\n\n");
 
 	/* Start worker thread (lower priority than main) */

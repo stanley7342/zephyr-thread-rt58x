@@ -1,8 +1,0 @@
-identifier: rt582_evb
-name: Rafael Microelectronics RT582 EVB
-type: mcu
-arch: arm
-toolchain:
-  - zephyr
-  - gnuarmemb
-supported: []

@@ -6,17 +6,17 @@
 # and BEFORE Zephyr's empty-library check (line 1065). This is the only window
 # where out-of-tree sources can be contributed to drivers__serial cleanly.
 
-if(CONFIG_UART_RT582)
-    get_filename_component(_RT582_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
-    set(_RT582_PLATFORM ${_RT582_REPO_ROOT}/sdk/components/platform)
+if(CONFIG_UART_RT583)
+    get_filename_component(_RT583_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+    set(_RT583_PLATFORM ${_RT583_REPO_ROOT}/sdk/components/platform)
 
     target_sources(drivers__serial PRIVATE
-        ${_RT582_REPO_ROOT}/drivers/serial/uart_rt582.c
-        ${_RT582_PLATFORM}/hosal/rt582_hosal/Src/hosal_uart.c
+        ${_RT583_REPO_ROOT}/drivers/serial/uart_rt583.c
+        ${_RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_uart.c
     )
 
     target_include_directories(drivers__serial PRIVATE
-        ${_RT582_PLATFORM}/soc/rt582/rt582_driver/Inc
-        ${_RT582_PLATFORM}/hosal/rt582_hosal/Inc
+        ${_RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
+        ${_RT583_PLATFORM}/hosal/rt583_hosal/Inc
     )
 endif()

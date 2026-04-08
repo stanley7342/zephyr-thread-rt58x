@@ -2,7 +2,7 @@
 
 int main(void)
 {
-	printk("Hello World! RT582-EVB\n");
+	printk("Hello World! RT583-EVB\n");
 
 	while (1) {
 		k_msleep(1000);

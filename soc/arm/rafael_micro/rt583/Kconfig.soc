@@ -1,0 +1,13 @@
+config SOC_SERIES_RT583
+    bool
+    select SOC_FAMILY_ARM
+
+config SOC_RT583
+    bool
+    select SOC_SERIES_RT583
+
+config SOC_SERIES
+    default "rt583" if SOC_SERIES_RT583
+
+config SOC
+    default "rt583" if SOC_RT583

@@ -245,7 +245,7 @@ int ota_flash_apply(const ota_meta_t *meta)
             /* Update raw SHA-256 */
             mbedtls_sha256_update(&sha, lz4_out_buf, decoded);
 
-            /* RT582 flash write-block-size=1 — write exactly decoded bytes,
+            /* RT583 flash write-block-size=1 — write exactly decoded bytes,
              * no padding needed. dst_off tracks actual image bytes. */
             rc = flash_area_write(slot1, dst_off, lz4_out_buf, (uint32_t)decoded);
             if (rc) {

@@ -1,8 +1,8 @@
 /*
- * ot_entropy.c — OpenThread entropy platform for Zephyr on RT582
+ * ot_entropy.c — OpenThread entropy platform for Zephyr on RT583
  *
  * Uses Rafael SDK hosal_trng_get_random_number() which calls
- * get_random_number() directly against the RT582 TRNG hardware.
+ * get_random_number() directly against the RT583 TRNG hardware.
  * No FreeRTOS dependency in the TRNG path.
  */
 

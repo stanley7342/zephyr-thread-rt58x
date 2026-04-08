@@ -1,5 +1,5 @@
 /*
- * ot_misc.c — OpenThread misc platform for Zephyr on RT582
+ * ot_misc.c — OpenThread misc platform for Zephyr on RT583
  * log_info/error replaced with printk; WDT APIs kept from Rafael SDK.
  */
 
@@ -55,7 +55,7 @@ void otPlatAssertFail(const char *aFilename, int aLineNumber)
 }
 
 /* ── CSL stubs ───────────────────────────────────────────────────────────── *
- * RT582 hardware does not implement Coordinated Sampled Listening (CSL).   */
+ * RT583 hardware does not implement Coordinated Sampled Listening (CSL).   */
 otError otPlatRadioEnableCsl(otInstance *aInstance, uint32_t aCslPeriod,
                               otShortAddress aShortAddr,
                               const otExtAddress *aExtAddr)

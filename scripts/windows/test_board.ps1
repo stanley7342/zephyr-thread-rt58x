@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT582-EVB 自動化測試：Build → Flash → UART banner → OT leader 驗證
+    RT583-EVB 自動化測試：Build → Flash → UART banner → OT leader 驗證
 
 .DESCRIPTION
     四個階段（可個別跳過）：
@@ -71,11 +71,11 @@ $ErrorActionPreference = "Stop"
 # ── 預設期望字串 ──────────────────────────────────────────────────────────────
 if (-not $Expected) {
     $Expected = switch ($p) {
-        "thread"      { @("RT582-EVB", "Zephyr + OpenThread CLI", "OpenThread FTD CLI started") }
-        "blinky"      { @("RT582", "blink") }
-        "hello_world" { @("Hello World", "RT582") }
+        "thread"      { @("RT583-EVB", "Zephyr + OpenThread CLI", "OpenThread FTD CLI started") }
+        "blinky"      { @("RT583", "blink") }
+        "hello_world" { @("Hello World", "RT583") }
         "test_flash"  { @("PASS", "flash") }
-        default       { @("RT582") }
+        default       { @("RT583") }
     }
 }
 
@@ -148,7 +148,7 @@ function Send-OtCmd {
 # ══════════════════════════════════════════════════════════════════════════════
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════════╗" -ForegroundColor White
-Write-Host "║       RT582-EVB 自動化板測腳本                 ║" -ForegroundColor White
+Write-Host "║       RT583-EVB 自動化板測腳本                 ║" -ForegroundColor White
 Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor White
 Write-Host "  目標      : $p"
 Write-Host "  Port      : $Port  (115200 8N1)"

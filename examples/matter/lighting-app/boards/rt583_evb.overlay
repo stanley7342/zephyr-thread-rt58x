@@ -1,0 +1,27 @@
+/*
+ * RT583 EVB DTS overlay for the Matter lighting app.
+ *
+ * Expands the primary image slot from 512 KB to 896 KB by reclaiming
+ * the OTA secondary slot and staging area.  The combined Matter +
+ * OpenThread + BLE image is ~800 KB; the 512 KB default slot is too small.
+ *
+ * OTA is not yet supported on this platform; a single large slot is
+ * used for development.
+ *
+ * Zephyr's MCUboot cmake (mcuboot.cmake) uses slot1 size for --slot-size
+ * in the imgtool sign command (swap-mode assumed by default).  Both slots
+ * are set to 896 KB so that imgtool validates against the correct size.
+ *
+ * slot0 (new): 0x010000–0x0EFFFF = 896 KB (0xE0000)
+ * slot1 (new): 0x0F0000–0x1DFFFF = 896 KB (0xE0000)
+ *   (slot1 overlaps staging/storage in the DTSI, but for a dev/non-OTA
+ *    build only slot0 is ever written; the overlap is harmless at DTS level)
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E0000>;   /* 896 KB */
+};
+
+&slot1_partition {
+    reg = <0x000F0000 0x000E0000>;   /* 896 KB (mirrors slot0 for imgtool) */
+};

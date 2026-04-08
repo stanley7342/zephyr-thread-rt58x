@@ -1,5 +1,5 @@
 /*
- * ot_crypto.c — OpenThread crypto platform for Zephyr on RT582
+ * ot_crypto.c — OpenThread crypto platform for Zephyr on RT583
  * Uses Rafael SDK TRNG for random; hardware AES/SHA disabled for simplicity.
  * OT_ENTER/EXIT_CRITICAL now use Zephyr irq_lock via openthread_port.h.
  */

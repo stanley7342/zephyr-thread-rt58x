@@ -1,5 +1,5 @@
 /*
- * ota_app.c — OTA integration for RT582 Thread example
+ * ota_app.c — OTA integration for RT583 Thread example
  *
  * Usage (OpenThread CLI):
  *   ota check  fd00::1              ← check + download from server fd00::1

@@ -1,5 +1,5 @@
 /*
- * RT582 Matter Lighting App — ZCL cluster attribute change callbacks.
+ * RT583 Matter Lighting App — ZCL cluster attribute change callbacks.
  *
  * Called by the Matter stack when a controller writes to the OnOff or
  * LevelControl cluster attributes.  Routes changes to AppTask which

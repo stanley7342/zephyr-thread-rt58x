@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config IEEE802154_RT583
+	bool "Rafael RT583 IEEE 802.15.4 radio stub driver"
+	default y
+	depends on DT_HAS_RAFAEL_RT583_IEEE802154_ENABLED
+	help
+	  Provides a DTS device node for the RT583 radio so that Zephyr's
+	  OpenThread platform (radio.c) can resolve DT_CHOSEN(zephyr_ieee802154).
+	  The actual radio operation is handled by ot_radio.c / lmac15p4.
+
+config IEEE802154_RT583_INIT_PRIORITY
+	int "RT583 IEEE 802.15.4 stub init priority"
+	default 80
+	depends on IEEE802154_RT583

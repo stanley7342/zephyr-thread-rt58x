@@ -1,5 +1,5 @@
 /*
- * ot_alarm.c — OpenThread alarm/timer platform for Zephyr on RT582
+ * ot_alarm.c — OpenThread alarm/timer platform for Zephyr on RT583
  *
  * FreeRTOS → Zephyr replacements:
  *   xTimerCreate / xTimerChangePeriod → K_TIMER_DEFINE + k_timer_start()
@@ -8,7 +8,7 @@
  *   xTaskGetTickCount() * portTICK_RATE_MS → k_uptime_get_32()
  *   pdMS_TO_TICKS(ms)                 → ms  (k_timer takes ms directly)
  *
- * The microsecond timer keeps direct RT582 TIMER3 register access.
+ * The microsecond timer keeps direct RT583 TIMER3 register access.
  * The IRQ is registered via Zephyr's IRQ_CONNECT (replacing
  * timer_callback_register() + NVIC_EnableIRQ()).
  */
@@ -31,7 +31,7 @@
 #include "openthread_port.h"
 #include "code_utils.h"
 
-/* Rafael RT582 hardware timer registers (from mcu.h) */
+/* Rafael RT583 hardware timer registers (from mcu.h) */
 #include "mcu.h"
 #include "lmac15p4.h"
 
@@ -44,7 +44,7 @@ static void _ms_timer_expiry(struct k_timer *t)
     OT_NOTIFY(OT_SYSTEM_EVENT_ALARM_MS_EXPIRED);
 }
 
-/* ── Microsecond timer (RT582 TIMER3 hardware registers) ─────────────────── */
+/* ── Microsecond timer (RT583 TIMER3 hardware registers) ─────────────────── */
 #if (OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE == 1)
 
 #define ALARM_TIMER_TICK_TO_MICRO_SEC(n)  ((n) * 25UL)
@@ -59,8 +59,8 @@ static void _ms_timer_expiry(struct k_timer *t)
                  : ALRAM_TIMER_COUNTER_COMPARE2(n1, n2))
 
 /* Timer3 IRQ number from mcu.h (IRQn_Type: Timer3_IRQn = 17) */
-#define RT582_TIMER3_IRQ   17
-#define RT582_TIMER3_PRIO   2
+#define RT583_TIMER3_IRQ   17
+#define RT583_TIMER3_PRIO   2
 
 static void _us_timer_isr(const void *unused)
 {
@@ -81,7 +81,7 @@ void ot_alarmInit(void)
 
 #if (OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE == 1)
     /* Configure TIMER3 for free-run at 40 MHz / prescale-1 */
-    irq_disable(RT582_TIMER3_IRQ);
+    irq_disable(RT583_TIMER3_IRQ);
 
     TIMER3->load = 0;
     TIMER3->clear = 1;
@@ -90,8 +90,8 @@ void ot_alarmInit(void)
     TIMER3->control.bit.mode = 0;     /* TIMER_FREERUN_MODE */
     TIMER3->control.bit.en = 0;
 
-    IRQ_CONNECT(RT582_TIMER3_IRQ, RT582_TIMER3_PRIO, _us_timer_isr, NULL, 0);
-    irq_enable(RT582_TIMER3_IRQ);
+    IRQ_CONNECT(RT583_TIMER3_IRQ, RT583_TIMER3_PRIO, _us_timer_isr, NULL, 0);
+    irq_enable(RT583_TIMER3_IRQ);
 #endif
 }
 

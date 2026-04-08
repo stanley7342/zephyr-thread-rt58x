@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT582-EVB Zephyr + OpenThread — 一鍵環境建置腳本
+    RT583-EVB Zephyr + OpenThread — 一鍵環境建置腳本
 
 .DESCRIPTION
     自動完成以下步驟：

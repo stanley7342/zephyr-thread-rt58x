@@ -1,8 +1,8 @@
-config UART_RT582
-    bool "Rafael RT582 UART driver"
-    depends on SERIAL && SOC_SERIES_RT582
+config UART_RT583
+    bool "Rafael RT583 UART driver"
+    depends on SERIAL && SOC_SERIES_RT583
     select SERIAL_HAS_DRIVER
     select SERIAL_SUPPORT_INTERRUPT
     default y
     help
-      UART driver for Rafael RT582. Wraps the HOSAL UART layer.
+      UART driver for Rafael RT583. Wraps the HOSAL UART layer.

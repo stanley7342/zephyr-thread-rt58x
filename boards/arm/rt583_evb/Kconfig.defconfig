@@ -1,0 +1,6 @@
+if BOARD_RT583_EVB
+
+config BOARD
+    default "rt583_evb"
+
+endif # BOARD_RT583_EVB

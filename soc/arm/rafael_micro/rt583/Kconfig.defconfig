@@ -1,0 +1,11 @@
+if SOC_RT583
+
+# RT583 clock: librt583_system.a compiled with SET_SYS_CLK=2 (SYS_CLK_64MHZ)
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+    default 64000000
+
+# RT583 external IRQs: 0–32 (Comp_IRQn = 32 is the highest in mcu.h)
+config NUM_IRQS
+    default 33
+
+endif # SOC_RT583

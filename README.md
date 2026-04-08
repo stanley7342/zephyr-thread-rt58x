@@ -1,10 +1,10 @@
-# RT582-EVB — Zephyr + OpenThread FTD
+# RT583-EVB — Zephyr + OpenThread FTD
 
-Zephyr RTOS port for the **Rafael Microelectronics RT582** (ARM Cortex-M3 @ 64 MHz) with a full OpenThread FTD CLI.
+Zephyr RTOS port for the **Rafael Microelectronics RT583** (ARM Cortex-M3 @ 64 MHz) with a full OpenThread FTD CLI.
 
 | Item | Value |
 |------|-------|
-| SoC | RT582 (ARM Cortex-M3, 64 MHz BBPLL) |
+| SoC | RT583 (ARM Cortex-M3, 64 MHz BBPLL) |
 | Zephyr | 4.4.0-rc1（`v4.4.0-rc1-211-gcf4d0f72478e`） |
 | OpenThread | FTD (Full Thread Device) CLI |
 | Console | UART0 — TX: GPIO16, RX: GPIO17, **115200 8N1** |
@@ -274,13 +274,13 @@ export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-1.0.1
 ### Clean build（推薦）
 
 ```bash
-west build -p always -b rt582_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
+west build -p always -b rt583_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
 ```
 
 ### 增量 build
 
 ```bash
-west build -b rt582_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
+west build -b rt583_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
 ```
 
 ### 輸出檔案
@@ -302,7 +302,7 @@ west build -b rt582_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/buil
 ### 硬體接線（UART Console）
 
 ```
-RT582-EVB          USB-UART 轉接器
+RT583-EVB          USB-UART 轉接器
 GPIO16 (TX)  ───►  RX
 GPIO17 (RX)  ◄───  TX
 GND          ───── GND
@@ -382,7 +382,7 @@ bash tools/linux/flash.sh
 `flash.sh` 會依下列順序尋找 OpenOCD scripts：
 
 1. `/mnt/c/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD/script`（掛載自 Windows SDK）
-2. `boards/arm/rt582_evb/support/rt58x.cfg`（本專案內）
+2. `boards/arm/rt583_evb/support/rt58x.cfg`（本專案內）
 
 若兩處都找不到，會提示錯誤並說明如何手動指定路徑。
 
@@ -406,7 +406,7 @@ Reset 後應看到：
 
 ```
 ======================================
-  RT582-EVB  Zephyr + OpenThread CLI
+  RT583-EVB  Zephyr + OpenThread CLI
 ======================================
 [MAIN] wdog started
 [RF] hosal_rf_init...
@@ -465,7 +465,7 @@ Done
 | `west update` 失敗 | revision 在遠端不存在 | 確認 `west.yml` 中的 `revision` 是有效的 tag 或 commit |
 | 完全沒有 UART 輸出 | Binary 燒錄至錯誤位址 | 燒錄至 **0x0**，不是 `0x8000` |
 | `printk` 輸出後系統卡死 | 從 ISR 呼叫 `printk`（spinlock 死鎖） | 使用 `k_work_submit` 延後到 thread context |
-| UART RX 中斷從不觸發 | `IRQ_CONNECT` 未呼叫 | 確認 `uart_rt582.c` 中有呼叫 `IRQ_CONNECT` |
+| UART RX 中斷從不觸發 | `IRQ_CONNECT` 未呼叫 | 確認 `uart_rt583.c` 中有呼叫 `IRQ_CONNECT` |
 | RF init 後 OT task 卡住 | RF MCU init 阻塞 | 確認 `CONFIG_RF_FW_INCLUDE_PCI=TRUE` compile definition |
 | `>` prompt 不出現 | OT CLI 初始化失敗 | 確認 `main.c` 有呼叫 `otAppCliInit` |
 | OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP 未被識別 | 用 [Zadig](https://zadig.akeo.ie/) 安裝 WinUSB 驅動 |
@@ -502,7 +502,7 @@ zephyr-thread-rt58x/
 │
 ├── cmake/
 │   └── zephyr_serial/
-│       └── CMakeLists.txt      # 將 uart_rt582.c + hosal_uart.c 加入 drivers__serial
+│       └── CMakeLists.txt      # 將 uart_rt583.c + hosal_uart.c 加入 drivers__serial
 │
 ├── subsys/openthread/
 │   └── CMakeLists.txt          # OT core、mbedTLS、RUCI、RF 等所有 OT 相關 sources
@@ -512,7 +512,7 @@ zephyr-thread-rt58x/
 │
 ├── drivers/
 │   └── serial/
-│       ├── uart_rt582.c        # Zephyr UART driver（HOSAL 封裝）
+│       ├── uart_rt583.c        # Zephyr UART driver（HOSAL 封裝）
 │       ├── Kconfig
 │       └── CMakeLists.txt
 │
@@ -526,12 +526,12 @@ zephyr-thread-rt58x/
 │       ├── network/thread/openthread/  # OpenThread 原始碼
 │       ├── utility/            # log、fsm、util_queue 等
 │       └── platform/           # SoC / HOSAL 平台驅動
-│           ├── hosal/rt582_hosal/
-│           └── soc/rt582/
+│           ├── hosal/rt583_hosal/
+│           └── soc/rt583/
 │
-├── boards/arm/rt582_evb/       # Board 定義（DTS、defconfig、Kconfig）
-├── dts/arm/rafael/rt582.dtsi   # SoC DTS（Flash 1 MB、RAM 144 KB、UART0/1）
-└── soc/arm/rafael_micro/rt582/ # SOC 定義（soc.c：SystemInit + COMM_SUBSYSTEM IRQ）
+├── boards/arm/rt583_evb/       # Board 定義（DTS、defconfig、Kconfig）
+├── dts/arm/rafael/rt583.dtsi   # SoC DTS（Flash 1 MB、RAM 144 KB、UART0/1）
+└── soc/arm/rafael_micro/rt583/ # SOC 定義（soc.c：SystemInit + COMM_SUBSYSTEM IRQ）
 ```
 
 ### 關鍵設計決策
@@ -539,7 +539,7 @@ zephyr-thread-rt58x/
 | 決策 | 原因 |
 |------|------|
 | 全部從原始碼編譯，無預編譯 `.a` | 消除工具鏈升級時的 ABI 不相容問題 |
-| `uart_rt582.c` 透過 Zephyr 模組加入 `drivers__serial` | `ZEPHYR_EXTRA_MODULES` 使模組 cmake 在正確時間點執行 |
+| `uart_rt583.c` 透過 Zephyr 模組加入 `drivers__serial` | `ZEPHYR_EXTRA_MODULES` 使模組 cmake 在正確時間點執行 |
 | 排除 `soft_source_match_table.c` | `ot_radio.c` 已提供 hardware-backed src match via lmac15p4，避免符號衝突 |
 | PIB 常數透過 Kconfig 設定 | 調整 RF 參數只需改 `prj.conf`，不需動應用程式碼 |
 | Shell 停用（`CONFIG_SHELL=n`） | Shell 的 TX 中斷路徑與 `printk` polling 競爭，會導致輸出亂碼 |

@@ -1,0 +1,3 @@
+config BOARD_RT583_EVB
+    bool "Rafael Microelectronics RT583 EVB"
+    depends on SOC_RT583

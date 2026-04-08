@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB Zephyr + OpenThread — macOS 環境建置腳本
+# RT583-EVB Zephyr + OpenThread — macOS 環境建置腳本
 #
 # 用法：
 #   bash scripts/macos/install.sh

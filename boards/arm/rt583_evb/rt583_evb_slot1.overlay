@@ -1,0 +1,12 @@
+/*
+ * RT583-EVB slot1 overlay
+ *
+ * 將 zephyr,code-partition 指向 slot1_partition（0x90000），
+ * 使 image 被 linked 並執行於 0x90000。
+ * 搭配 MCUboot Direct XIP：MCUboot 比較版本後從 slot1 直接執行。
+ */
+/ {
+    chosen {
+        zephyr,code-partition = &slot1_partition;
+    };
+};

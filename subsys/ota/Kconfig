@@ -1,7 +1,7 @@
 config OTA
     bool "OTA firmware update subsystem"
     depends on FLASH && FLASH_MAP && BOOTLOADER_MCUBOOT
-    depends on OPENTHREAD_RT582
+    depends on OPENTHREAD_RT583
     depends on SETTINGS
     help
       Enables CoAP Block-wise OTA download + LZ4 decompression

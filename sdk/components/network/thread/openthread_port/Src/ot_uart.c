@@ -1,5 +1,5 @@
 /*
- * ot_uart.c — OpenThread UART platform for Zephyr on RT582
+ * ot_uart.c — OpenThread UART platform for Zephyr on RT583
  *
  * RX path: interrupt-driven (CONFIG_UART_INTERRUPT_DRIVEN=y)
  *   UART RX IRQ → hosal_rx_callback (ring buf) → uart_rx_irq_cb (ISR ctx)
@@ -35,7 +35,7 @@ void otPlatUartSendDone(void) {}
 #include "tprintk.h"
 
 /* ── UART device ─────────────────────────────────────────────────────────── *
- * Reuse UART0 which is already the Zephyr console (uart_rt582 driver).     */
+ * Reuse UART0 which is already the Zephyr console (uart_rt583 driver).     */
 #define OT_UART_NODE DT_NODELABEL(uart0)
 
 static const struct device *ot_uart_dev;

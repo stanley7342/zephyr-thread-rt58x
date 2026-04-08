@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB — macOS 燒錄腳本（CMSIS-DAP + OpenOCD）
+# RT583-EVB — macOS 燒錄腳本（CMSIS-DAP + OpenOCD）
 #
 # 用法：
 #   bash scripts/macos/flash.sh -p thread        # slot0 (0x10000)

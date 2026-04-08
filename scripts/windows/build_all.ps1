@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Build all RT582-EVB targets and report a pass/fail summary.
+    Build all RT583-EVB targets and report a pass/fail summary.
 
 .DESCRIPTION
     Calls build.ps1 for every target in sequence.

@@ -1,6 +1,0 @@
-if BOARD_RT582_EVB
-
-config BOARD
-    default "rt582_evb"
-
-endif # BOARD_RT582_EVB

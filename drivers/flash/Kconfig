@@ -1,10 +1,10 @@
-config FLASH_RT582
-    bool "Rafael RT582 internal flash driver"
-    depends on SOC_SERIES_RT582
+config FLASH_RT583
+    bool "Rafael RT583 internal flash driver"
+    depends on SOC_SERIES_RT583
     select FLASH_HAS_DRIVER_ENABLED
     select FLASH_HAS_PAGE_LAYOUT
     default y
     help
-      Flash driver for Rafael RT582 internal SPI flash.
+      Flash driver for Rafael RT583 internal SPI flash.
       Wraps the HOSAL/flashctl API into Zephyr flash_driver_api.
       Supports 4KB sector erase and 256-byte page writes.

@@ -1,5 +1,5 @@
 /*
- * RT582 Matter Lighting App — Application event definitions.
+ * RT583 Matter Lighting App — Application event definitions.
  */
 
 #pragma once

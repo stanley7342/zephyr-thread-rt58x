@@ -1,7 +1,0 @@
-# Zephyr sets SOC_RT582 automatically via board.yml / soc.yml.
-# Only set application-level configs here.
-
-# Console via UART0 (GPIO16=TX, GPIO17=RX, 115200 baud)
-CONFIG_SERIAL=y
-CONFIG_UART_CONSOLE=y
-CONFIG_UART_RT582=y

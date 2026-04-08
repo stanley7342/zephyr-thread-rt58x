@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB — WSL/Linux 燒錄腳本（CMSIS-DAP + OpenOCD）
+# RT583-EVB — WSL/Linux 燒錄腳本（CMSIS-DAP + OpenOCD）
 #
 # 前置步驟（Windows 端）：
 #   1. winget install usbipd

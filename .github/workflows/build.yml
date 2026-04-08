@@ -141,7 +141,7 @@ jobs:
               -DDTS_ROOT=${PROJECT}"
           fi
 
-          west build -p always -b rt582_evb \
+          west build -p always -b rt583_evb \
             -d ${{ matrix.build_dir }} \
             ${{ matrix.source }} \
             -- ${CMAKE_ARGS}

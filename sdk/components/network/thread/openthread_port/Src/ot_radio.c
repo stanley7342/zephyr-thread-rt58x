@@ -1,5 +1,5 @@
 /*
- * ot_radio.c — OpenThread radio platform for RT582 on Zephyr
+ * ot_radio.c — OpenThread radio platform for RT583 on Zephyr
  *
  * Ported from Rafael SDK openthread_port/src/ot_radio.c.
  * Changes from the original:

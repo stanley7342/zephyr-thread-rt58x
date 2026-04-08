@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB Zephyr + OpenThread — Linux/WSL 環境建置腳本
+# RT583-EVB Zephyr + OpenThread — Linux/WSL 環境建置腳本
 #
 # 用法：
 #   bash scripts/linux/install.sh

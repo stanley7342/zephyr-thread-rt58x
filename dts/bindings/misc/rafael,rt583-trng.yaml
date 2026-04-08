@@ -1,0 +1,5 @@
+description: Rafael RT583 True Random Number Generator (TRNG)
+
+compatible: "rafael,rt583-trng"
+
+include: base.yaml

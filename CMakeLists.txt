@@ -11,7 +11,7 @@ set(KCONFIG_ROOT ${CMAKE_CURRENT_LIST_DIR}/Kconfig)
 list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(rt582_helloworld VERSION 1.1.1)
+project(rt583_helloworld VERSION 1.1.1)
 
 # ── Build metadata ────────────────────────────────────────────────────────────
 execute_process(
@@ -45,35 +45,35 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples/thre
 
 # Rafael IoT SDK vendored into sdk/.
 set(RAFAEL_SDK ${CMAKE_CURRENT_LIST_DIR}/sdk)
-set(RT582_PLATFORM ${RAFAEL_SDK}/components/platform)
+set(RT583_PLATFORM ${RAFAEL_SDK}/components/platform)
 
 # Application source
 target_sources(app PRIVATE examples/thread/src/main.c)
 
 # ── OpenThread ────────────────────────────────────────────────────────────────
-if(CONFIG_OPENTHREAD_RT582)
+if(CONFIG_OPENTHREAD_RT583)
     include(subsys/openthread/CMakeLists.txt)
 endif()
 
-# ── RT582 platform drivers ────────────────────────────────────────────────────
+# ── RT583 platform drivers ────────────────────────────────────────────────────
 # Platform sources (system_mcu.c, sysctrl.c, etc.) and include directories are
 # now provided by cmake/zephyr_module/CMakeLists.txt via ZEPHYR_EXTRA_MODULES,
 # so they are available to both this app and MCUboot without duplication.
-set(RT582_DRV_SRC ${RT582_PLATFORM}/soc/rt582/rt582_driver/Src)
+set(RT583_DRV_SRC ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src)
 
 target_include_directories(app PRIVATE
-    ${RT582_PLATFORM}/soc/rt582/rt582_driver/Inc
-    ${RT582_PLATFORM}/soc/rt582/rt582_system/Include
-    ${RT582_PLATFORM}/hosal/rt582_hosal/Inc
+    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
+    ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
+    ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
 )
 
 # comm_subsystem_drv.c is only needed by the Thread example.
 target_sources(app PRIVATE
-    ${RT582_DRV_SRC}/comm_subsystem_drv.c
+    ${RT583_DRV_SRC}/comm_subsystem_drv.c
 )
 
-# ── RT582 UART driver ─────────────────────────────────────────────────────────
-# uart_rt582.c + hosal_uart.c are added to drivers__serial via the Zephyr
+# ── RT583 UART driver ─────────────────────────────────────────────────────────
+# uart_rt583.c + hosal_uart.c are added to drivers__serial via the Zephyr
 # module cmake at cmake/zephyr_serial/CMakeLists.txt (see zephyr/module.yml).
 # ZEPHYR_EXTRA_MODULES above registers this repo as a module so that cmake
 # runs at the correct point in Zephyr's build graph.

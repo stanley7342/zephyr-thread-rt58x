@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT582-EVB Zephyr + OpenThread — 移除腳本
+    RT583-EVB Zephyr + OpenThread — 移除腳本
 
 .DESCRIPTION
     移除所有由 install.ps1 安裝的元件：

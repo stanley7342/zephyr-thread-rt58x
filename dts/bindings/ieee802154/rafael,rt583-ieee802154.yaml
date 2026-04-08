@@ -1,0 +1,8 @@
+description: Rafael RT583 IEEE 802.15.4 radio stub binding.
+  Provides a DTS device node so that Zephyr's openthread/platform/radio.c
+  can resolve DT_CHOSEN(zephyr_ieee802154) at compile time. The actual
+  radio access is performed by ot_radio.c via the lmac15p4 library.
+
+compatible: "rafael,rt583-ieee802154"
+
+include: base.yaml

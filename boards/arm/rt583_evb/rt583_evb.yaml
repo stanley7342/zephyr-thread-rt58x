@@ -1,0 +1,8 @@
+identifier: rt583_evb
+name: Rafael Microelectronics RT583 EVB
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported: []

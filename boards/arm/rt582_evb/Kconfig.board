@@ -1,3 +1,0 @@
-config BOARD_RT582_EVB
-    bool "Rafael Microelectronics RT582 EVB"
-    depends on SOC_RT582

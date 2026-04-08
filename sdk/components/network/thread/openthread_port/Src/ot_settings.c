@@ -1,5 +1,5 @@
 /*
- * ot_settings.c — OpenThread platform settings for Zephyr on RT582
+ * ot_settings.c — OpenThread platform settings for Zephyr on RT583
  *
  * Implements otPlatSettings* API.  The SDK's libopenthread-ftd.a calls these
  * directly (it was NOT built with OPENTHREAD_CONFIG_PLATFORM_FLASH_API_ENABLE).
@@ -17,7 +17,7 @@
 #include <openthread/platform/settings.h>
 
 /* ── Store limits ────────────────────────────────────────────────────────── *
- * RT582 has 144 KB of SRAM.  Keep the settings store small.  128 bytes     *
+ * RT583 has 144 KB of SRAM.  Keep the settings store small.  128 bytes     *
  * covers the longest typical OT setting (child/neighbor table entries).    */
 #define OT_SETTINGS_MAX_ENTRIES   32
 #define OT_SETTINGS_MAX_VALUE_LEN 128

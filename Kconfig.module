@@ -1,12 +1,14 @@
-# Kconfig.module — RT582 out-of-tree driver Kconfigs
+# Kconfig.module — RT583 out-of-tree driver Kconfigs
 #
 # Sourced by Zephyr's module system (zephyr/module.yml kconfig: entry).
-# This makes UART_RT582 and FLASH_RT582 visible to any app or bootloader
+# This makes UART_RT583 and FLASH_RT583 visible to any app or bootloader
 # that uses this module, including MCUboot.
 
 rsource "drivers/serial/Kconfig"
 rsource "drivers/flash/Kconfig"
 rsource "drivers/bluetooth/Kconfig"
+rsource "drivers/entropy/Kconfig"
+rsource "drivers/ieee802154/Kconfig"
 
 # MCUboot's Kconfig defines MBEDTLS_CONFIG_FILE without a type (it expects
 # Zephyr's mbedTLS Kconfig to provide the 'string' declaration first).

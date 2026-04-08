@@ -1,4 +1,0 @@
-# Rafael RT582 EVB Board Kconfig
-
-config BOARD_RT582_EVB
-    select SOC_RT582

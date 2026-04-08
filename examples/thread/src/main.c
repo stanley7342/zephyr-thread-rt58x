@@ -1,8 +1,8 @@
 /*
- * main.c — RT582-EVB OpenThread FTD CLI example
+ * main.c — RT583-EVB OpenThread FTD CLI example
  *
  * Build:
- *   west build -p always -b rt582_evb examples/thread
+ *   west build -p always -b rt583_evb examples/thread
  *
  * Flash:
  *   bash tools/linux/flash.sh --bin build/zephyr/zephyr.bin
@@ -46,18 +46,18 @@ static void wdog_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
-/* PHY/MAC PIB — tunable via Kconfig (prj.conf CONFIG_RT582_*_PIB_*) */
-#define PHY_PIB_TURNAROUND_TIMER          CONFIG_RT582_PHY_PIB_TURNAROUND_TIMER
-#define PHY_PIB_CCA_DETECTED_TIME         CONFIG_RT582_PHY_PIB_CCA_DETECTED_TIME
-#define PHY_PIB_CCA_DETECT_MODE           CONFIG_RT582_PHY_PIB_CCA_DETECT_MODE
-#define PHY_PIB_CCA_THRESHOLD             CONFIG_RT582_PHY_PIB_CCA_THRESHOLD
-#define MAC_PIB_UNIT_BACKOFF_PERIOD       CONFIG_RT582_MAC_PIB_UNIT_BACKOFF_PERIOD
-#define MAC_PIB_MAC_ACK_WAIT_DURATION     CONFIG_RT582_MAC_PIB_ACK_WAIT_DURATION
-#define MAC_PIB_MAC_MAX_BE                CONFIG_RT582_MAC_PIB_MAX_BE
-#define MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME CONFIG_RT582_MAC_PIB_MAX_FRAME_TOTAL_WAIT_TIME
-#define MAC_PIB_MAC_MAX_FRAME_RETRIES     CONFIG_RT582_MAC_PIB_MAX_FRAME_RETRIES
-#define MAC_PIB_MAC_MAX_CSMACA_BACKOFFS   CONFIG_RT582_MAC_PIB_MAX_CSMACA_BACKOFFS
-#define MAC_PIB_MAC_MIN_BE                CONFIG_RT582_MAC_PIB_MIN_BE
+/* PHY/MAC PIB — tunable via Kconfig (prj.conf CONFIG_RT583_*_PIB_*) */
+#define PHY_PIB_TURNAROUND_TIMER          CONFIG_RT583_PHY_PIB_TURNAROUND_TIMER
+#define PHY_PIB_CCA_DETECTED_TIME         CONFIG_RT583_PHY_PIB_CCA_DETECTED_TIME
+#define PHY_PIB_CCA_DETECT_MODE           CONFIG_RT583_PHY_PIB_CCA_DETECT_MODE
+#define PHY_PIB_CCA_THRESHOLD             CONFIG_RT583_PHY_PIB_CCA_THRESHOLD
+#define MAC_PIB_UNIT_BACKOFF_PERIOD       CONFIG_RT583_MAC_PIB_UNIT_BACKOFF_PERIOD
+#define MAC_PIB_MAC_ACK_WAIT_DURATION     CONFIG_RT583_MAC_PIB_ACK_WAIT_DURATION
+#define MAC_PIB_MAC_MAX_BE                CONFIG_RT583_MAC_PIB_MAX_BE
+#define MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME CONFIG_RT583_MAC_PIB_MAX_FRAME_TOTAL_WAIT_TIME
+#define MAC_PIB_MAC_MAX_FRAME_RETRIES     CONFIG_RT583_MAC_PIB_MAX_FRAME_RETRIES
+#define MAC_PIB_MAC_MAX_CSMACA_BACKOFFS   CONFIG_RT583_MAC_PIB_MAX_CSMACA_BACKOFFS
+#define MAC_PIB_MAC_MIN_BE                CONFIG_RT583_MAC_PIB_MIN_BE
 
 void otrInitUser(otInstance *instance)
 {
@@ -70,7 +70,7 @@ void otrInitUser(otInstance *instance)
 int main(void)
 {
     (printk)("======================================\n");
-    (printk)("  RT582-EVB  Zephyr + OpenThread CLI  \n");
+    (printk)("  RT583-EVB  Zephyr + OpenThread CLI  \n");
     (printk)("  Built: " __DATE__ " " __TIME__ "  \n");
     (printk)("======================================\n");
 
@@ -83,10 +83,10 @@ int main(void)
     if (firmware_size_ruci > 0) {
         uint32_t fw_crc = crc32_ieee(firmware_program_ruci, firmware_size_ruci);
         printk("[RF] firmware CRC32: 0x%08x (size=%u)", fw_crc, firmware_size_ruci);
-#if CONFIG_RT582_RF_FW_EXPECTED_CRC32 != 0
-        if (fw_crc != CONFIG_RT582_RF_FW_EXPECTED_CRC32) {
+#if CONFIG_RT583_RF_FW_EXPECTED_CRC32 != 0
+        if (fw_crc != CONFIG_RT583_RF_FW_EXPECTED_CRC32) {
             printk("[RF] ERROR: firmware CRC mismatch! expected=0x%08x",
-                   CONFIG_RT582_RF_FW_EXPECTED_CRC32);
+                   CONFIG_RT583_RF_FW_EXPECTED_CRC32);
         }
 #endif
     }

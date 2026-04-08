@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB — 開啟 minicom 序列終端機
+# RT583-EVB — 開啟 minicom 序列終端機
 #
 # 用法：
 #   bash scripts/linux/minicom.sh              # 自動偵測序列埠

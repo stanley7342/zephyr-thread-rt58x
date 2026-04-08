@@ -2,7 +2,7 @@
  * ota_coap.c — CoAP Block-wise (RFC 7959) OTA download
  *
  * Protocol:
- *   Client (RT582)          Server (OTA host)
+ *   Client (RT583)          Server (OTA host)
  *   ──────────────          ─────────────────
  *   GET /ota/meta    ──►    200  ota_meta_t (80B)
  *

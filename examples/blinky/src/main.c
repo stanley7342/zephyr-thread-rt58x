@@ -1,5 +1,5 @@
 /*
- * RT582-EVB LED Blinky
+ * RT583-EVB LED Blinky
  *
  * LED pin: GPIO22 (default — adjust to match your EVB schematic)
  */
@@ -12,7 +12,7 @@
 
 int main(void)
 {
-	printk("RT582 Blinky — LED on GPIO%d\n", LED_PIN);
+	printk("RT583 Blinky — LED on GPIO%d\n", LED_PIN);
 
 	gpio_cfg_output(LED_PIN);
 	gpio_pin_write(LED_PIN, 0);

@@ -1,7 +1,7 @@
 /*
- * BLE Peripheral — Heart Rate Service example for RT582 EVB.
+ * BLE Peripheral — Heart Rate Service example for RT583 EVB.
  *
- * Advertises as "RT582 HRS" and exposes:
+ * Advertises as "RT583 HRS" and exposes:
  *   - Heart Rate Service (HRS) — simulated heart rate
  *   - Battery Service (BAS)    — simulated battery level
  *   - Device Information Service (DIS)

@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT582-EVB 燒錄腳本（Windows 原生，CMSIS-DAP + openocd-rt58x）
+    RT583-EVB 燒錄腳本（Windows 原生，CMSIS-DAP + openocd-rt58x）
 
 .DESCRIPTION
     使用 openocd-rt58x 的 Windows 版本（openocd.exe）直接燒錄，
@@ -117,7 +117,7 @@ $binKB   = [math]::Round($binSize / 1024, 1)
 
 # ── 顯示資訊 ─────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "==> 燒錄 RT582-EVB" -ForegroundColor Cyan
+Write-Host "==> 燒錄 RT583-EVB" -ForegroundColor Cyan
 Write-Host "    OpenOCD : $ocdBin"
 Write-Host "    Scripts : $ocdTcl"
 Write-Host "    Binary  : $Bin ($binKB KB)"

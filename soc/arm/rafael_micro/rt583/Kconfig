@@ -1,0 +1,16 @@
+# Rafael RT583 SoC Kconfig
+
+config SOC_SERIES_RT583
+    select ARM
+    select CPU_CORTEX_M3
+    select CPU_HAS_ARM_MPU   # RT583 mcu.h: __MPU_PRESENT = 1
+
+config SOC_RT583
+    bool
+    select SOC_SERIES_RT583
+
+config SOC_SERIES
+    default "rt583" if SOC_SERIES_RT583
+
+config SOC
+    default "rt583" if SOC_RT583

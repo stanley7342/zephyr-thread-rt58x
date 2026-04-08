@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# RT582-EVB Zephyr + OpenThread — macOS 移除腳本
+# RT583-EVB Zephyr + OpenThread — macOS 移除腳本
 #
 # 移除 install.sh 安裝的元件（SDK、.west、zephyr、Python venv、env.sh）。
 # brew 安裝的套件不會自動移除。

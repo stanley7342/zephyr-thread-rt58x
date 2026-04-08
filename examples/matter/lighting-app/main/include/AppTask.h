@@ -1,5 +1,5 @@
 /*
- * RT582 Matter Lighting App — Application task.
+ * RT583 Matter Lighting App — Application task.
  *
  * Manages:
  *  - Matter stack initialisation (BLE advertising, OpenThread, Server)

@@ -1,0 +1,6 @@
+board:
+  name: rt583_evb
+  full_name: Rafael Microelectronics RT583 EVB
+  vendor: rafael
+  socs:
+  - name: rt583
