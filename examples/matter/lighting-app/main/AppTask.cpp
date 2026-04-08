@@ -1,5 +1,5 @@
 /*
- * RT582 Matter Lighting App — Application task.
+ * RT583 Matter Lighting App — Application task.
  *
  * Initialises the CHIP/Matter stack and drives the lighting state machine.
  * Hardware LED is currently simulated via printk — wire to a real GPIO
@@ -12,7 +12,6 @@
 #include <app-common/zap-generated/attributes/Accessors.h>
 #include <app/clusters/identify-server/identify-server.h>
 #include <app/clusters/on-off-server/on-off-server.h>
-#include <app/server/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
@@ -26,6 +25,7 @@
 #ifdef CONFIG_NET_L2_OPENTHREAD
 #include <platform/OpenThread/GenericNetworkCommissioningThreadDriver.h>
 #include <app/clusters/network-commissioning/network-commissioning.h>
+#include <app/clusters/network-commissioning/CodegenInstance.h>
 #endif
 
 #include <zephyr/kernel.h>
@@ -54,9 +54,8 @@ Identify sIdentify = {
 };
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
-app::Clusters::NetworkCommissioning::Instance
-    sThreadNetworkCommissioningInstance(0 /* endpoint */,
-        &(NetworkCommissioning::GenericThreadDriver::GetInstance()));
+app::Clusters::NetworkCommissioning::InstanceAndDriver<NetworkCommissioning::GenericThreadDriver>
+    sThreadNetworkDriver(0 /* endpoint */);
 #endif
 
 } /* namespace */
@@ -191,32 +190,43 @@ CHIP_ERROR AppTask::Init()
 {
     CHIP_ERROR err;
 
+    printk("[APP] MemoryInit...\n");
     /* Initialise CHIP memory allocator */
     err = chip::Platform::MemoryInit();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("MemoryInit failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
+    printk("[APP] InitChipStack...\n");
     /* Initialise CHIP device layer (BLE + OpenThread) */
     err = PlatformMgr().InitChipStack();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitChipStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
+    printk("[APP] AddEventHandler...\n");
     /* Register device event handler */
-    PlatformMgr().AddEventHandler(ChipEventHandler, 0);
+    err = PlatformMgr().AddEventHandler(ChipEventHandler, 0);
+    VerifyOrReturnError(err == CHIP_NO_ERROR, err,
+                        LOG_ERR("AddEventHandler failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
+    printk("[APP] InitThreadStack...\n");
     err = ThreadStackMgr().InitThreadStack();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitThreadStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
+    printk("[APP] SetThreadDeviceType...\n");
     err = ConnectivityMgr().SetThreadDeviceType(
         ConnectivityManager::kThreadDeviceType_Router);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("SetThreadDeviceType failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    sThreadNetworkCommissioningInstance.Init();
+    printk("[APP] ThreadNetworkDriver Init...\n");
+    err = sThreadNetworkDriver.Init();
+    VerifyOrReturnError(err == CHIP_NO_ERROR, err,
+                        LOG_ERR("ThreadNetworkDriver Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
 #endif
 
+    printk("[APP] ServerInit...\n");
     /* Initialise Matter server (GATT, mDNS, session management) */
     static chip::CommonCaseDeviceServerInitParams serverParams;
     err = serverParams.InitializeStaticResourcesBeforeServerInit();
@@ -227,6 +237,7 @@ CHIP_ERROR AppTask::Init()
     SetDeviceAttestationCredentialsProvider(
         Examples::GetExampleDACProvider());
 
+    printk("[APP] Server::Init...\n");
     err = chip::Server::GetInstance().Init(serverParams);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
@@ -246,6 +257,7 @@ CHIP_ERROR AppTask::Init()
 
 CHIP_ERROR AppTask::StartApp()
 {
+    printk("[APP] StartApp\n");
     CHIP_ERROR err = Init();
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("AppTask::Init() failed: %" CHIP_ERROR_FORMAT, err.Format());

@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT582-EVB Zephyr + OpenThread — 編譯腳本
+    RT583-EVB Zephyr + OpenThread — 編譯腳本
 
 .DESCRIPTION
     載入環境變數並執行 west build。
@@ -75,7 +75,7 @@ $slotSuffix    = if ($Slot1) { "_slot1" } else { "" }
 $buildDir      = Join-Path $projectDir "build\${p}${slotSuffix}"
 $outBin        = Join-Path $buildDir "${p}_zephyr.bin"
 # CMake requires forward slashes; build a reusable helper to append cmake args
-$slot1OverlayFwd = ($projectDir -replace '\\','/') + "/boards/arm/rt582_evb/rt582_evb_slot1.overlay"
+$slot1OverlayFwd = ($projectDir -replace '\\','/') + "/boards/arm/rt583_evb/rt583_evb_slot1.overlay"
 
 # Helper: returns a List[string] with all west-build args ready for splatting.
 # Using a List avoids PowerShell's character-splitting bug when splatting arrays after '--'.
@@ -88,7 +88,7 @@ function Build-WestArgs {
     $args = [System.Collections.Generic.List[string]]@(
         '-m', 'west', 'build',
         '-p', $pristineFlag,
-        '-b', 'rt582_evb',
+        '-b', 'rt583_evb',
         $Source,
         '--build-dir', $BuildSubdir,
         '--'
@@ -101,7 +101,7 @@ if ($p -eq "bootloader") {
     $overlay = Join-Path $projectDir "examples\bootloader\mcuboot.conf"
 
     Write-Host ""
-    Write-Host "==> west build（MCUboot / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（MCUboot / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host "    Overlay : $overlay"
@@ -124,7 +124,7 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -eq "ble_hrs") {
     Write-Host ""
-    Write-Host "==> west build（BLE HRS / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（BLE HRS / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host ""
@@ -141,7 +141,7 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -eq "test_hci") {
     Write-Host ""
-    Write-Host "==> west build（HCI Test / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（HCI Test / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host ""
@@ -160,7 +160,7 @@ if ($p -eq "bootloader") {
     # Set CHIP_ROOT env var to override the default <workspace>/connectedhomeip path.
     $chipRoot = if ($env:CHIP_ROOT) { $env:CHIP_ROOT } else { Join-Path $Workspace "connectedhomeip" }
     Write-Host ""
-    Write-Host "==> west build（Matter Lighting / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（Matter Lighting / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host "    CHIP_ROOT: $chipRoot"
@@ -171,6 +171,8 @@ if ($p -eq "bootloader") {
     }
 
     $env:CHIP_ROOT = $chipRoot
+    # clang-format is needed by connectedhomeip codegen.py; ensure the wrapper is on PATH.
+    $env:PATH = "C:\Users\Stanley\bin;$env:PATH"
     $westArgs = Build-WestArgs `
         -Source      "$projectName/examples/matter/lighting-app" `
         -BuildSubdir "$projectName/build/${p}" `
@@ -182,7 +184,7 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -in @("blinky", "hello_world")) {
     Write-Host ""
-    Write-Host "==> west build（$p / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（$p / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     if ($Slot1)     { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
@@ -203,7 +205,7 @@ if ($p -eq "bootloader") {
     Pop-Location
 } elseif ($p -eq "test_flash") {
     Write-Host ""
-    Write-Host "==> west build（Flash Unit Test / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（Flash Unit Test / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     if ($Slot1)     { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
@@ -224,7 +226,7 @@ if ($p -eq "bootloader") {
     Pop-Location
 } else {
     Write-Host ""
-    Write-Host "==> west build（Thread FTD CLI / rt582_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build（Thread FTD CLI / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     if ($Slot1) { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
