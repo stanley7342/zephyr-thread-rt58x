@@ -234,14 +234,9 @@ uint8_t RfMcu_PowerStateCheck(void)
 
 void RfMcu_DmaInit(void)
 {
-    printk("[RF-MCU] DmaInit: WAKE_UP+RESET...\n");
-    RfMcu_HostCtrlAhb(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
-    RfMcu_HostCtrlAhb(COMM_SUBSYSTEM_HOST_CTRL_RESET);
-    printk("[RF-MCU] DmaInit: SysRdySignalWait (INFO=0x%08x)...\n",
-           (unsigned)COMM_SUBSYSTEM_AHB->COMM_SUBSYSTEM_INFO);
-    RfMcu_SysRdySignalWait();
-    printk("[RF-MCU] DmaInit: ready (INFO=0x%08x)\n",
-           (unsigned)COMM_SUBSYSTEM_AHB->COMM_SUBSYSTEM_INFO);
+    /* AHB DmaInit: enable NVIC and RF MCU DMA interrupt only.
+     * No RESET here — matches reference rt584 design.
+     * The RESET+SysRdyWait is done in RfMcu_SysInit() after HostModeEnable. */
     NVIC_EnableIRQ(CommSubsystem_IRQn);
     RfMcu_InterruptEnSetAhb(COMM_SUBSYSTEM_DMA_INT_ENABLE);
 }
@@ -1022,39 +1017,26 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
 
     RfMcu_ChipIdCheck();
 
-    printk("[RF-MCU] Reset+Wait1...\n");
-    /* Wake before reset: required in AHB mode when the RF MCU may be in a
-     * DMA-ready or post-warm-reset state that needs a WAKE_UP pulse to accept
-     * a RESET and re-assert SYS_RDY.  Mirrors what RfMcu_DmaInit() does. */
+    printk("[RF-MCU] HostModeEnable+Reset+Wait1...\n");
+    /* Reference rt584 order: HostModeEnable → WAKE_UP → RESET → SysRdyWait.
+     * HostModeEnable halts the RF MCU first.  WAKE_UP guards against the RF
+     * MCU being in deep-sleep across a warm reset (the reference omits it but
+     * relies on cold-boot; we keep it for development-cycle robustness).
+     * After RESET, the ROM boots with HOST_MODE active and asserts SYS_RDY to
+     * signal "ready for firmware programming". */
+    RfMcu_HostModeEnable();
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
     RfMcu_HostCtrl(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
 #endif
     RfMcu_HostResetMcu();
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_SPI)
     RfMcu_HostWakeUpMcu();
-#endif
-    RfMcu_SysRdySignalWait();
-    printk("[RF-MCU] Wait1 done, HostModeEnable+DmaInit...\n");
-#if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_SPI)
-    RfMcu_HostModeEnable();
     RfMcu_InterruptDisableAll();
 #endif
+    RfMcu_SysRdySignalWait();
+    printk("[RF-MCU] Wait1 done, DmaInit...\n");
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
-    /* AHB path: skip HostModeEnable and DmaInit's RESET entirely.
-     *
-     * HOST_MODE (ENABLE=bit24) latches in the COMM_SUBSYSTEM and is cleared
-     * only by DISABLE_HOST_MODE (bit25).  Any RESET issued while HOST_MODE is
-     * active reboots the RF MCU ROM, but the ROM detects HOST_MODE and stays
-     * halted — SYS_RDY never asserts, so SysRdySignalWait inside DmaInit
-     * hangs forever regardless of whether HostModeDisable was called first.
-     *
-     * AHB DMA has direct bus access to RF MCU SRAM independent of RF MCU
-     * execution state, so HOST_MODE is not required for AHB firmware loading.
-     * After Wait1 the RF MCU is already in RF_MCU_PWR_STATE_NORMAL, so
-     * DmaBusyCheck's HostWakeUpMcuAhb() exits immediately — no additional
-     * reset is needed.  Just enable NVIC and the DMA interrupt. */
-    NVIC_EnableIRQ(CommSubsystem_IRQn);
-    RfMcu_InterruptEnSetAhb(COMM_SUBSYSTEM_DMA_INT_ENABLE);
+    RfMcu_DmaInit();
 #endif
     printk("[RF-MCU] DmaInit done\n");
 

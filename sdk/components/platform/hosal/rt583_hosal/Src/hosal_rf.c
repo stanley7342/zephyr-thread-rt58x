@@ -1171,11 +1171,9 @@ void hosal_rf_init(hosal_rf_mode_t mode)
 {
     printk("[RF] hosal_rf_init entry mode=0x%x\n", (unsigned)mode);
     NVIC_SetPriority(CommSubsystem_IRQn, 0x4);
-    /* RfMcu_SysInit() (called internally by rf_common_init_by_fw) already
-     * runs DmaInit after Wait1.  A pre-DmaInit here enables the CommSubsystem
-     * NVIC with gRfMcuIsrCfg.commsubsystem_isr still NULL and puts the RF MCU
-     * into a DMA-ready state that requires WAKE_UP before another RESET will
-     * re-assert SYS_RDY — causing SysInit's Wait1 to hang. */
+    /* DmaInit only enables NVIC + DMA interrupt (no RESET) — matches
+     * reference rt584 and is safe to call before rf_common_init_by_fw. */
+    RfMcu_DmaInit();
     if (rf_common_init_by_fw(mode, __rf_event_callback) != true) {
         printk("[RF] init fw fail — halting\n");
         k_panic();
