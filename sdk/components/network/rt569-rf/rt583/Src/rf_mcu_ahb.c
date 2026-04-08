@@ -179,10 +179,11 @@ void RfMcu_InterruptClearAhb(uint32_t value)
 void RfMcu_DmaBusyCheck(void)
 {
 #if (RF_MCU_USING_REG_FIELD)
-    while (RF_MCU_AHB_INTR_STATUS_PTR->DMA_BUSY != 0)
-    {
-        RfMcu_HostWakeUpMcuAhb();
-    }
+    /* Pure poll — do NOT call HostWakeUpMcuAhb() here.
+     * HostWakeUpMcuAhb writes 0x100 (WAKE_UP) to COMM_SUBSYSTEM_HOST,
+     * which is a 32-bit write that zeros DMA_EN (bit16), aborting any
+     * DMA currently in progress.  Reference rt584 does the same. */
+    while (RF_MCU_AHB_INTR_STATUS_PTR->DMA_BUSY != 0);
 #else
     volatile uint32_t dma_is_busy;
     do
