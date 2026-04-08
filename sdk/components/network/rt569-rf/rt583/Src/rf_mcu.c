@@ -1040,12 +1040,13 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
     RfMcu_InterruptDisableAll();
 #endif
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
-    /* WAKE_UP+RESET in DmaInit takes the RF MCU back out of HOST_MODE so the
-     * ROM re-boots and asserts SYS_RDY.  The AHB DMA then writes firmware
-     * directly to RF MCU SRAM while the ROM is running (no HOST_MODE needed
-     * for AHB; it's a SPI-path requirement).  Without this reset,
-     * DmaBusyCheck's HostWakeUpMcuAhb() spins forever waiting for
-     * RF_MCU_PWR_STATE_NORMAL which is never reached in HOST_MODE. */
+    /* HOST_MODE (bit24) is a latched state cleared only by DISABLE_HOST_MODE
+     * (bit25), not by RESET or WAKE_UP alone.  Without clearing it first,
+     * DmaInit's RESET boots the ROM but HOST_MODE persists — the ROM stays
+     * halted and never asserts SYS_RDY, so DmaInit's SysRdySignalWait hangs.
+     * For AHB, HOST_MODE isn't needed anyway (AHB DMA has direct SRAM access
+     * while ROM runs); clear it so DmaInit can drive a clean ROM boot. */
+    RfMcu_HostModeDisable();
     RfMcu_DmaInit();
 #endif
     printk("[RF-MCU] DmaInit done\n");
