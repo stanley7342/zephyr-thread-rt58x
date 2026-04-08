@@ -1,29 +1,37 @@
-# subsys/openthread/CMakeLists.txt — RT582 OpenThread FTD platform
-# Included by the root CMakeLists.txt when CONFIG_OPENTHREAD_RT582=y.
+# subsys/openthread/CMakeLists.txt — RT583 OpenThread FTD platform
+# Included by the root CMakeLists.txt when CONFIG_OPENTHREAD_RT583=y.
 
 set(OT_PORT_INC   ${RAFAEL_SDK}/components/network/thread/openthread_port/Inc)
 set(OT_PORT_SRC   ${RAFAEL_SDK}/components/network/thread/openthread_port/Src)
 set(OT_PORT_UTILS ${RAFAEL_SDK}/components/network/thread/openthread_port/utils)
 set(OT_ROOT       ${RAFAEL_SDK}/components/network/thread/openthread)
 
-set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt582)
-set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt582)
+set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
+set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
 set(RUCI_INC      ${RAFAEL_SDK}/components/network/ruci/Inc)
 set(LMAC_INC      ${RAFAEL_SDK}/components/network/lmac15p4/Inc)
-set(RT582_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_driver/Inc)
-set(RT582_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_system/Include)
-set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Inc)
-set(RT582_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_crypto/Inc)
-set(RT582_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt582/rt582_crypto)
+set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
+set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
+set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
+set(RT583_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto/Inc)
+set(RT583_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto)
 set(UTIL_INC      ${RAFAEL_SDK}/components/utility/utility/Inc)
 set(LOG_INC       ${RAFAEL_SDK}/components/utility/log)
 set(MBEDTLS_INC   ${OT_ROOT}/third_party/mbedtls/repo/include)
 
-# ── Collect OT core + CLI sources ────────────────────────────────────────────
+# ── Collect OT core sources ───────────────────────────────────────────────────
+# CLI is excluded for the Matter build (not needed; saves ~37 KB flash + 7 KB BSS).
+# When building the Thread FTD CLI example, the CLI sources are needed; add them
+# back by setting OT_INCLUDE_CLI=1 before including this file.
 file(GLOB_RECURSE OT_CORE_SOURCES
     ${OT_ROOT}/src/core/*.cpp
-    ${OT_ROOT}/src/cli/*.cpp
 )
+if(NOT DEFINED OT_INCLUDE_CLI OR OT_INCLUDE_CLI)
+    file(GLOB_RECURSE OT_CLI_SOURCES
+        ${OT_ROOT}/src/cli/*.cpp
+    )
+    list(APPEND OT_CORE_SOURCES ${OT_CLI_SOURCES})
+endif()
 # extension_example.cpp requires optional OT Extension API — exclude.
 list(FILTER OT_CORE_SOURCES EXCLUDE REGEX "extension_example\\.cpp$")
 
@@ -55,26 +63,26 @@ target_sources(app PRIVATE
     ${OT_PORT_SRC}/ot_memory.c
     ${OT_PORT_SRC}/ot_diag.c
     ${OT_PORT_SRC}/ot_crypto.c
-    ${OT_PORT_SRC}/rt582_compat.c
+    ${OT_PORT_SRC}/rt583_compat.c
     ${OT_PORT_SRC}/log_shim.c
 
     # LMAC + RF MCU
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_rf.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt582_hosal/Src/hosal_trng.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
+    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_trng.c
     ${RT569_RF_DIR}/Src/rf_mcu.c
     ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
     ${RT569_RF_DIR}/Src/rf_common_init.c
     ${RT569_FW_DIR}/Src/rt569mp_fw.c
     ${RT569_FW_DIR}/Src/rt569mp_init.c
 
-    # rt582_crypto (replaces librt582_crypto.a)
-    ${RT582_CRYPTO_SRC}/rt_aes.c
-    ${RT582_CRYPTO_SRC}/rt_crypto.c
-    ${RT582_CRYPTO_SRC}/rt_crypto_util.c
-    ${RT582_CRYPTO_SRC}/rt_ecjpake.c
-    ${RT582_CRYPTO_SRC}/rt_hmac_drbg.c
-    ${RT582_CRYPTO_SRC}/rt_sha256.c
+    # rt583_crypto (replaces librt583_crypto.a)
+    ${RT583_CRYPTO_SRC}/rt_aes.c
+    ${RT583_CRYPTO_SRC}/rt_crypto.c
+    ${RT583_CRYPTO_SRC}/rt_crypto_util.c
+    ${RT583_CRYPTO_SRC}/rt_ecjpake.c
+    ${RT583_CRYPTO_SRC}/rt_hmac_drbg.c
+    ${RT583_CRYPTO_SRC}/rt_sha256.c
 
     # RUCI (replaces libruci.a)
     ${RAFAEL_SDK}/components/network/ruci/Src/ruci.c
@@ -127,6 +135,8 @@ target_sources(app PRIVATE
 
 target_include_directories(app PRIVATE
     ${OT_PORT_INC}
+    # tprintk.h is provided by the thread example app — OT port sources include it
+    ${CMAKE_CURRENT_LIST_DIR}/../../examples/thread/src
     ${OT_ROOT}/include
     ${OT_ROOT}/src
     ${OT_ROOT}/src/core
@@ -136,10 +146,10 @@ target_include_directories(app PRIVATE
     ${OT_ROOT}/third_party/tcplp/lib
     ${MBEDTLS_INC}
     ${LMAC_INC}
-    ${RT582_DRV_INC}
-    ${RT582_SYS_INC}
+    ${RT583_DRV_INC}
+    ${RT583_SYS_INC}
     ${HOSAL_INC}
-    ${RT582_CRYPTO_INC}
+    ${RT583_CRYPTO_INC}
     ${UTIL_INC}
     ${LOG_INC}
     ${RT569_RF_DIR}/Inc
@@ -147,29 +157,53 @@ target_include_directories(app PRIVATE
     ${RUCI_INC}
 )
 
-# Expose OT public headers to the application (main.c uses otAppCliInit etc.)
+# Expose OT port config headers globally (needed for OPENTHREAD_CONFIG_FILE resolution).
+# NOTE: ${OT_ROOT}/include (SDK's vendored OT) is intentionally NOT added here as a user
+# include (-I) — it would shadow modules/lib/openthread/include and break compilation of
+# Zephyr's openthread-ftd library with missing BR diagnostic symbols.
+# The SDK OT headers are already in target_include_directories(app PRIVATE ...) above.
 zephyr_include_directories(
-    ${OT_ROOT}/include
     ${OT_PORT_INC}
 )
 
+# When CONFIG_OPENTHREAD_RT583=y, CONFIG_OPENTHREAD_SOURCES=n so Zephyr's OT module does
+# NOT add modules/lib/openthread/include to the global include path. Add it here as a
+# system include (-isystem, lower priority) so:
+#  - Zephyr's OT L2 layer (openthread.c) can find <openthread/instance.h>
+#  - Matter's GN build can find <openthread/instance.h>
+#  - SDK OT compilation (app PRIVATE) still uses SDK's own OT headers first (via -I)
+zephyr_system_include_directories(
+    ${ZEPHYR_BASE}/../modules/lib/openthread/include
+    ${ZEPHYR_BASE}/../modules/lib/openthread/examples/platforms
+)
+
 target_compile_definitions(app PRIVATE
-    OPENTHREAD_CONFIG_FILE="openthread-core-rt582-zephyr-config.h"
-    CONFIG_RT582=1
+    OPENTHREAD_CONFIG_FILE="openthread-core-rt583-zephyr-config.h"
+    CONFIG_RT583=1
     OPENTHREAD_FTD=1
     OPENTHREAD_MTD=0
     OPENTHREAD_RADIO=0
-    CHIP_TYPE=2
-    "CONFIG_RF_FW_INCLUDE_PCI=TRUE"
+    CHIP_TYPE=3
     CONFIG_CRYPTO_SECP256R1_ENABLE=1
-    "MBEDTLS_CONFIG_FILE=\"openthread-mbedtls-config.h\""
     "PACKAGE_NAME=\"OpenThread\""
     "PACKAGE_VERSION=\"1.0.0\""
 )
 
+# CONFIG_RF_FW_INCLUDE_PCI and MBEDTLS_CONFIG_FILE may already be defined by
+# the BLE subsystem or Zephyr's mbedTLS module (INTERFACE properties that
+# propagate before our PRIVATE compile_definitions).  To avoid redefinition
+# warnings, emit -U before -D in target_compile_options — which is appended
+# after target_compile_definitions in the compiler command.
+target_compile_options(app PRIVATE
+    -UCONFIG_RF_FW_INCLUDE_PCI
+    -DCONFIG_RF_FW_INCLUDE_PCI=TRUE
+    -UMBEDTLS_CONFIG_FILE
+    "-DMBEDTLS_CONFIG_FILE=\"openthread-mbedtls-config.h\""
+)
+
 zephyr_compile_definitions(
-    OPENTHREAD_CONFIG_FILE="openthread-core-rt582-zephyr-config.h"
-    CONFIG_RT582=1
+    OPENTHREAD_CONFIG_FILE="openthread-core-rt583-zephyr-config.h"
+    CONFIG_RT583=1
     OPENTHREAD_FTD=1
 )
 
