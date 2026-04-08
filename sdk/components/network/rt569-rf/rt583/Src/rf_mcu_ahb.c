@@ -407,7 +407,7 @@ void RfMcu_AhbIsrHandler(COMM_SUBSYSTEM_ISR_t isr_cb)
         /* Implement AHB DMA done callback if needed */
     }
 
-    if (status & COMM_SUBSYSTEM_INT_STATUS_MASK)
+    if ((status & COMM_SUBSYSTEM_INT_STATUS_MASK) && isr_cb)
     {
         enter_critical_section();
         isr_cb(status & COMM_SUBSYSTEM_INT_STATUS_MASK);
@@ -426,7 +426,7 @@ void RfMcu_AhbIsrHandler(COMM_SUBSYSTEM_ISR_t isr_cb)
         COMM_SUBSYSTEM_AHB->COMM_SUBSYSTEM_INTR_CLR = COMM_SUBSYSTEM_DMA_INT_CLR;
     }
 
-    if (status & COMM_SUBSYSTEM_INT_STATUS_MASK)
+    if ((status & COMM_SUBSYSTEM_INT_STATUS_MASK) && isr_cb)
     {
         enter_critical_section();
         isr_cb((status & 0xFF));
