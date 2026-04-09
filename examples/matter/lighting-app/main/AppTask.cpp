@@ -15,6 +15,8 @@
 #include <app/server/Server.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
+#include <platform/Zephyr/DeviceInstanceInfoProviderImpl.h>
+#include <DeviceInfoProviderImpl.h>
 #include <data-model-providers/codegen/Instance.h>
 #include <lib/core/ErrorStr.h>
 #include <lib/support/CHIPMem.h>
@@ -46,6 +48,8 @@ void ot_set_instance(struct otInstance *inst);
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
 #include <zephyr/net/openthread.h>  /* openthread_init(), openthread_get_default_instance() */
+#include <openthread/ip6.h>          /* otIp6SetEnabled */
+#include <zephyr/net/net_if.h>       /* net_if_up, net_if_get_default */
 #endif
 
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
@@ -75,6 +79,9 @@ app::Clusters::NetworkCommissioning::InstanceAndDriver<NetworkCommissioning::Gen
 #endif
 
 } /* namespace */
+
+/* File-scope pointer to the serverParams so ServerInitWork can access it. */
+chip::CommonCaseDeviceServerInitParams * gServerInitParams = nullptr;
 
 /* ── LED simulation (replace with real GPIO when EVB LED pin is known) ─────── */
 
@@ -323,10 +330,35 @@ CHIP_ERROR AppTask::Init()
                         LOG_ERR("ThreadNetworkDriver Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
 #endif
 
+#ifdef CONFIG_NET_L2_OPENTHREAD
+    /* Bring up the OT IPv6 interface so that Server::Init can bind UDP
+     * sockets.  Thread itself stays idle (MANUAL_START) — commissioning
+     * via BLE will provision and start Thread later.  Without this,
+     * bind(::, 5540) returns EADDRNOTAVAIL because no interface is up. */
+    {
+        openthread_mutex_lock();
+        otIp6SetEnabled(openthread_get_default_instance(), true);
+        openthread_mutex_unlock();
+
+        /* Bring Zephyr net interfaces up so bind() succeeds. */
+        for (int idx = 1; idx <= 4; idx++) {
+            struct net_if *iface = net_if_get_by_index(idx);
+            if (iface) {
+                int r = net_if_up(iface);
+                printk("[APP] net_if_up(idx=%d %p) = %d\n", idx, iface, r);
+            }
+        }
+        printk("[APP] net_if default=%p\n", net_if_get_default());
+        /* Give the stack a moment to assign the link-local address. */
+        k_sleep(K_MSEC(200));
+    }
+#endif
+
     printk("[APP] ServerInit...\n");
     /* Initialise Matter server (GATT, mDNS, session management) */
-    static chip::CommonCaseDeviceServerInitParams serverParams;
-    err = serverParams.InitializeStaticResourcesBeforeServerInit();
+    static chip::CommonCaseDeviceServerInitParams sServerInitParams;
+    gServerInitParams = &sServerInitParams;
+    err = sServerInitParams.InitializeStaticResourcesBeforeServerInit();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("ServerInitParams failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
@@ -334,20 +366,46 @@ CHIP_ERROR AppTask::Init()
     SetDeviceAttestationCredentialsProvider(
         Examples::GetExampleDACProvider());
 
-    printk("[APP] Server::Init...\n");
-    err = chip::Server::GetInstance().Init(serverParams);
-    VerifyOrReturnError(err == CHIP_NO_ERROR, err,
-                        LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
+    /* DeviceInstanceInfoProvider — required by BasicInformation cluster init.
+     * Must be set before Server::Init which triggers SetDataModelProvider. */
+    static DeviceLayer::DeviceInstanceInfoProviderImpl sDeviceInstanceInfoProvider(
+        DeviceLayer::ConfigurationManagerImpl::GetDefaultInstance());
+    DeviceLayer::SetDeviceInstanceInfoProvider(&sDeviceInstanceInfoProvider);
+
+    /* DeviceInfoProvider — required by UserLabel cluster init. */
+    static DeviceLayer::DeviceInfoProviderImpl sDeviceInfoProvider;
+    sDeviceInfoProvider.SetStorageDelegate(sServerInitParams.persistentStorageDelegate);
+    DeviceLayer::SetDeviceInfoProvider(&sDeviceInfoProvider);
+
+    /* Data model provider — required since connectedhomeip removed the default. */
+    sServerInitParams.dataModelProvider =
+        chip::app::CodegenDataModelProviderInstance(sServerInitParams.persistentStorageDelegate);
+
+    return CHIP_NO_ERROR;
+}
+
+/* Called from the CHIP event loop thread via ScheduleWork — holds the
+ * stack lock and can safely post platform events. */
+static void ServerInitWork(intptr_t arg)
+{
+    auto * serverParams = reinterpret_cast<chip::CommonCaseDeviceServerInitParams *>(arg);
+
+    printk("[APP] Server::Init (from event loop)...\n");
+    CHIP_ERROR err = chip::Server::GetInstance().Init(*serverParams);
+    printk("[APP] Server::Init returned err=%d\n", err.AsInteger());
+    if (err != CHIP_NO_ERROR) {
+        printk("[APP] Server::Init FAILED\n");
+        return;
+    }
 
     /* Set initial light state */
-    SetLed(mLightOn, mLightLevel);
-    UpdateClusterState();
+    AppTask & task = AppTask::Instance();
+    task.SetLightOn(task.IsLightOn());
+    task.UpdateClusterState();
 
     /* Print commissioning QR code and manual pairing code */
     PrintOnboardingCodes(chip::RendezvousInformationFlags(
         chip::RendezvousInformationFlag::kBLE));
-
-    return CHIP_NO_ERROR;
 }
 
 /* ── Main event loop ────────────────────────────────────────────────────────── */
@@ -361,10 +419,24 @@ CHIP_ERROR AppTask::StartApp()
         return err;
     }
 
-    /* Start CHIP device layer event loop (BLE + Thread tasks) */
+    /* Start CHIP device layer event loop BEFORE Server::Init.
+     * Server::Init → emberAfInit → cluster callbacks may call PostEventOrDie
+     * which requires the event loop to be running. */
+    printk("[APP] StartEventLoopTask...\n");
     err = PlatformMgr().StartEventLoopTask();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("StartEventLoopTask failed: %" CHIP_ERROR_FORMAT, err.Format()));
+
+    /* Schedule Server::Init on the CHIP event loop thread so it holds the
+     * stack lock and can dispatch platform events.  The serverParams static
+     * in Init() outlives this call. */
+    {
+        /* Get pointer to the static serverParams in Init() — it's the only
+         * CommonCaseDeviceServerInitParams we created. */
+        extern chip::CommonCaseDeviceServerInitParams * gServerInitParams;
+        PlatformMgr().ScheduleWork(ServerInitWork,
+                                   reinterpret_cast<intptr_t>(gServerInitParams));
+    }
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
     err = ThreadStackMgr().StartThreadTask();

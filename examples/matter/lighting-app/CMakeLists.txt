@@ -71,6 +71,7 @@ target_include_directories(app PRIVATE
     ${GEN_DIR}/app-common
     ${GEN_DIR}/lighting-app
     ${CHIP_ROOT}/examples/lighting-app/lighting-common
+    ${CHIP_ROOT}/examples/providers
     ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
     ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
     ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
@@ -81,6 +82,7 @@ target_sources(app PRIVATE
     main/main.cpp
     main/AppTask.cpp
     main/ZclCallbacks.cpp
+    ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
 )
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
@@ -99,6 +101,11 @@ endif()
 target_sources(app PRIVATE
     ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
 )
+
+# Dummy net interface — provides an IPv6 link-local address so that Matter's
+# Server::Init can bind UDP sockets.  RT583's OT radio uses vendored lmac15p4
+# (not a Zephyr ieee802154 driver), so no real net_if is registered.
+target_sources(app PRIVATE ${RT583_PROJECT_DIR}/drivers/net/dummy_net_if.c)
 
 # RF firmware selection for multi-protocol (BLE + 802.15.4) coexistence.
 # rf_common_init_by_fw() checks CONFIG_RF_FW_INCLUDE_* at compile time.

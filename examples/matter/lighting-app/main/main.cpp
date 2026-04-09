@@ -17,7 +17,7 @@
 
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
-#define APP_STACK_SIZE  14336
+#define APP_STACK_SIZE  4096
 
 K_THREAD_STACK_DEFINE(app_stack, APP_STACK_SIZE);  /* non-static for extern in AppTask.cpp */
 static struct k_thread app_thread;
@@ -44,13 +44,6 @@ static void app_thread_fn(void *, void *, void *)
 int main()
 {
     printk("[MAIN] start\n");
-
-    /* Heartbeat: print every 1s for 30s so we can confirm UART at any time.
-     * Remove after UART is confirmed working. */
-    for (int i = 0; i < 30; i++) {
-        printk("[HEARTBEAT] tick=%d\n", i);
-        k_sleep(K_MSEC(1000));
-    }
 
     k_thread_create(&app_thread, app_stack, APP_STACK_SIZE,
                     app_thread_fn, NULL, NULL, NULL,

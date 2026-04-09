@@ -206,6 +206,8 @@ target_compile_definitions(app PRIVATE
     OPENTHREAD_RADIO=0
     CHIP_TYPE=3
     CONFIG_CRYPTO_SECP256R1_ENABLE=1
+    # Matter needs its own state-change callback alongside Zephyr L2's.
+    OPENTHREAD_CONFIG_MAX_STATECHANGE_HANDLERS=3
     "PACKAGE_NAME=\"OpenThread\""
     "PACKAGE_VERSION=\"1.0.0\""
 )
