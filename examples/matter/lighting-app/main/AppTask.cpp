@@ -23,6 +23,8 @@
 #include <lib/support/CodeUtils.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <setup_payload/OnboardingCodesUtil.h>
+#include <setup_payload/QRCodeSetupPayloadGenerator.h>
+#include <setup_payload/ManualSetupPayloadGenerator.h>
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
 #include <platform/OpenThread/GenericNetworkCommissioningThreadDriver.h>
@@ -426,10 +428,24 @@ static void ServerInitWork(intptr_t arg)
     printk("[APP] UpdateClusterState done\n");
 
     /* Print commissioning QR code and manual pairing code */
-    printk("[APP] PrintOnboardingCodes...\n");
-    PrintOnboardingCodes(chip::RendezvousInformationFlags(
-        chip::RendezvousInformationFlag::kBLE));
-    printk("[APP] PrintOnboardingCodes done\n");
+    {
+        chip::PayloadContents payload;
+        GetPayloadContents(payload, chip::RendezvousInformationFlags(
+            chip::RendezvousInformationFlag::kBLE));
+
+        char buf[chip::QRCodeBasicSetupPayloadGenerator::kMaxQRCodeBase38RepresentationLength + 1];
+
+        chip::MutableCharSpan qrCode(buf);
+        if (GetQRCode(qrCode, payload) == CHIP_NO_ERROR) {
+            printk("\n[APP] QR Code URL:\n");
+            printk("      https://project-chip.github.io/connectedhomeip/qrcode.html?data=%s\n\n", qrCode.data());
+        }
+
+        chip::MutableCharSpan manualCode(buf);
+        if (GetManualPairingCode(manualCode, payload) == CHIP_NO_ERROR) {
+            printk("[APP] Manual pairing code: %s\n\n", manualCode.data());
+        }
+    }
 }
 
 /* ── Main event loop ────────────────────────────────────────────────────────── */

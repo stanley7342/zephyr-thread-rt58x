@@ -180,21 +180,24 @@ static int hci_evt_cb(void *p_arg)
 static int hci_acl_cb(void *p_arg)
 {
 	/*
-	 * Rafael BLE controller RX ACL wire format (mirrors TX):
-	 *   [0]   H4 type       (0x02)
-	 *   [1-2] sequence      (uint16 LE, RF-internal RX counter — discard)
-	 *   [3-4] handle+flags  (uint16 LE, HCI ACL header)
-	 *   [5-6] data_len      (uint16 LE, payload byte count)
-	 *   [7+]  payload
+	 * Rafael BLE controller RX ACL wire format (NO sequence field):
+	 *   [0]   transport_id  (0x02)
+	 *   [1-2] handle:12 + pb_flag:2 + bc_flag:2  (uint16 LE)
+	 *   [3-4] data_len      (uint16 LE, payload byte count)
+	 *   [5+]  payload
 	 *
-	 * bt_buf_get_rx(BT_BUF_ACL_IN) already records the H:4 type in the
-	 * net_buf metadata, so we must NOT copy buf_raw[0].
-	 * We must also skip buf_raw[1-2] (sequence) — it is not part of HCI.
-	 * The HCI ACL content passed to the host starts at buf_raw[3].
+	 * NOTE: Unlike TX (which host adds a sequence field at [1-2]),
+	 * the controller does NOT include sequence in received ACL data.
+	 * See Rafael SDK: ble_hci_acl_data_struct (RX) vs
+	 *                 ble_hci_acl_data_sn_struct (TX).
+	 *
+	 * bt_buf_get_rx(BT_BUF_ACL_IN) records the H:4 type in net_buf
+	 * metadata, so we must NOT copy buf_raw[0].
+	 * The HCI ACL content passed to the host starts at buf_raw[1].
 	 */
 	uint8_t *buf_raw = (uint8_t *)p_arg;
-	uint16_t data_len = sys_get_le16(&buf_raw[5]);
-	uint16_t total    = 7u + data_len;   /* type(1)+seq(2)+hdr(4)+payload */
+	uint16_t data_len = sys_get_le16(&buf_raw[3]);
+	uint16_t total    = 5u + data_len;   /* type(1)+hdr(4)+payload */
 
 	dump_hex("RX-ACL", buf_raw, total);
 
@@ -204,8 +207,8 @@ static int hci_acl_cb(void *p_arg)
 		return 0;
 	}
 
-	/* Copy handle+flags(2) + data_len(2) + payload, skipping type and seq. */
-	net_buf_add_mem(buf, &buf_raw[3], 4u + data_len);
+	/* Copy handle+flags(2) + data_len(2) + payload, skipping type byte. */
+	net_buf_add_mem(buf, &buf_raw[1], 4u + data_len);
 	k_fifo_put(&rx_fifo, buf);
 	return 0;
 }

@@ -8,6 +8,9 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Bump CHIP_CACHE_VERSION to force a fresh connectedhomeip clone
+  # (e.g. when upstream adds a new required submodule like third_party/zap/repo).
+  CHIP_CACHE_VERSION: "2"
 
 jobs:
   build:
@@ -231,20 +234,25 @@ jobs:
         run: ~/zephyr-sdk/setup.sh -c
 
       # ── connectedhomeip ─────────────────────────────────────────────────────
+      # Cache key includes CHIP_CACHE_VERSION so bumping it in env forces a
+      # fresh clone when upstream adds new required submodules (e.g. zap/repo).
       - name: Cache connectedhomeip
         id: cache-chip
         uses: actions/cache@v4
         with:
           path: connectedhomeip
-          key: chip-${{ hashFiles('zephyr-thread/examples/matter/lighting-app/CMakeLists.txt', 'zephyr-thread/examples/matter/lighting-app/lighting-app.zap') }}
+          key: chip-v${{ env.CHIP_CACHE_VERSION }}-${{ hashFiles('zephyr-thread/examples/matter/lighting-app/CMakeLists.txt', 'zephyr-thread/examples/matter/lighting-app/lighting-app.zap') }}
 
       - name: Clone connectedhomeip
         if: steps.cache-chip.outputs.cache-hit != 'true'
         run: |
           git clone --depth=1 \
             https://github.com/project-chip/connectedhomeip connectedhomeip
-          cd connectedhomeip
-          # Only init submodules needed for Zephyr ZAP codegen
+
+      - name: Init connectedhomeip submodules
+        working-directory: connectedhomeip
+        run: |
+          # Always run after clone or cache restore — idempotent if already present.
           git submodule update --init --depth=1 \
             third_party/zap/repo \
             third_party/pigweed/repo
