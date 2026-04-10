@@ -12,7 +12,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"   # keep going even if one target fails
 
-$targets = @("bootloader", "blinky", "hello_world", "test_flash", "thread", "ble_hrs")
+$targets = @("bootloader", "blinky", "hello_world", "test_flash", "thread", "ble_hrs", "lighting-app")
 $results = [ordered]@{}
 $script  = Join-Path $PSScriptRoot "build.ps1"
 

@@ -139,6 +139,7 @@ jobs:
           if [ "${{ matrix.is_bootloader }}" = "true" ]; then
             CMAKE_ARGS="${CMAKE_ARGS} \
               -DOVERLAY_CONFIG=${PROJECT}/examples/bootloader/mcuboot.conf \
+              -DDTC_OVERLAY_FILE=${PROJECT}/examples/bootloader/mcuboot.overlay \
               -DBOARD_ROOT=${PROJECT} \
               -DSOC_ROOT=${PROJECT} \
               -DDTS_ROOT=${PROJECT}"
@@ -247,6 +248,7 @@ jobs:
         run: |
           git clone --depth=1 \
             https://github.com/project-chip/connectedhomeip connectedhomeip
+          cd connectedhomeip && git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9 && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9
 
       - name: Init connectedhomeip submodules
         working-directory: connectedhomeip
