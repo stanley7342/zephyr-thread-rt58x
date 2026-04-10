@@ -234,8 +234,7 @@ jobs:
         run: ~/zephyr-sdk/setup.sh -c
 
       # ── connectedhomeip ─────────────────────────────────────────────────────
-      # Cache key includes CHIP_CACHE_VERSION so bumping it in env forces a
-      # fresh clone when upstream adds new required submodules (e.g. zap/repo).
+      # Cache key includes CHIP_CACHE_VERSION so bumping it forces a fresh clone.
       - name: Cache connectedhomeip
         id: cache-chip
         uses: actions/cache@v4
@@ -253,9 +252,38 @@ jobs:
         working-directory: connectedhomeip
         run: |
           # Always run after clone or cache restore — idempotent if already present.
+          # Note: third_party/zap/repo is NOT a submodule; zap-cli is a
+          # standalone binary installed separately in the "Install zap-cli" step.
           git submodule update --init --depth=1 \
-            third_party/zap/repo \
             third_party/pigweed/repo
+
+      # ── zap-cli ─────────────────────────────────────────────────────────────
+      # ZAP is a standalone code-generation tool (not a git submodule).
+      # Required version: >= 2025.10.23 (see connectedhomeip scripts/tools/zap/zap_execution.py).
+      - name: Cache zap-cli
+        id: cache-zap
+        uses: actions/cache@v4
+        with:
+          path: ~/zap-cli
+          key: zap-v2025.10.23-nightly.2-linux-amd64
+
+      - name: Install zap-cli
+        if: steps.cache-zap.outputs.cache-hit != 'true'
+        run: |
+          ZAP_DIR="$HOME/zap-cli"
+          mkdir -p "${ZAP_DIR}"
+          # Install via CIPD — official distribution used by the CHIP project.
+          curl -fsSL \
+            "https://chrome-infra-packages.appspot.com/dl/infra/tools/cipd/linux-amd64/+/latest" \
+            -o /tmp/cipd && chmod +x /tmp/cipd
+          /tmp/cipd ensure -ensure-file - -root "${ZAP_DIR}" <<'EOF'
+          experimental/matter/zap/linux-amd64  version:v2025.10.23-nightly.2
+          EOF
+          # Confirm binary exists
+          ls -la "${ZAP_DIR}/zap-cli" || { echo "ERROR: zap-cli not found after install" >&2; exit 1; }
+
+      - name: Set ZAP_INSTALL_PATH
+        run: echo "ZAP_INSTALL_PATH=$HOME/zap-cli" >> "$GITHUB_ENV"
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build matter_lighting

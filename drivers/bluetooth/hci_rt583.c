@@ -32,12 +32,6 @@
 
 #define LOG_PREFIX "[HCI] "
 
-/* ISR count from soc.c */
-extern volatile uint32_t rt583_comm_irq_count;
-/* RF event processing counters from hosal_rf.c */
-extern uint32_t s_isr_count;
-extern uint32_t s_proc_wakeups;
-extern uint32_t s_evt_count;
 
 /* BLE HCI H:4 packet type indicators */
 #define H4_CMD  0x01
@@ -75,9 +69,9 @@ bool hci_rt58x_rf_already_init = false;
 __weak uint32_t _crit_unlock(void) { return 0; }
 __weak void     _crit_relock(uint32_t nest) { ARG_UNUSED(nest); }
 
-/* ── Debug helpers (disabled — enable by setting HCI_RT58X_DEBUG to 1) ── */
+/* ── Debug helpers (set HCI_RT58X_DEBUG=1 to enable HCI hex dumps) ── */
 
-#define HCI_RT58X_DEBUG 1
+#define HCI_RT58X_DEBUG 0
 
 #if HCI_RT58X_DEBUG
 static void dump_hex(const char *dir, const uint8_t *data, uint16_t len)
@@ -243,13 +237,6 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 
 	switch (type) {
 	case H4_CMD: {
-		uint32_t irq_before = rt583_comm_irq_count;
-		uint32_t isr_before = s_isr_count;
-		uint32_t proc_before = s_proc_wakeups;
-		uint32_t evt_before = s_evt_count;
-		printk(LOG_PREFIX "pre-send pwr=0x%02x irq=%u isr=%u proc=%u evt=%u\n",
-		       RfMcu_PowerStateCheck(), irq_before,
-		       isr_before, proc_before, evt_before);
 		for (int i = 0; i < SEND_RETRY_MAX; i++) {
 			rc = hosal_rf_write_command(buf->data, buf->len);
 			if (rc == 0) {
@@ -259,12 +246,6 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 			       i, rc, RfMcu_PowerStateCheck());
 			k_sleep(SEND_RETRY_DELAY);
 		}
-		printk(LOG_PREFIX "post-send rc=%d irq=%u(+%u) isr=%u(+%u) proc=%u(+%u) evt=%u(+%u)\n",
-		       rc,
-		       rt583_comm_irq_count, rt583_comm_irq_count - irq_before,
-		       s_isr_count, s_isr_count - isr_before,
-		       s_proc_wakeups, s_proc_wakeups - proc_before,
-		       s_evt_count, s_evt_count - evt_before);
 		if (rc != 0) {
 			printk(LOG_PREFIX "cmd send failed\n");
 			net_buf_unref(buf);
@@ -420,17 +401,10 @@ static int hci_rt58x_setup(const struct device *dev,
 		return -EIO;
 	}
 
-	printk(LOG_PREFIX "setup: cmd sent, sleeping 100ms for response...\n");
+	/* Wait for vendor command response (discarded by setup_in_progress gate) */
 	k_sleep(K_MSEC(100));
-	/* Use arch_printk to bypass LOG subsystem entirely */
-	printk(LOG_PREFIX "setup: sleep done irq=%u\n", rt583_comm_irq_count);
-	/* Busy-wait 10ms to let UART flush completely */
-	k_busy_wait(10000);
-	printk(LOG_PREFIX "setup: A\n");
 	hci_data.setup_in_progress = false;
-	printk(LOG_PREFIX "setup: B\n");
-
-	printk(LOG_PREFIX "setup: done irq=%u\n", rt583_comm_irq_count);
+	printk(LOG_PREFIX "setup: done\n");
 	return 0;
 }
 
@@ -470,8 +444,7 @@ static int hci_rt58x_open(const struct device *dev, bt_hci_recv_t recv)
 			RX_THREAD_PRIORITY, 0, K_NO_WAIT);
 	k_thread_name_set(&rx_thread_data, "bt_rx");
 
-	printk(LOG_PREFIX "opened pwr=0x%02x irq=%u\n",
-	       RfMcu_PowerStateCheck(), rt583_comm_irq_count);
+	printk(LOG_PREFIX "opened pwr=0x%02x\n", RfMcu_PowerStateCheck());
 	return 0;
 }
 
