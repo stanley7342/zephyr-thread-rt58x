@@ -1,0 +1,28 @@
+/*
+ * Flash partition override for Matter lighting app.
+ *
+ * Default slot0/slot1 = 800 KB but matter_lighting image is ~866 KB.
+ * MCUboot uses min(slot0, slot1) as the signing size (both slots must
+ * be able to hold the same image for Direct XIP failover).
+ *
+ * Layout (2 MB flash):
+ *   0x000000 –  0x010000  boot_partition    64 KB  MCUboot
+ *   0x010000 –  0x0F8000  slot0_partition  928 KB  matter_lighting (primary)
+ *   0x0F8000 –  0x1E0000  slot1_partition  928 KB  OTA spare / Direct XIP failover
+ *   0x1E0000 –  0x1F0000  storage_partition 64 KB  Matter settings / NVS
+ *   0x1F0000 –  0x200000  factory_partition 64 KB  factory data
+ *   Total: 64 + 928 + 928 + 64 + 64 = 2048 KB = 2 MB
+ *
+ * Headroom: 928 KB slot − 866 KB image = 62 KB
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+&slot1_partition {
+    reg = <0x000F8000 0x000E8000>;  /* 928 KB — equal to slot0, required by MCUboot */
+};
+
+/* staging overlaps with new slot1 — remove it (OTA disabled for matter_lighting) */
+/delete-node/ &staging_partition;

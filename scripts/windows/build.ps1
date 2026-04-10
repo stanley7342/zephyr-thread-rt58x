@@ -12,7 +12,7 @@
       thread          → build\thread\thread_zephyr.bin
       bootloader      → build\bootloader\bootloader_zephyr.bin
       test_hci        → build\test_hci\test_hci_zephyr.bin
-      matter_lighting → build\matter_lighting\matter_lighting_zephyr.bin
+      lighting-app → build\lighting-app\lighting-app_zephyr.bin
 
 .PARAMETER NoPristine
     增量編譯（跳過 clean，加快重複編譯速度）。
@@ -26,7 +26,7 @@
 
 param(
     [Parameter(Mandatory)]
-    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci", "matter_lighting")]
+    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci", "lighting-app")]
     [string] $p,
     [switch] $NoPristine,
     [switch] $NoMCUboot,  # 略過 MCUboot，直接燒到 0x0（blinky / hello_world / test）
@@ -111,16 +111,13 @@ if ($p -eq "bootloader") {
     Write-Host "    Overlay : $overlay"
     Write-Host ""
 
-    $projectDirFwd = $projectDir -replace '\\','/'
+    $overlayFwd  = $overlay -replace '\\','/'
+    $mcubootSrc  = Join-Path $Workspace "bootloader\mcuboot\boot\zephyr"
+    $mcubootFwd  = $mcubootSrc -replace '\\','/'
     $westArgs = Build-WestArgs `
-        -Source      "bootloader/mcuboot/boot/zephyr" `
+        -Source      $mcubootFwd `
         -BuildSubdir "$projectName/build/$p" `
-        -ExtraCmake  @(
-            "-DOVERLAY_CONFIG=$overlay",
-            "-DBOARD_ROOT=$projectDirFwd",
-            "-DSOC_ROOT=$projectDirFwd",
-            "-DDTS_ROOT=$projectDirFwd"
-        )
+        -ExtraCmake  @("-DOVERLAY_CONFIG=$overlayFwd")
     Push-Location $Workspace
     & $python312 @westArgs
     $rc = $LASTEXITCODE
@@ -159,10 +156,12 @@ if ($p -eq "bootloader") {
     $rc = $LASTEXITCODE
     Pop-Location
 
-} elseif ($p -eq "matter_lighting") {
+} elseif ($p -eq "lighting-app") {
     # Matter requires GN build system and connectedhomeip to be available.
     # Set CHIP_ROOT env var to override the default <workspace>/connectedhomeip path.
     $chipRoot = if ($env:CHIP_ROOT) { $env:CHIP_ROOT } else { Join-Path $Workspace "connectedhomeip" }
+    $buildDir = Join-Path $projectDir "build\lighting-app"
+    $outBin   = Join-Path $buildDir "zephyr\zephyr.bin"
     Write-Host ""
     Write-Host "==> west build（Matter Lighting / rt583_evb）" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
@@ -179,7 +178,7 @@ if ($p -eq "bootloader") {
     $env:PATH = "C:\Users\Stanley\bin;$env:PATH"
     $westArgs = Build-WestArgs `
         -Source      "$projectName/examples/matter/lighting-app" `
-        -BuildSubdir "$projectName/build/${p}" `
+        -BuildSubdir "$projectName/build/lighting-app" `
         -ExtraCmake  @()
     Push-Location $Workspace
     & $python312 @westArgs
@@ -258,13 +257,13 @@ if ($rc -ne 0) {
 $zephyrSigned = Join-Path $buildDir "zephyr\zephyr.signed.bin"
 $zephyrBin    = Join-Path $buildDir "zephyr\zephyr.bin"
 if (Test-Path $zephyrSigned) {
-    Copy-Item $zephyrSigned $outBin
+    if ($outBin -ne $zephyrSigned) { Copy-Item $zephyrSigned $outBin }
     Write-Host ""
-    Write-Host "    [OK] 編譯成功（signed）：$outBin" -ForegroundColor Green
+    Write-Host "    [OK] 編譯成功（signed）：$zephyrSigned" -ForegroundColor Green
 } elseif (Test-Path $zephyrBin) {
-    Copy-Item $zephyrBin $outBin
+    if ($outBin -ne $zephyrBin) { Copy-Item $zephyrBin $outBin }
     Write-Host ""
-    Write-Host "    [OK] 編譯成功：$outBin" -ForegroundColor Green
+    Write-Host "    [OK] 編譯成功：$zephyrBin" -ForegroundColor Green
 }
 
 if (Get-Command deactivate -ErrorAction SilentlyContinue) { deactivate }

@@ -8,3 +8,7 @@ CONFIG_UART_RT583=y
 
 # Entropy subsystem — required for ENTROPY_RT583 (TRNG driver) and BLE/OT CSPRNG
 CONFIG_ENTROPY_GENERATOR=y
+
+# Generate Intel HEX for all apps — required by west flash (openocd runner hex mode).
+# Address is embedded in the hex file so this works for both 0x0 and MCUboot (0x10000).
+CONFIG_BUILD_OUTPUT_HEX=y
