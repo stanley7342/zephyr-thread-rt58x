@@ -259,31 +259,49 @@ jobs:
 
       # ── zap-cli ─────────────────────────────────────────────────────────────
       # ZAP is a standalone code-generation tool (not a git submodule).
-      # Required version: >= 2025.10.23 (see connectedhomeip scripts/tools/zap/zap_execution.py).
+      # Required version: >= 2025.10.23 (see scripts/tools/zap/zap_execution.py).
+      # gh CLI is pre-installed on ubuntu-22.04 runners; github.token provides
+      # read-only API access without rate-limit issues.
       - name: Cache zap-cli
         id: cache-zap
         uses: actions/cache@v4
         with:
           path: ~/zap-cli
-          key: zap-v2025.10.23-nightly.2-linux-amd64
+          key: zap-v2025.10.23-linux-amd64
 
       - name: Install zap-cli
         if: steps.cache-zap.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           ZAP_DIR="$HOME/zap-cli"
           mkdir -p "${ZAP_DIR}"
-          # Install via CIPD — official distribution used by the CHIP project.
-          curl -fsSL \
-            "https://chrome-infra-packages.appspot.com/dl/infra/tools/cipd/linux-amd64/+/latest" \
-            -o /tmp/cipd && chmod +x /tmp/cipd
-          /tmp/cipd ensure -ensure-file - -root "${ZAP_DIR}" <<'EOF'
-          experimental/matter/zap/linux-amd64  version:v2025.10.23-nightly.2
-          EOF
-          # Confirm binary exists
-          ls -la "${ZAP_DIR}/zap-cli" || { echo "ERROR: zap-cli not found after install" >&2; exit 1; }
+          # Find the release tag that contains '2025.10.23' (jq is pre-installed on ubuntu runners)
+          RELEASE_TAG=$(gh api repos/project-chip/zap/releases \
+            | jq -r '[.[] | select(.tag_name | contains("2025.10.23"))][0].tag_name')
+          echo "ZAP release: ${RELEASE_TAG}"
+          # Download the Linux x64 zip from that release
+          gh release download "${RELEASE_TAG}" \
+            --repo project-chip/zap \
+            --pattern "*linux*x64*.zip" \
+            --dir /tmp/zap-dl
+          find /tmp/zap-dl -name "*.zip" | head -1 | xargs -I{} unzip -q {} -d "${ZAP_DIR}"
+          # Make zap-cli executable and record its directory
+          find "${ZAP_DIR}" -name "zap-cli" -type f -exec chmod +x {} \;
+          ZAP_CLI=$(find "${ZAP_DIR}" -name "zap-cli" -type f | head -1)
+          if [ -z "${ZAP_CLI}" ]; then
+            echo "ERROR: zap-cli not found after extraction" >&2
+            ls -laR "${ZAP_DIR}/"
+            exit 1
+          fi
+          echo "zap-cli: ${ZAP_CLI}"
+          echo "ZAP_INSTALL_PATH=$(dirname "${ZAP_CLI}")" >> "$GITHUB_ENV"
 
-      - name: Set ZAP_INSTALL_PATH
-        run: echo "ZAP_INSTALL_PATH=$HOME/zap-cli" >> "$GITHUB_ENV"
+      - name: Set ZAP_INSTALL_PATH (cache hit)
+        if: steps.cache-zap.outputs.cache-hit == 'true'
+        run: |
+          ZAP_CLI=$(find "$HOME/zap-cli" -name "zap-cli" -type f | head -1)
+          echo "ZAP_INSTALL_PATH=$(dirname "${ZAP_CLI}")" >> "$GITHUB_ENV"
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build matter_lighting
