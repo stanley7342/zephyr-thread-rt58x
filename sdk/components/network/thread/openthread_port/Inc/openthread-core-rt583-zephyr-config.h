@@ -54,8 +54,11 @@
 #define OPENTHREAD_CONFIG_MAC_MAX_TX_ATTEMPTS_DIRECT             4
 #define OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_DIRECT   4
 
-/* Heap — use platform malloc (newlib) */
-#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (8 * 1024)
+/* Heap — internal pool for OT dynamic allocations.
+ * 4 KB is sufficient for FTD idle state and initial BLE commissioning;
+ * Thread network join and SRP client registration may consume up to ~6 KB.
+ * Reduced from 8 KB so the freed 4 KB can go to CONFIG_CHIP_MALLOC_SYS_HEAP_SIZE. */
+#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (4 * 1024)
 
 /* CoAP API — needed for OTA subsystem */
 #define OPENTHREAD_CONFIG_COAP_API_ENABLE                1

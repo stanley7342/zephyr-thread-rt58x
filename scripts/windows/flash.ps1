@@ -13,9 +13,11 @@
       3. 環境變數 OPENOCD_RT58X
 
 .PARAMETER p
-    燒錄目標：thread 或 bootloader。
-      thread     → build\thread\thread_zephyr.bin  @ 0x10000
-      bootloader → build\bootloader\bootloader_zephyr.bin  @ 0x0
+    燒錄目標。
+      thread          → build\thread\thread_zephyr.bin          @ 0x10000
+      bootloader      → build\bootloader\bootloader_zephyr.bin  @ 0x0
+      test_hci        → build\test_hci\zephyr\zephyr.bin        @ 0x0
+      matter_lighting → build\matter_lighting\*_zephyr.bin      @ 0x0
 
 .PARAMETER Bin
     直接指定 binary 路徑（搭配 -Addr 使用）。
@@ -25,12 +27,13 @@
 
 .EXAMPLE
     .\scripts\windows\flash.ps1 -p thread
-    .\scripts\windows\flash.ps1 -p bootloader
+    .\scripts\windows\flash.ps1 -p test_hci
+    .\scripts\windows\flash.ps1 -p matter_lighting
     .\scripts\windows\flash.ps1 -Bin build\thread\thread_zephyr.bin -Addr 0x10000
 #>
 
 param(
-    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "matter_lighting")]
+    [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci", "matter_lighting")]
     [string] $p      = "",
     [string] $Bin    = "",
     [string] $Addr   = "",
@@ -57,6 +60,7 @@ if ($p) {
                 "hello_world" { $Bin = Join-Path $projectDir "build\hello_world${slotSuffix}\zephyr\zephyr.signed.bin" }
                 "test_flash"  { $Bin = Join-Path $projectDir "build\test_flash${slotSuffix}\zephyr\zephyr.signed.bin" }
                 "ble_hrs"          { $Bin = Join-Path $projectDir "build\ble_hrs${slotSuffix}\zephyr\zephyr.signed.bin" }
+                "test_hci"         { $Bin = Join-Path $projectDir "build\test_hci\zephyr\zephyr.bin" }
                 "matter_lighting"  { $Bin = Join-Path $projectDir "build\matter_lighting\matter_lighting_zephyr.bin" }
                 "bootloader"       { $Bin = Join-Path $projectDir "build\bootloader\bootloader_zephyr.bin" }
                 default       { $Bin = Join-Path $projectDir "build\${p}${slotSuffix}\zephyr\zephyr.bin" }
@@ -67,6 +71,7 @@ if ($p) {
         if ($NoMCUboot)                          { $Addr = "0x0" }
         elseif ($Slot1)                          { $Addr = "0x90000" }
         elseif ($p -eq "bootloader")             { $Addr = "0x0" }
+        elseif ($p -eq "test_hci")               { $Addr = "0x0" }
         elseif ($p -eq "matter_lighting")        { $Addr = "0x0" }
         else                                     { $Addr = "0x10000" }
     }

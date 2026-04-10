@@ -86,6 +86,18 @@ static hosal_rf_cmd_state_t ghosal_rf_cmd_state_q;
  * Initial count = 1 (given) so the first xSemaphoreTake succeeds. */
 static K_SEM_DEFINE(g_rf_cmd_sem, 1, 1);
 
+/* ── Wake-up retry work item ────────────────────────────────────────────────
+ * In multi-protocol mode the RF MCU only checks the BLE HCI command queue
+ * when transitioning from SLEEP (pwr=0x02) → NORMAL (pwr=0x03).  If a
+ * BLE command is sent while the RF MCU is already in NORMAL state (active
+ * 802.15.4), the command sits in the queue until the RF MCU next sleeps.
+ * This delayable work item fires every 150 ms while a command is pending
+ * (g_rf_cmd_sem count == 0) and calls RfMcu_HostWakeUpMcu() to catch the
+ * RF MCU on its next sleep cycle.                                           */
+static void rf_wake_retry_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(g_rf_wake_retry, rf_wake_retry_fn);
+/* rf_wake_retry_fn body is defined below, after s_isr_count / s_evt_count. */
+
 /* Task-notification semaphore waking __rf_proc (replaces task notification).
  * Initial count = 0 so __rf_proc blocks until the first __rf_signal(). */
 static K_SEM_DEFINE(g_rf_notify_sem, 0, 1);
@@ -146,7 +158,12 @@ __STATIC_FORCEINLINE void __rf_signal(void) {
     k_sem_give(&g_rf_notify_sem);
 }
 
+uint32_t s_isr_count;
+uint8_t  s_last_int_status;   /* last intStatus seen by ISR — visible from HCI driver */
 static void __rf_event_callback(uint8_t intStatus) {
+    s_isr_count++;
+    s_last_int_status = intStatus;
+    printk("[RF-ISR] #%u sts=0x%02x\n", s_isr_count, intStatus);
     RfMcu_InterruptClear(intStatus);
 
     if (intStatus & HOSAL_RF_EVENT_STS) {
@@ -185,6 +202,22 @@ static void __rf_tx_data_queue_init(void) {
     }
 }
 
+uint32_t s_evt_count;
+
+static void rf_wake_retry_fn(struct k_work *work)
+{
+    if (k_sem_count_get(&g_rf_cmd_sem) == 0) {
+        /* Command still pending — retry WAKE_UP to catch RF MCU on next sleep */
+        uint8_t pwr = RfMcu_PowerStateCheck();
+        printk("[RF-RETRY] pwr=0x%02x isr=%u evt=%u\n",
+               pwr, s_isr_count, s_evt_count);
+        RfMcu_HostWakeUpMcu();
+        RfMcu_HostCtrl(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
+        k_work_reschedule(&g_rf_wake_retry, K_MSEC(150));
+    }
+    /* else: sem available — command completed, stop retrying */
+}
+
 __STATIC_FORCEINLINE void handle_event_status(void) {
     RF_MCU_RX_CMDQ_ERROR rxCmdError = RF_MCU_RX_CMDQ_ERR_INIT;
     uint32_t event_len = 0;
@@ -192,6 +225,9 @@ __STATIC_FORCEINLINE void handle_event_status(void) {
 
     event_len = RfMcu_EvtQueueRead(g_event_buffer, &rxCmdError);
     if (rxCmdError == RF_MCU_RX_CMDQ_GET_SUCCESS) {
+        s_evt_count++;
+        printk("[RF-EVT] #%u type=0x%02x len=%u\n",
+               s_evt_count, g_event_buffer[0], event_len);
         switch (g_event_buffer[0]) {
         case HOSAL_RF_HCI_EVENT:
             if (g_hci_evt_cb) {
@@ -293,6 +329,7 @@ static void __rf_check_state(void) {
 }
 
 /* RF event processing thread (replaces FreeRTOS __rf_proc task). */
+uint32_t s_proc_wakeups;
 static void __rf_proc(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1);
@@ -301,6 +338,11 @@ static void __rf_proc(void *p1, void *p2, void *p3)
 
     while (1) {
         k_sem_take(&g_rf_notify_sem, K_FOREVER);
+        s_proc_wakeups++;
+        printk("[RF-PROC] wake #%u rp=%u wp=%u\n",
+               s_proc_wakeups,
+               ghosal_rf_cmd_state_q.rp,
+               ghosal_rf_cmd_state_q.wp);
         __rf_check_state();
     }
 }
@@ -932,9 +974,23 @@ static hosal_rf_status_t __rf_15p4_op_pan_idx_set(uint32_t pan_idx) {
 int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     /* Release FreeRTOS irq_lock before blocking so __rf_proc can run. */
     uint32_t nest = _crit_unlock();
-    printk("[RF-CMD] write_command: taking sem (count=%d)\n",
-           k_sem_count_get(&g_rf_cmd_sem));
-    k_sem_take(&g_rf_cmd_sem, K_FOREVER);
+    printk("[RF-CMD] write_command: taking sem (count=%d) len=%u hdr=0x%02x\n",
+           k_sem_count_get(&g_rf_cmd_sem), command_len,
+           command_len > 0 ? command_ptr[0] : 0xFF);
+    int sem_rc = k_sem_take(&g_rf_cmd_sem, K_SECONDS(5));
+    if (sem_rc != 0) {
+        printk("[RF-CMD] *** SEM TIMEOUT (5s) — previous cmd never got response ***\n");
+        printk("[RF-CMD]   pwr=0x%02x notify_sem=%d evt_count=%u\n",
+               RfMcu_PowerStateCheck(),
+               k_sem_count_get(&g_rf_notify_sem), s_evt_count);
+        printk("[RF-CMD]   rp=%u wp=%u\n",
+               ghosal_rf_cmd_state_q.rp, ghosal_rf_cmd_state_q.wp);
+        /* Force-recover so subsequent commands can proceed */
+        k_sem_reset(&g_rf_cmd_sem);
+        k_sem_give(&g_rf_cmd_sem);
+        /* Re-take with no wait — should succeed now */
+        k_sem_take(&g_rf_cmd_sem, K_NO_WAIT);
+    }
     printk("[RF-CMD] write_command: sem taken\n");
     _crit_relock(nest);
     RfMcu_HostWakeUpMcu();
@@ -950,6 +1006,14 @@ int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
         k_yield();
         return HOSAL_RF_STATUS_NO_MEMORY;
     }
+    /* In multi-protocol mode the RF MCU only checks the BLE HCI command
+     * queue when transitioning from SLEEP (pwr=0x02) → NORMAL.  If pwr is
+     * already 0x03 (active 802.15.4), HostWakeUpMcu() is a no-op.  Send
+     * an initial WAKE_UP pulse now, and schedule periodic retries (every
+     * 150 ms) to catch the RF MCU on its next natural sleep cycle.
+     * Must be AFTER CmdQueueSend: DMA sets DMA_EN first, WAKE_UP comes after. */
+    RfMcu_HostCtrl(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
+    k_work_reschedule(&g_rf_wake_retry, K_MSEC(150));
     return HOSAL_RF_STATUS_SUCCESS;
 }
 

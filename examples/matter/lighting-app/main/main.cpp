@@ -17,7 +17,7 @@
 
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
-#define APP_STACK_SIZE  4096
+#define APP_STACK_SIZE  8192
 
 K_THREAD_STACK_DEFINE(app_stack, APP_STACK_SIZE);  /* non-static for extern in AppTask.cpp */
 static struct k_thread app_thread;

@@ -44,6 +44,7 @@ void ot_radioInit(void);
 void ot_alarmInit(void);
 void ot_entropy_init(void);
 void ot_set_instance(struct otInstance *inst);
+void chip_heap_print_stats(void);
 }
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
@@ -264,7 +265,7 @@ CHIP_ERROR AppTask::Init()
     printk("[APP] ot_entropy_init done\n");
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
-    /* Explicitly initialise the OT instance on this thread (14 KB stack).
+    /* Explicitly initialise the OT instance on this thread (8 KB stack).
      * openthread_init() calls otInstanceInitSingle() which needs ~4 KB of
      * stack — far more than the 2 KB main thread used during POST_KERNEL
      * device init.  After this call openthread_get_default_instance() returns
@@ -381,6 +382,17 @@ CHIP_ERROR AppTask::Init()
     sServerInitParams.dataModelProvider =
         chip::app::CodegenDataModelProviderInstance(sServerInitParams.persistentStorageDelegate);
 
+    /* Stack watermark after full Init() — measures actual peak stack depth. */
+    {
+        uintptr_t sp;
+        __asm__ volatile("mov %0, sp" : "=r"(sp));
+        extern char app_stack[];
+        uintptr_t base = (uintptr_t)app_stack;
+        uintptr_t top  = base + 8192; /* matches APP_STACK_SIZE in main.cpp */
+        printk("[STACK] after Init SP=0x%08x used=%u free=%u\n",
+               (unsigned)sp, (unsigned)(top - sp), (unsigned)(sp - base));
+    }
+
     return CHIP_NO_ERROR;
 }
 
@@ -390,8 +402,15 @@ static void ServerInitWork(intptr_t arg)
 {
     auto * serverParams = reinterpret_cast<chip::CommonCaseDeviceServerInitParams *>(arg);
 
+    {
+        uintptr_t sp;
+        __asm__ volatile("mov %0, sp" : "=r"(sp));
+        printk("[CHIP-TASK] ServerInitWork SP=0x%08x\n", (unsigned)sp);
+    }
+    chip_heap_print_stats();
     printk("[APP] Server::Init (from event loop)...\n");
     CHIP_ERROR err = chip::Server::GetInstance().Init(*serverParams);
+    chip_heap_print_stats();
     printk("[APP] Server::Init returned err=%d\n", err.AsInteger());
     if (err != CHIP_NO_ERROR) {
         printk("[APP] Server::Init FAILED\n");
@@ -400,12 +419,17 @@ static void ServerInitWork(intptr_t arg)
 
     /* Set initial light state */
     AppTask & task = AppTask::Instance();
+    printk("[APP] SetLightOn...\n");
     task.SetLightOn(task.IsLightOn());
+    printk("[APP] UpdateClusterState...\n");
     task.UpdateClusterState();
+    printk("[APP] UpdateClusterState done\n");
 
     /* Print commissioning QR code and manual pairing code */
+    printk("[APP] PrintOnboardingCodes...\n");
     PrintOnboardingCodes(chip::RendezvousInformationFlags(
         chip::RendezvousInformationFlag::kBLE));
+    printk("[APP] PrintOnboardingCodes done\n");
 }
 
 /* ── Main event loop ────────────────────────────────────────────────────────── */
@@ -434,8 +458,10 @@ CHIP_ERROR AppTask::StartApp()
         /* Get pointer to the static serverParams in Init() — it's the only
          * CommonCaseDeviceServerInitParams we created. */
         extern chip::CommonCaseDeviceServerInitParams * gServerInitParams;
-        PlatformMgr().ScheduleWork(ServerInitWork,
-                                   reinterpret_cast<intptr_t>(gServerInitParams));
+        err = PlatformMgr().ScheduleWork(ServerInitWork,
+                                         reinterpret_cast<intptr_t>(gServerInitParams));
+        VerifyOrReturnError(err == CHIP_NO_ERROR, err,
+                            LOG_ERR("ScheduleWork failed: %" CHIP_ERROR_FORMAT, err.Format()));
     }
 
 #ifdef CONFIG_NET_L2_OPENTHREAD

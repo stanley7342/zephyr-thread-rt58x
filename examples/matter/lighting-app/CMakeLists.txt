@@ -62,6 +62,26 @@ chip_configure_data_model(app
     MATTER_IDLS ${CMAKE_CURRENT_LIST_DIR}/lighting-app.matter
 )
 
+# ── ODR fix: remove server sources from CMake build ──────────────────────────
+# chip_configure_data_model(INCLUDE_SERVER) adds Server.cpp and
+# CommissioningWindowManager.cpp to the CMake app target.  These are ALSO
+# compiled by the GN build (into libCHIP.a) which uses its own include-path
+# order for mbedTLS / TF-PSA-Crypto headers.  PASESession.cpp is compiled
+# ONLY by GN.  If CMake and GN resolve psa_pake_operation_t to different
+# struct sizes, CommissioningWindowManager (which embeds PASESession) has an
+# ODR violation: the GN-compiled PASESession::Clear() writes past the
+# CMake-allocated CommissioningWindowManager boundary, corrupting adjacent
+# Server members.  Removing these two files from the CMake build forces the
+# linker to use the GN-compiled .o files from libCHIP.a, where all TUs see
+# the same headers.  --allow-multiple-definition (already set) ensures the
+# remaining duplicates (from other server sources) link without error.
+get_target_property(_app_srcs app SOURCES)
+list(REMOVE_ITEM _app_srcs
+    "${CHIP_ROOT}/src/app/server/Server.cpp"
+    "${CHIP_ROOT}/src/app/server/CommissioningWindowManager.cpp"
+)
+set_property(TARGET app PROPERTY SOURCES ${_app_srcs})
+
 # ── Include directories ──────────────────────────────────────────────────────
 set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
 
@@ -82,7 +102,25 @@ target_sources(app PRIVATE
     main/main.cpp
     main/AppTask.cpp
     main/ZclCallbacks.cpp
+    main/MallocWrappers.cpp
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
+)
+
+# Redirect ALL heap allocations to our sys_heap wrapper (MallocWrappers.cpp).
+# --wrap=malloc/calloc/realloc/free covers CHIP SDK and C++ operator new/delete.
+# --wrap=_malloc_r/... covers newlib reentrant calls (strdup, printf internals,
+# etc.) that bypass the public malloc symbol and call _malloc_r directly.
+# Without the _malloc_r wraps, strdup() during Server::Init exhausts the 2 KB
+# k_heap (shared with BT GATT) → NULL → CHIP_ERROR_NO_MEMORY.
+zephyr_ld_options(
+    -Wl,--wrap=malloc
+    -Wl,--wrap=calloc
+    -Wl,--wrap=realloc
+    -Wl,--wrap=free
+    -Wl,--wrap=_malloc_r
+    -Wl,--wrap=_free_r
+    -Wl,--wrap=_calloc_r
+    -Wl,--wrap=_realloc_r
 )
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────

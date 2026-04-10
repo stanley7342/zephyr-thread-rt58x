@@ -27,12 +27,17 @@
 #include "hosal_rf.h"
 #include "hosal_lpm.h"
 #include "rf_mcu.h"
+#include "ruci.h"
 /* #include "flashctl.h" — not safe during early BLE setup */
 
 #define LOG_PREFIX "[HCI] "
 
 /* ISR count from soc.c */
 extern volatile uint32_t rt583_comm_irq_count;
+/* RF event processing counters from hosal_rf.c */
+extern uint32_t s_isr_count;
+extern uint32_t s_proc_wakeups;
+extern uint32_t s_evt_count;
 
 /* BLE HCI H:4 packet type indicators */
 #define H4_CMD  0x01
@@ -148,7 +153,15 @@ static int hci_evt_cb(void *p_arg)
 
 	struct net_buf *buf = bt_buf_get_evt(evt_code, false, K_NO_WAIT);
 	if (!buf) {
-		printk(LOG_PREFIX "drop evt 0x%02x\n", evt_code);
+		printk(LOG_PREFIX "drop evt 0x%02x (no buf)\n", evt_code);
+		/* CRITICAL: even if we can't forward the event to the host,
+		 * we must still return 1 for CMD_COMPLETE/CMD_STATUS so that
+		 * handle_event_status() releases g_rf_cmd_sem.  Without this,
+		 * a buffer-pool exhaustion permanently deadlocks the HCI path. */
+		if (evt_code == BT_HCI_EVT_CMD_COMPLETE ||
+		    evt_code == BT_HCI_EVT_CMD_STATUS) {
+			return 1;
+		}
 		return 0;
 	}
 
@@ -166,9 +179,22 @@ static int hci_evt_cb(void *p_arg)
 
 static int hci_acl_cb(void *p_arg)
 {
+	/*
+	 * Rafael BLE controller RX ACL wire format (mirrors TX):
+	 *   [0]   H4 type       (0x02)
+	 *   [1-2] sequence      (uint16 LE, RF-internal RX counter — discard)
+	 *   [3-4] handle+flags  (uint16 LE, HCI ACL header)
+	 *   [5-6] data_len      (uint16 LE, payload byte count)
+	 *   [7+]  payload
+	 *
+	 * bt_buf_get_rx(BT_BUF_ACL_IN) already records the H:4 type in the
+	 * net_buf metadata, so we must NOT copy buf_raw[0].
+	 * We must also skip buf_raw[1-2] (sequence) — it is not part of HCI.
+	 * The HCI ACL content passed to the host starts at buf_raw[3].
+	 */
 	uint8_t *buf_raw = (uint8_t *)p_arg;
-	uint16_t data_len = sys_get_le16(&buf_raw[3]);
-	uint16_t total = 5 + data_len;
+	uint16_t data_len = sys_get_le16(&buf_raw[5]);
+	uint16_t total    = 7u + data_len;   /* type(1)+seq(2)+hdr(4)+payload */
 
 	dump_hex("RX-ACL", buf_raw, total);
 
@@ -178,10 +204,8 @@ static int hci_acl_cb(void *p_arg)
 		return 0;
 	}
 
-	/* bt_buf_get_rx() prepends the H:4 type byte (0x02),
-	 * so skip buf_raw[0] to avoid duplication. */
-	net_buf_add_mem(buf, &buf_raw[1], total - 1);
-	/* printk(LOG_PREFIX "ACL-IN len=%u\n", buf->len); */
+	/* Copy handle+flags(2) + data_len(2) + payload, skipping type and seq. */
+	net_buf_add_mem(buf, &buf_raw[3], 4u + data_len);
 	k_fifo_put(&rx_fifo, buf);
 	return 0;
 }
@@ -215,21 +239,36 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 	decode_tx(buf->data, buf->len);
 
 	switch (type) {
-	case H4_CMD:
+	case H4_CMD: {
+		uint32_t irq_before = rt583_comm_irq_count;
+		uint32_t isr_before = s_isr_count;
+		uint32_t proc_before = s_proc_wakeups;
+		uint32_t evt_before = s_evt_count;
+		printk(LOG_PREFIX "pre-send pwr=0x%02x irq=%u isr=%u proc=%u evt=%u\n",
+		       RfMcu_PowerStateCheck(), irq_before,
+		       isr_before, proc_before, evt_before);
 		for (int i = 0; i < SEND_RETRY_MAX; i++) {
 			rc = hosal_rf_write_command(buf->data, buf->len);
 			if (rc == 0) {
 				break;
 			}
-			printk(LOG_PREFIX "cmd retry %d\n", i);
+			printk(LOG_PREFIX "cmd retry %d rc=%d pwr=0x%02x\n",
+			       i, rc, RfMcu_PowerStateCheck());
 			k_sleep(SEND_RETRY_DELAY);
 		}
+		printk(LOG_PREFIX "post-send rc=%d irq=%u(+%u) isr=%u(+%u) proc=%u(+%u) evt=%u(+%u)\n",
+		       rc,
+		       rt583_comm_irq_count, rt583_comm_irq_count - irq_before,
+		       s_isr_count, s_isr_count - isr_before,
+		       s_proc_wakeups, s_proc_wakeups - proc_before,
+		       s_evt_count, s_evt_count - evt_before);
 		if (rc != 0) {
 			printk(LOG_PREFIX "cmd send failed\n");
 			net_buf_unref(buf);
 			return -EIO;
 		}
 		break;
+	}
 	case H4_ACL: {
 		/*
 		 * Rafael BLE controller wire format (hosal_rf_write_tx_data):
@@ -313,13 +352,51 @@ static int hci_rt58x_setup(const struct device *dev,
 	printk(LOG_PREFIX "setup: BD ADDR=%02X:%02X:%02X:%02X:%02X:%02X\n",
 	       addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
 
+	int rc;
+
+	/* ── Step 0: RUCI INITIATE_BLE ──────────────────────────────────────
+	 * In multi-protocol mode the RF MCU scheduler must be told that BLE
+	 * is active (analogous to RUCI_INITIATE_ZIGBEE on the OT side).
+	 * Without this, the BLE HCI command queue is not polled while the RF
+	 * MCU is in NORMAL state doing 802.15.4 — causing BLE commands like
+	 * LE Set Random Address (0x2005) to time out.
+	 *
+	 * Packet: [0x12=PCI_BLE_CMD_HEADER, 0x01=INITIATE_BLE code, 0x00=len]
+	 * Response: RUCI_PCI_EVENT confirmation → handle_event_status releases
+	 * g_rf_cmd_sem automatically even if g_pci_event_cb is NULL.          */
+	if (hci_rt58x_rf_already_init) {
+		uint8_t ruci_ble_init[RUCI_LEN_INITIATE_BLE];
+		SET_RUCI_PARA_INITIATE_BLE(ruci_ble_init);
+		RUCI_ENDIAN_CONVERT(ruci_ble_init, RUCI_INITIATE_BLE);
+
+		printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE pwr=0x%02x\n",
+		       RfMcu_PowerStateCheck());
+		for (int i = 0; i < SEND_RETRY_MAX; i++) {
+			rc = hosal_rf_write_command(ruci_ble_init,
+						    sizeof(ruci_ble_init));
+			if (rc == 0) {
+				break;
+			}
+			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE retry %d\n", i);
+			k_sleep(SEND_RETRY_DELAY);
+		}
+		if (rc != 0) {
+			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE FAILED rc=%d\n", rc);
+			/* Non-fatal — continue with HCI setup */
+		} else {
+			/* Wait for RUCI confirmation (releases g_rf_cmd_sem) */
+			k_sleep(K_MSEC(20));
+			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE done pwr=0x%02x\n",
+			       RfMcu_PowerStateCheck());
+		}
+	}
+
 	uint8_t cmd[] = {
 		H4_CMD, 0x01, 0xFC, RT58X_VS_SET_CTRL_INFO_PLEN,
 		addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
 		RT58X_BLE_VERSION,                     /* 0x0C = BT 5.3 */
 		0x64, 0x08,                            /* Company ID 0x0864 LE */
 	};
-	int rc;
 
 	printk(LOG_PREFIX "setup: vendor Set Controller Info\n");
 	dump_hex("TX-SETUP", cmd, sizeof(cmd));

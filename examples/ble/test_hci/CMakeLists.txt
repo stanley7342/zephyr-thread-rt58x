@@ -28,4 +28,17 @@ target_sources(app PRIVATE
 if(CONFIG_BLE_RT583)
     set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
     include(${RT583_PROJECT_DIR}/subsys/ble/CMakeLists.txt)
+
+    # Override: enable multi-protocol (BLE + 802.15.4) firmware blob so that
+    # hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL) succeeds in this test.
+    # subsys/ble sets CONFIG_RF_FW_INCLUDE_BLE=TRUE / PCI=FALSE (BLE-only).
+    # We need MULTI_2P4G=TRUE and PCI=TRUE to load the multi-protocol binary.
+    target_compile_options(app PRIVATE
+        -UCONFIG_RF_FW_INCLUDE_BLE
+        -DCONFIG_RF_FW_INCLUDE_BLE=FALSE
+        -UCONFIG_RF_FW_INCLUDE_PCI
+        -DCONFIG_RF_FW_INCLUDE_PCI=TRUE
+        -UCONFIG_RF_FW_INCLUDE_MULTI_2P4G
+        -DCONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
+    )
 endif()

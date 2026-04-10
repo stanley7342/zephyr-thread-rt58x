@@ -8,9 +8,11 @@
     請先完成 install.ps1 環境建置再使用本腳本。
 
 .PARAMETER p
-    編譯目標：thread 或 bootloader。
-      thread     → build\thread\thread_zephyr.bin
-      bootloader → build\bootloader\bootloader_zephyr.bin
+    編譯目標。
+      thread          → build\thread\thread_zephyr.bin
+      bootloader      → build\bootloader\bootloader_zephyr.bin
+      test_hci        → build\test_hci\test_hci_zephyr.bin
+      matter_lighting → build\matter_lighting\matter_lighting_zephyr.bin
 
 .PARAMETER NoPristine
     增量編譯（跳過 clean，加快重複編譯速度）。
@@ -68,6 +70,8 @@ if (-not (Test-Path $tfPsaCrypto)) {
     if ($LASTEXITCODE -ne 0) { throw "west update tf-psa-crypto 失敗" }
     Pop-Location
 }
+
+$env:CMAKE_BUILD_PARALLEL_LEVEL = [System.Environment]::ProcessorCount
 
 $pristineFlag  = if ($NoPristine) { "auto" } else { "always" }
 $modeLabel     = if ($NoPristine) { "增量" } else { "Clean" }
