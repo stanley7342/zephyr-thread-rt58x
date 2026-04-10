@@ -161,10 +161,13 @@ zephyr_ld_options(
 )
 
 # ECP enum compatibility: CHIP (TF-PSA-Crypto) passes SECP256R1=1 but OT's linked
-# mbedtls_ecp_group_load (mbedTLS 2.x) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
+# mbedtls_ecp_group_load (mbedTLS 3.6.0) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
 # --wrap redirects all callers through __wrap_mbedtls_ecp_group_load (ecp_enum_compat.c)
 # which translates 1→3 before forwarding to OT's __real implementation.
+# The muladd and mul wraps add diagnostic logging to identify PASE failure root cause.
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_muladd)
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_mul)
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
 if(CONFIG_BLE_RT583)

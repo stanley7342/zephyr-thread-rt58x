@@ -111,13 +111,14 @@ if ($p -eq "bootloader") {
     Write-Host "    Overlay : $overlay"
     Write-Host ""
 
-    $overlayFwd  = $overlay -replace '\\','/'
+    $overlayFwd     = $overlay -replace '\\','/'
+    $dtcOverlayFwd  = (Join-Path $projectDir "examples\bootloader\mcuboot-matter.overlay") -replace '\\','/'
     $mcubootSrc  = Join-Path $Workspace "bootloader\mcuboot\boot\zephyr"
     $mcubootFwd  = $mcubootSrc -replace '\\','/'
     $westArgs = Build-WestArgs `
         -Source      $mcubootFwd `
         -BuildSubdir "$projectName/build/$p" `
-        -ExtraCmake  @("-DOVERLAY_CONFIG=$overlayFwd")
+        -ExtraCmake  @("-DOVERLAY_CONFIG=$overlayFwd", "-DDTC_OVERLAY_FILE=$dtcOverlayFwd")
     Push-Location $Workspace
     & $python312 @westArgs
     $rc = $LASTEXITCODE
