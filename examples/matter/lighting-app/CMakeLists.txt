@@ -17,7 +17,8 @@ if(NOT EXISTS "${CHIP_ROOT}/src/lib/core/CHIPError.h")
     message(FATAL_ERROR
         "connectedhomeip not found at ${CHIP_ROOT}.\n"
         "Set the CHIP_ROOT environment variable or clone it to ${WORKSPACE_DIR}/connectedhomeip:\n"
-        "  git clone --recurse-submodules https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip")
+        "  git clone --recurse-submodules https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip\n"
+        "  cd ${WORKSPACE_DIR}/connectedhomeip && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
 endif()
 
 get_filename_component(GEN_DIR "${CHIP_ROOT}/zzz_generated" ABSOLUTE)

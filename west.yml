@@ -9,6 +9,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: mcuboot
       url-base: https://github.com/mcu-tools
+    - name: matter
+      url-base: https://github.com/project-chip
 
   projects:
     - name: zephyr
@@ -35,6 +37,12 @@ manifest:
       remote: mcuboot
       revision: cf5810201c84d6e266aeda2abdab80854066ac08
       path: bootloader/mcuboot
+
+    - name: connectedhomeip
+      remote: matter
+      revision: fdb31dbcb3ebe000ad3e41b386e90849937948f9
+      path: connectedhomeip
+      import: false
 
   self:
     path: zephyr-thread-rt58x
