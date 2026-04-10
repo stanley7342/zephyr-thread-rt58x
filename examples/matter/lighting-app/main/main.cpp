@@ -13,7 +13,6 @@
 #include <system/SystemError.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/printk.h>
 
 LOG_MODULE_REGISTER(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
@@ -24,17 +23,6 @@ static struct k_thread app_thread;
 
 static void app_thread_fn(void *, void *, void *)
 {
-    /* Stack depth diagnostic: print SP offset from stack base at thread entry.
-     * With a healthy 16 KB stack this should show < 200 bytes used here. */
-    {
-        uintptr_t sp;
-        __asm__ volatile("mov %0, sp" : "=r"(sp));
-        uintptr_t base = (uintptr_t)app_stack;
-        uintptr_t top  = base + APP_STACK_SIZE;
-        printk("[STACK] entry SP=0x%08x base=0x%08x used=%u free=%u\n",
-               (unsigned)sp, (unsigned)base,
-               (unsigned)(top - sp), (unsigned)(sp - base));
-    }
     CHIP_ERROR err = AppTask::Instance().StartApp();
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("Exited with code %" CHIP_ERROR_FORMAT, err.Format());
@@ -43,8 +31,6 @@ static void app_thread_fn(void *, void *, void *)
 
 int main()
 {
-    printk("[MAIN] start\n");
-
     k_thread_create(&app_thread, app_stack, APP_STACK_SIZE,
                     app_thread_fn, NULL, NULL, NULL,
                     K_PRIO_PREEMPT(1), 0, K_NO_WAIT);

@@ -2,7 +2,7 @@
  * RT583 Matter Lighting App — Application task.
  *
  * Initialises the CHIP/Matter stack and drives the lighting state machine.
- * Hardware LED is currently simulated via printk — wire to a real GPIO
+ * Hardware LED is currently a stub — wire to a real GPIO
  * using Zephyr's gpio_pin_set() when the EVB LED pin is known.
  */
 
@@ -23,8 +23,6 @@
 #include <lib/support/CodeUtils.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <setup_payload/OnboardingCodesUtil.h>
-#include <setup_payload/QRCodeSetupPayloadGenerator.h>
-#include <setup_payload/ManualSetupPayloadGenerator.h>
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
 #include <platform/OpenThread/GenericNetworkCommissioningThreadDriver.h>
@@ -34,9 +32,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/random/random.h>
-#include <zephyr/sys/printk.h>
-#include <psa/crypto.h>
 
 extern "C" {
 #include "hosal_rf.h"
@@ -46,7 +41,6 @@ void ot_radioInit(void);
 void ot_alarmInit(void);
 void ot_entropy_init(void);
 void ot_set_instance(struct otInstance *inst);
-void chip_heap_print_stats(void);
 }
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
@@ -90,11 +84,12 @@ chip::CommonCaseDeviceServerInitParams * gServerInitParams = nullptr;
 
 void AppTask::SetLed(bool on, uint8_t level)
 {
-    printk("[LED] %s  level=%u/254\n", on ? "ON " : "OFF", level);
     /* TODO: wire to GPIO
      * const struct device *led = DEVICE_DT_GET(DT_ALIAS(led0));
      * gpio_pin_set(led, PIN, on ? 1 : 0);
      */
+    ARG_UNUSED(on);
+    ARG_UNUSED(level);
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────────── */
@@ -136,12 +131,10 @@ void AppTask::UpdateClusterState()
 
 void AppTask::IdentifyStartHandler(Identify *)
 {
-    printk("[LED] Identify: blinking\n");
 }
 
 void AppTask::IdentifyStopHandler(Identify *)
 {
-    printk("[LED] Identify: stop\n");
     AppTask::Instance().SetLed(AppTask::Instance().IsLightOn(),
                                AppTask::Instance().GetLightLevel());
 }
@@ -221,20 +214,9 @@ CHIP_ERROR AppTask::Init()
      * radio init.  The BLE HCI driver (hci_rt58x_open) and OT radio layer
      * both require an initialized RF MCU; MULTI_PROTOCOL loads firmware that
      * supports both simultaneously. */
-    {
-        uintptr_t sp_before;
-        __asm__ volatile("mov %0, sp" : "=r"(sp_before));
-        printk("[STACK] before hosal_rf_init SP=0x%08x\n", (unsigned)sp_before);
-    }
-    printk("[APP] hosal_rf_init MULTI_PROTOCOL...\n");
     hosal_lpm_init();
     hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
     hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
-    {
-        uintptr_t sp_after;
-        __asm__ volatile("mov %0, sp" : "=r"(sp_after));
-        printk("[STACK] after hosal_rf_init SP=0x%08x\n", (unsigned)sp_after);
-    }
     /* IRQ 20 (COMM_SUBSYSTEM) is enabled inside hosal_rf_init → RfMcu_DmaInit
      * → NVIC_EnableIRQ AFTER SysRdySignalWait.  Do NOT enable it before
      * hosal_rf_init: gRfMcuIsrCfg.commsubsystem_isr is NULL until
@@ -242,29 +224,22 @@ CHIP_ERROR AppTask::Init()
      * corrupts RF MCU register state (RfMcu_SysRdySignalWait never exits). */
     k_sleep(K_MSEC(50));
     hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
-    printk("[APP] hosal_rf_init done\n");
 
     /* Initialise lmac15p4 radio layer for OpenThread (sets up RUCI callbacks,
      * channel, and MAC address from OTP/flash).  Must be called after
      * hosal_rf_init() so the RF MCU RUCI interface is ready. */
-    printk("[APP] ot_radioInit...\n");
     ot_radioInit();
-    printk("[APP] ot_radioInit done\n");
 
     /* Initialise the hardware alarm timer (TIMER3) used for OT microsecond
      * alarms.  Called here so TIMER3 is configured before openthread_init()
      * starts the OT work queue and may schedule the first alarm. */
-    printk("[APP] ot_alarmInit...\n");
     ot_alarmInit();
-    printk("[APP] ot_alarmInit done\n");
 
     /* Warm up the TRNG before otInstanceInitSingle() calls otPlatEntropyGet().
      * hosal_trng_get_random_number() requires the TRNG clock to be running;
      * this call exercises it once so any first-access latency is absorbed here
      * rather than deep inside otInstanceInitSingle(). */
-    printk("[APP] ot_entropy_init...\n");
     ot_entropy_init();
-    printk("[APP] ot_entropy_init done\n");
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
     /* Explicitly initialise the OT instance on this thread (8 KB stack).
@@ -272,62 +247,42 @@ CHIP_ERROR AppTask::Init()
      * stack — far more than the 2 KB main thread used during POST_KERNEL
      * device init.  After this call openthread_get_default_instance() returns
      * a valid pointer and InitThreadStack() no longer asserts. */
-    printk("[APP] openthread_init...\n");
     {
         int ot_err = openthread_init();
-        printk("[APP] openthread_init done, err=%d\n", ot_err);
+        if (ot_err != 0) {
+            LOG_ERR("openthread_init failed: %d", ot_err);
+        }
     }
     /* Sync our ot_instance accessor (used by ot_alarmTask / ot_radioTask)
      * with Zephyr's openthread_instance set by openthread_init(). */
     ot_set_instance(openthread_get_default_instance());
-    printk("[APP] ot_set_instance done\n");
 #endif
 
-    /* PSA entropy diagnostic — test before InitChipStack */
-    {
-        psa_status_t s1 = psa_crypto_init();
-        printk("[PSA] psa_crypto_init status=%d\n", (int)s1);
-        uint8_t rbuf[4] = {0};
-        psa_status_t s2 = psa_generate_random(rbuf, sizeof(rbuf));
-        printk("[PSA] psa_generate_random status=%d bytes=%02x%02x%02x%02x\n",
-               (int)s2, rbuf[0], rbuf[1], rbuf[2], rbuf[3]);
-        int cs = sys_csrand_get(rbuf, sizeof(rbuf));
-        printk("[CSRAND] sys_csrand_get ret=%d\n", cs);
-    }
-
-    printk("[APP] MemoryInit...\n");
     /* Initialise CHIP memory allocator */
     err = chip::Platform::MemoryInit();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("MemoryInit failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    printk("[APP] InitChipStack — enter...\n");
     /* Initialise CHIP device layer (BLE + OpenThread) */
     err = PlatformMgr().InitChipStack();
-    printk("[APP] InitChipStack — returned err=%d\n", err.AsInteger());
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitChipStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    printk("[APP] AddEventHandler...\n");
     /* Register device event handler */
     err = PlatformMgr().AddEventHandler(ChipEventHandler, 0);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("AddEventHandler failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
-    printk("[APP] InitThreadStack...\n");
     err = ThreadStackMgr().InitThreadStack();
-    printk("[APP] InitThreadStack returned err=%d\n", err.AsInteger());
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitThreadStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    printk("[APP] SetThreadDeviceType...\n");
     err = ConnectivityMgr().SetThreadDeviceType(
         ConnectivityManager::kThreadDeviceType_Router);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("SetThreadDeviceType failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
-    printk("[APP] ThreadNetworkDriver Init...\n");
     err = sThreadNetworkDriver.Init();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("ThreadNetworkDriver Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
@@ -347,17 +302,14 @@ CHIP_ERROR AppTask::Init()
         for (int idx = 1; idx <= 4; idx++) {
             struct net_if *iface = net_if_get_by_index(idx);
             if (iface) {
-                int r = net_if_up(iface);
-                printk("[APP] net_if_up(idx=%d %p) = %d\n", idx, iface, r);
+                net_if_up(iface);
             }
         }
-        printk("[APP] net_if default=%p\n", net_if_get_default());
         /* Give the stack a moment to assign the link-local address. */
         k_sleep(K_MSEC(200));
     }
 #endif
 
-    printk("[APP] ServerInit...\n");
     /* Initialise Matter server (GATT, mDNS, session management) */
     static chip::CommonCaseDeviceServerInitParams sServerInitParams;
     gServerInitParams = &sServerInitParams;
@@ -384,17 +336,6 @@ CHIP_ERROR AppTask::Init()
     sServerInitParams.dataModelProvider =
         chip::app::CodegenDataModelProviderInstance(sServerInitParams.persistentStorageDelegate);
 
-    /* Stack watermark after full Init() — measures actual peak stack depth. */
-    {
-        uintptr_t sp;
-        __asm__ volatile("mov %0, sp" : "=r"(sp));
-        extern char app_stack[];
-        uintptr_t base = (uintptr_t)app_stack;
-        uintptr_t top  = base + 8192; /* matches APP_STACK_SIZE in main.cpp */
-        printk("[STACK] after Init SP=0x%08x used=%u free=%u\n",
-               (unsigned)sp, (unsigned)(top - sp), (unsigned)(sp - base));
-    }
-
     return CHIP_NO_ERROR;
 }
 
@@ -404,55 +345,26 @@ static void ServerInitWork(intptr_t arg)
 {
     auto * serverParams = reinterpret_cast<chip::CommonCaseDeviceServerInitParams *>(arg);
 
-    {
-        uintptr_t sp;
-        __asm__ volatile("mov %0, sp" : "=r"(sp));
-        printk("[CHIP-TASK] ServerInitWork SP=0x%08x\n", (unsigned)sp);
-    }
-    chip_heap_print_stats();
-    printk("[APP] Server::Init (from event loop)...\n");
     CHIP_ERROR err = chip::Server::GetInstance().Init(*serverParams);
-    chip_heap_print_stats();
-    printk("[APP] Server::Init returned err=%d\n", err.AsInteger());
     if (err != CHIP_NO_ERROR) {
-        printk("[APP] Server::Init FAILED\n");
+        LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format());
         return;
     }
 
     /* Set initial light state */
     AppTask & task = AppTask::Instance();
-    printk("[APP] SetLightOn...\n");
     task.SetLightOn(task.IsLightOn());
-    printk("[APP] UpdateClusterState...\n");
     task.UpdateClusterState();
-    printk("[APP] UpdateClusterState done\n");
 
-    /* Print commissioning QR code and manual pairing code */
-    {
-        chip::PayloadContents payload;
-        GetPayloadContents(payload, chip::RendezvousInformationFlags(
-            chip::RendezvousInformationFlag::kBLE));
-
-        char buf[chip::QRCodeBasicSetupPayloadGenerator::kMaxQRCodeBase38RepresentationLength + 1];
-
-        chip::MutableCharSpan qrCode(buf);
-        if (GetQRCode(qrCode, payload) == CHIP_NO_ERROR) {
-            printk("\n[APP] QR Code URL:\n");
-            printk("      https://project-chip.github.io/connectedhomeip/qrcode.html?data=%s\n\n", qrCode.data());
-        }
-
-        chip::MutableCharSpan manualCode(buf);
-        if (GetManualPairingCode(manualCode, payload) == CHIP_NO_ERROR) {
-            printk("[APP] Manual pairing code: %s\n\n", manualCode.data());
-        }
-    }
+    /* Print commissioning QR code URL and manual pairing code */
+    PrintOnboardingCodes(chip::RendezvousInformationFlags(
+        chip::RendezvousInformationFlag::kBLE));
 }
 
 /* ── Main event loop ────────────────────────────────────────────────────────── */
 
 CHIP_ERROR AppTask::StartApp()
 {
-    printk("[APP] StartApp\n");
     CHIP_ERROR err = Init();
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("AppTask::Init() failed: %" CHIP_ERROR_FORMAT, err.Format());
@@ -462,7 +374,6 @@ CHIP_ERROR AppTask::StartApp()
     /* Start CHIP device layer event loop BEFORE Server::Init.
      * Server::Init → emberAfInit → cluster callbacks may call PostEventOrDie
      * which requires the event loop to be running. */
-    printk("[APP] StartEventLoopTask...\n");
     err = PlatformMgr().StartEventLoopTask();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("StartEventLoopTask failed: %" CHIP_ERROR_FORMAT, err.Format()));

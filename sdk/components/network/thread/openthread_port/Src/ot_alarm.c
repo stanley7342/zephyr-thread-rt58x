@@ -119,16 +119,9 @@ uint32_t otPlatTimeGetXtalAccuracy(void)
 }
 
 /* ── Millisecond alarm ───────────────────────────────────────────────────── */
-static bool s_alarm_logged;
 void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
     OT_UNUSED_VARIABLE(aInstance);
-
-    if (!s_alarm_logged) {
-        printk("[OT-ALARM] first otPlatAlarmMilliStartAt t0=%u dt=%u\n",
-               (unsigned)aT0, (unsigned)aDt);
-        s_alarm_logged = true;
-    }
     uint32_t now = otPlatAlarmMilliGetNow();
     uint32_t elapsed = now - aT0;
 

@@ -36,7 +36,6 @@ static void dummy_iface_init(struct net_if *iface)
     /* Flag the interface as up so socket bind() works. */
     net_if_flag_set(iface, NET_IF_UP);
 
-    printk("[DUMMY-NET] iface %p initialised\n", iface);
 }
 
 static struct dummy_api dummy_api_funcs = {

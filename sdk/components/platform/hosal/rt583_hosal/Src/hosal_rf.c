@@ -163,7 +163,6 @@ uint8_t  s_last_int_status;   /* last intStatus seen by ISR — visible from HCI
 static void __rf_event_callback(uint8_t intStatus) {
     s_isr_count++;
     s_last_int_status = intStatus;
-    printk("[RF-ISR] #%u sts=0x%02x\n", s_isr_count, intStatus);
     RfMcu_InterruptClear(intStatus);
 
     if (intStatus & HOSAL_RF_EVENT_STS) {
@@ -208,9 +207,6 @@ static void rf_wake_retry_fn(struct k_work *work)
 {
     if (k_sem_count_get(&g_rf_cmd_sem) == 0) {
         /* Command still pending — retry WAKE_UP to catch RF MCU on next sleep */
-        uint8_t pwr = RfMcu_PowerStateCheck();
-        printk("[RF-RETRY] pwr=0x%02x isr=%u evt=%u\n",
-               pwr, s_isr_count, s_evt_count);
         RfMcu_HostWakeUpMcu();
         RfMcu_HostCtrl(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
         k_work_reschedule(&g_rf_wake_retry, K_MSEC(150));
@@ -226,8 +222,6 @@ __STATIC_FORCEINLINE void handle_event_status(void) {
     event_len = RfMcu_EvtQueueRead(g_event_buffer, &rxCmdError);
     if (rxCmdError == RF_MCU_RX_CMDQ_GET_SUCCESS) {
         s_evt_count++;
-        printk("[RF-EVT] #%u type=0x%02x len=%u\n",
-               s_evt_count, g_event_buffer[0], event_len);
         switch (g_event_buffer[0]) {
         case HOSAL_RF_HCI_EVENT:
             if (g_hci_evt_cb) {
@@ -339,10 +333,6 @@ static void __rf_proc(void *p1, void *p2, void *p3)
     while (1) {
         k_sem_take(&g_rf_notify_sem, K_FOREVER);
         s_proc_wakeups++;
-        printk("[RF-PROC] wake #%u rp=%u wp=%u\n",
-               s_proc_wakeups,
-               ghosal_rf_cmd_state_q.rp,
-               ghosal_rf_cmd_state_q.wp);
         __rf_check_state();
     }
 }
@@ -974,16 +964,10 @@ static hosal_rf_status_t __rf_15p4_op_pan_idx_set(uint32_t pan_idx) {
 int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     /* Release FreeRTOS irq_lock before blocking so __rf_proc can run. */
     uint32_t nest = _crit_unlock();
-    printk("[RF-CMD] write_command: taking sem (count=%d) len=%u hdr=0x%02x\n",
-           k_sem_count_get(&g_rf_cmd_sem), command_len,
-           command_len > 0 ? command_ptr[0] : 0xFF);
     int sem_rc = k_sem_take(&g_rf_cmd_sem, K_SECONDS(5));
     if (sem_rc != 0) {
-        printk("[RF-CMD] *** SEM TIMEOUT (5s) — previous cmd never got response ***\n");
-        printk("[RF-CMD]   pwr=0x%02x notify_sem=%d evt_count=%u\n",
+        printk("[RF-CMD] SEM TIMEOUT pwr=0x%02x rp=%u wp=%u\n",
                RfMcu_PowerStateCheck(),
-               k_sem_count_get(&g_rf_notify_sem), s_evt_count);
-        printk("[RF-CMD]   rp=%u wp=%u\n",
                ghosal_rf_cmd_state_q.rp, ghosal_rf_cmd_state_q.wp);
         /* Force-recover so subsequent commands can proceed */
         k_sem_reset(&g_rf_cmd_sem);
@@ -991,7 +975,6 @@ int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
         /* Re-take with no wait — should succeed now */
         k_sem_take(&g_rf_cmd_sem, K_NO_WAIT);
     }
-    printk("[RF-CMD] write_command: sem taken\n");
     _crit_relock(nest);
     RfMcu_HostWakeUpMcu();
     if (RfMcu_PowerStateCheck() != 0x03) {
@@ -1216,7 +1199,13 @@ hosal_rf_status_t hosal_rf_ioctl(hosal_rf_ioctl_t ctl, void *p_arg) {
         break;
     }
     if (rval != HOSAL_RF_STATUS_SUCCESS) {
-        log_error("RF IOCTL(%d) status %d", ctl, rval);
+        /* CONTENT_ERROR (10) on AUTO_STATE_SET is expected in MULTI_PROTOCOL
+         * mode — RF MCU manages state transitions internally. Not an error. */
+        if (rval == HOSAL_RF_STATUS_CONTENT_ERROR) {
+            log_debug("RF IOCTL(%d) content_error (expected in multi-protocol)", ctl);
+        } else {
+            log_error("RF IOCTL(%d) status %d", ctl, rval);
+        }
     }
     return rval;
 }
@@ -1236,7 +1225,6 @@ int hosal_rf_callback_set(int callback_type, hosal_rf_callback_t pfn_callback,
 
 void hosal_rf_init(hosal_rf_mode_t mode)
 {
-    printk("[RF] hosal_rf_init entry mode=0x%x\n", (unsigned)mode);
     NVIC_SetPriority(CommSubsystem_IRQn, 0x4);
     /* DmaInit only enables NVIC + DMA interrupt (no RESET) — matches
      * reference rt584 and is safe to call before rf_common_init_by_fw. */

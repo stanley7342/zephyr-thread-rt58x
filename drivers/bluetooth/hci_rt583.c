@@ -191,9 +191,8 @@ static int hci_acl_cb(void *p_arg)
 	 */
 	uint8_t *buf_raw = (uint8_t *)p_arg;
 	uint16_t data_len = sys_get_le16(&buf_raw[3]);
-	uint16_t total    = 5u + data_len;   /* type(1)+hdr(4)+payload */
 
-	dump_hex("RX-ACL", buf_raw, total);
+	dump_hex("RX-ACL", buf_raw, 5u + data_len);
 
 	struct net_buf *buf = bt_buf_get_rx(BT_BUF_ACL_IN, K_NO_WAIT);
 	if (!buf) {
@@ -333,9 +332,6 @@ static int hci_rt58x_setup(const struct device *dev,
 	 */
 	uint8_t addr[6] = {0x58, 0x82, 0xBE, 0xEF, 0xCA, 0xFE};
 
-	printk(LOG_PREFIX "setup: BD ADDR=%02X:%02X:%02X:%02X:%02X:%02X\n",
-	       addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
-
 	int rc;
 
 	/* ── Step 0: RUCI INITIATE_BLE ──────────────────────────────────────
@@ -353,15 +349,12 @@ static int hci_rt58x_setup(const struct device *dev,
 		SET_RUCI_PARA_INITIATE_BLE(ruci_ble_init);
 		RUCI_ENDIAN_CONVERT(ruci_ble_init, RUCI_INITIATE_BLE);
 
-		printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE pwr=0x%02x\n",
-		       RfMcu_PowerStateCheck());
 		for (int i = 0; i < SEND_RETRY_MAX; i++) {
 			rc = hosal_rf_write_command(ruci_ble_init,
 						    sizeof(ruci_ble_init));
 			if (rc == 0) {
 				break;
 			}
-			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE retry %d\n", i);
 			k_sleep(SEND_RETRY_DELAY);
 		}
 		if (rc != 0) {
@@ -370,8 +363,6 @@ static int hci_rt58x_setup(const struct device *dev,
 		} else {
 			/* Wait for RUCI confirmation (releases g_rf_cmd_sem) */
 			k_sleep(K_MSEC(20));
-			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE done pwr=0x%02x\n",
-			       RfMcu_PowerStateCheck());
 		}
 	}
 
@@ -382,9 +373,6 @@ static int hci_rt58x_setup(const struct device *dev,
 		0x64, 0x08,                            /* Company ID 0x0864 LE */
 	};
 
-	printk(LOG_PREFIX "setup: vendor Set Controller Info\n");
-	dump_hex("TX-SETUP", cmd, sizeof(cmd));
-
 	hci_data.setup_in_progress = true;
 
 	for (int i = 0; i < SEND_RETRY_MAX; i++) {
@@ -392,7 +380,6 @@ static int hci_rt58x_setup(const struct device *dev,
 		if (rc == 0) {
 			break;
 		}
-		printk(LOG_PREFIX "setup: write_cmd retry %d rc=%d\n", i, rc);
 		k_sleep(SEND_RETRY_DELAY);
 	}
 	if (rc != 0) {
@@ -404,7 +391,6 @@ static int hci_rt58x_setup(const struct device *dev,
 	/* Wait for vendor command response (discarded by setup_in_progress gate) */
 	k_sleep(K_MSEC(100));
 	hci_data.setup_in_progress = false;
-	printk(LOG_PREFIX "setup: done\n");
 	return 0;
 }
 
@@ -421,21 +407,13 @@ static int hci_rt58x_open(const struct device *dev, bt_hci_recv_t recv)
 	hosal_rf_callback_set(HOSAL_RF_BLE_RX_CALLBACK,
 			      (hosal_rf_callback_t)hci_acl_cb, NULL);
 
-	if (hci_rt58x_rf_already_init) {
-		/* RF MCU was already initialized (e.g. in MULTI_PROTOCOL mode by
-		 * the application before bt_enable()).  Skip re-init to avoid
-		 * overwriting the firmware and losing OT state. */
-		printk(LOG_PREFIX "RF already init — skipping hosal_rf_init\n");
-	} else {
+	if (!hci_rt58x_rf_already_init) {
 		/* Standalone BLE (no OT): initialize RF MCU in BLE-only mode. */
-		printk(LOG_PREFIX "hosal_rf_init BLE_CONTROLLER...\n");
 		hosal_lpm_init();
 		hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL,
 				 HOSAL_LOW_POWER_LEVEL_SLEEP0);
 		hosal_rf_init(HOSAL_RF_MODE_BLE_CONTROLLER);
-		printk(LOG_PREFIX "hosal_rf_init done, sleep 50ms\n");
 		k_sleep(K_MSEC(50));
-		printk(LOG_PREFIX "sleep done\n");
 	}
 
 	k_thread_create(&rx_thread_data, rx_thread_stack,
@@ -444,7 +422,6 @@ static int hci_rt58x_open(const struct device *dev, bt_hci_recv_t recv)
 			RX_THREAD_PRIORITY, 0, K_NO_WAIT);
 	k_thread_name_set(&rx_thread_data, "bt_rx");
 
-	printk(LOG_PREFIX "opened pwr=0x%02x\n", RfMcu_PowerStateCheck());
 	return 0;
 }
 

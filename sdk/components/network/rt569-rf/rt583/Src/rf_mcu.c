@@ -1009,7 +1009,6 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
 
     RfMcu_ChipIdCheck();
 
-    printk("[RF-MCU] HostModeEnable+Reset+Wait1...\n");
     /* Reference rt584 order: HostModeEnable → WAKE_UP → RESET → SysRdyWait.
      * HostModeEnable halts the RF MCU first.  WAKE_UP guards against the RF
      * MCU being in deep-sleep across a warm reset (the reference omits it but
@@ -1026,11 +1025,9 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
     RfMcu_InterruptDisableAll();
 #endif
     RfMcu_SysRdySignalWait();
-    printk("[RF-MCU] Wait1 done, DmaInit...\n");
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
     RfMcu_DmaInit();
 #endif
-    printk("[RF-MCU] DmaInit done\n");
 
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_SPI)
 #if (RF_MCU_CHIP_TYPE == RF_MCU_TYPE_ASIC)
@@ -1052,7 +1049,6 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
 #if (CONFIG_RF_MCU_CONST_LOAD_SUPPORTED)
         if (pRfMcuConstAddr && uiRfMcuConstLength)
         {
-            printk("[RF-MCU] ConstLoad %u bytes...\n", (unsigned)uiRfMcuConstLength);
             if ((error = RfMcu_ConstLoad(pRfMcuConstAddr, uiRfMcuConstLength)) != RF_MCU_INIT_NO_ERROR)
             {
                 /* Constant load should not be failed at memory manipulation,
@@ -1060,16 +1056,13 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
                 printk("[RF-MCU] ConstLoad FAILED err=%d\n", (int)error);
                 return error;
             }
-            printk("[RF-MCU] ConstLoad ok\n");
         }
 #endif
-        printk("[RF-MCU] ImageLoad %u bytes...\n", (unsigned)image_size);
 #if ((RF_MCU_CHIP_MODEL == RF_MCU_CHIP_569M0) && (RF_MCU_CHIP_BASE == BASE_ROM_TYPE))
         RfMcu_ImageLoadM0(p_sys_image, image_size);
 #else
         RfMcu_ImageLoad(p_sys_image, image_size);
 #endif
-        printk("[RF-MCU] ImageLoad done\n");
 #if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_SPI)
         if ((error = RfMcu_CheckFw(p_sys_image, image_size)) != RF_MCU_INIT_NO_ERROR)
         {
@@ -1086,11 +1079,9 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
 #endif
     }
 
-    printk("[RF-MCU] LoadExtMemInit+Reset+Wait2...\n");
     RFMcu_LoadExtMemInit();
     RfMcu_HostResetMcu();
     RfMcu_SysRdySignalWait();
-    printk("[RF-MCU] Wait2 done — fw running\n");
 
 #if (RF_MCU_PATCH_SUPPORTED)
     if (pPatchAddr && uiPatchLength)

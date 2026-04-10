@@ -34,13 +34,48 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${RT583_PROJECT_DIR})
 list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 
 # mbedTLS 4.0 compat: Zephyr v4.4 ships mbedTLS 4.0 (TF-PSA-Crypto) which
-# removed mbedtls/ecp.h and mbedtls/bignum.h from the public API.
+# moved mbedtls/ecp.h and mbedtls/bignum.h from the public API to the private
+# driver include path (tf-psa-crypto/drivers/builtin/include/mbedtls/private/).
 # connectedhomeip still uses those headers (mbedTLS 2.x/3.x public API).
-# The shim directory re-exports them from mbedtls/private/ so the GN build
-# compiles without source patches.  The -I flag has higher priority than the
-# -isystem flags that chip-module later injects from Zephyr's cflags.
+# The mbedtls_shim/ directory provides forwarding headers so that
+# #include <mbedtls/ecp.h> finds mbedtls/private/ecp.h.
+#
+# Three plain -I flags are required instead of relying on the -isystem paths
+# already injected by zephyr_get_compile_flags:
+#   1. mbedtls_shim/           — provides mbedtls/ecp.h → mbedtls/private/ecp.h
+#   2. .../drivers/builtin/include — provides mbedtls/private/ecp.h itself
+#   3. .../tf-psa-crypto/include   — provides tf-psa-crypto/build_info.h and
+#                                    mbedtls/platform_util.h (included by ecp.h)
+#
+# zephyr_get_compile_flags emits "-isystemC:/path" (no space between -isystem
+# and the drive-letter path) which arm-zephyr-eabi-g++ on Windows does not parse
+# correctly — the drive letter is swallowed by the flag name.  Plain -I flags
+# are always parsed correctly and take precedence over -isystem.
+#
+# Paths are normalised with get_filename_component(ABSOLUTE) to eliminate the
+# /../ segment so the compiler receives a clean Windows absolute path.
+#
+# MBEDTLS_ALLOW_PRIVATE_ACCESS enables MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+# (see mbedtls/private_access.h) which guards ALL function declarations in
+# mbedtls/private/ecp.h (mbedtls_ecp_group_init, mbedtls_ecp_mul, …).
+# Without it CHIPCryptoPALPSA.cpp fails with 'not declared in this scope'.
+get_filename_component(TF_PSA_CRYPTO_INCLUDE
+    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
+    ABSOLUTE)
+get_filename_component(TF_PSA_CRYPTO_BUILTIN_INCLUDE
+    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
+    ABSOLUTE)
+
 set(CHIP_CFLAGS
     "-I${CMAKE_CURRENT_LIST_DIR}/mbedtls_shim"
+    "-I${TF_PSA_CRYPTO_BUILTIN_INCLUDE}"
+    "-I${TF_PSA_CRYPTO_INCLUDE}"
+    # mbedtls/private/ecp.h guards ALL function declarations (mbedtls_ecp_group_init,
+    # mbedtls_ecp_mul, etc.) inside #if defined(MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS).
+    # That macro is only defined when MBEDTLS_ALLOW_PRIVATE_ACCESS is defined
+    # (see private_access.h).  Without it, the functions are not declared and
+    # CHIPCryptoPALPSA.cpp fails with 'not declared in this scope' errors.
+    "-DMBEDTLS_ALLOW_PRIVATE_ACCESS"
     # PSA crypto provides its own entropy; PlatformManagerImpl.cpp must not call
     # add_entropy_source() (the PSA backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE).
     # Defining CONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR suppresses that code path.
@@ -103,6 +138,7 @@ target_sources(app PRIVATE
     main/AppTask.cpp
     main/ZclCallbacks.cpp
     main/MallocWrappers.cpp
+    main/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
 )
 
@@ -122,6 +158,12 @@ zephyr_ld_options(
     -Wl,--wrap=_calloc_r
     -Wl,--wrap=_realloc_r
 )
+
+# ECP enum compatibility: CHIP (TF-PSA-Crypto) passes SECP256R1=1 but OT's linked
+# mbedtls_ecp_group_load (mbedTLS 2.x) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
+# --wrap redirects all callers through __wrap_mbedtls_ecp_group_load (ecp_enum_compat.c)
+# which translates 1→3 before forwarding to OT's __real implementation.
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
 if(CONFIG_BLE_RT583)

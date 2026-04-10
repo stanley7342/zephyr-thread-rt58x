@@ -39,7 +39,6 @@ void otPlatSettingsInit(otInstance *aInstance,
                         const uint16_t *aSensitiveKeys,
                         uint16_t        aSensitiveKeysLength)
 {
-    printk("[OT-SETTINGS] otPlatSettingsInit\n");
     (void)aInstance;
     (void)aSensitiveKeys;
     (void)aSensitiveKeysLength;

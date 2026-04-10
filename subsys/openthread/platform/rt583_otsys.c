@@ -16,7 +16,6 @@
 
 #include <stdint.h>
 #include <openthread/instance.h>
-#include <zephyr/sys/printk.h>
 
 /**
  * platformRadioInit — no-op.
@@ -28,9 +27,6 @@
  */
 void platformRadioInit(void)
 {
-    /* Diagnostic: confirms otSysInit() has been entered and is completing its
-     * platformRadio step.  If we never see this, otSysInit itself is the hang. */
-    printk("[OT] platformRadioInit (otSysInit step)\n");
 }
 
 /**

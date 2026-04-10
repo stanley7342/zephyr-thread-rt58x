@@ -50,7 +50,6 @@ void otPlatCryptoInit(void)
 
 void otPlatCryptoRandomInit(void)
 {
-    printk("[OT-CRYPTO] otPlatCryptoRandomInit\n");
     /* TRNG-based RNG needs no initialization beyond hosal_rf_init() */
 }
 

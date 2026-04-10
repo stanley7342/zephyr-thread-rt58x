@@ -84,6 +84,7 @@ static void early_uart_putc(uint8_t c)
     UART0_THR = c;
 }
 
+__attribute__((unused))
 static void early_puts(const char *s)
 {
     while (*s) {
@@ -98,7 +99,6 @@ static int rt583_soc_init(void)
                    * Without this the UART peripheral has no clock and
                    * hosal_uart_send_complete spins on LSR.TEMT forever. */
     early_uart_setup(); /* Enable UART0 clock + set 115200 baud @ 64 MHz */
-    early_puts("\n[SOC] SystemInit done\n");
 
 #if defined(CONFIG_OPENTHREAD_RT583) || defined(CONFIG_BLE_RT583)
     IRQ_CONNECT(RT583_COMM_SUBSYSTEM_IRQN,

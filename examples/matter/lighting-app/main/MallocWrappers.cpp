@@ -18,6 +18,7 @@
  * frees, causing a memory leak and OOM.  CONFIG_SYS_HEAP_VALIDATE=y in
  * prj.conf enables Zephyr's own heap structural validation.
  *
+ * APP_MALLOC_HEAP_SIZE = 12 KB: sufficient for Server::Init (~8-10 KB peak).
  * alloc_id is a monotonic counter so crash messages can be correlated
  * with "[HEAP-ALLOC] #N" trace lines enabled by chip_heap_enable_trace().
  */
@@ -30,7 +31,7 @@
 #include <cstring>
 
 /* ---------- Heap buffer ---------- */
-#define APP_MALLOC_HEAP_SIZE  14336
+#define APP_MALLOC_HEAP_SIZE  12288
 
 static uint8_t s_heap_buf[APP_MALLOC_HEAP_SIZE] __aligned(8);
 static struct sys_heap s_heap;

@@ -875,11 +875,6 @@ void ot_radioInit(void)
         sIEEE_EUI64Addr[0] &= ~0x01; /* unicast */
     }
 
-    printk("[OT-RADIO] EUI-64: %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
-           sIEEE_EUI64Addr[0], sIEEE_EUI64Addr[1],
-           sIEEE_EUI64Addr[2], sIEEE_EUI64Addr[3],
-           sIEEE_EUI64Addr[4], sIEEE_EUI64Addr[5],
-           sIEEE_EUI64Addr[6], sIEEE_EUI64Addr[7]);
 
     memset(&otRadio_var, 0, offsetof(otRadio_t, buffPool));
 
