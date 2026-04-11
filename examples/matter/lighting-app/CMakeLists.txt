@@ -6,19 +6,26 @@ get_filename_component(RT583_PROJECT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../.." AB
 # Workspace root is one level above the repo (standard west workspace layout)
 get_filename_component(WORKSPACE_DIR "${RT583_PROJECT_DIR}/.." ABSOLUTE)
 
-# CHIP_ROOT: use CHIP_ROOT env var first, fall back to <workspace>/connectedhomeip
+# CHIP_ROOT: use CHIP_ROOT env var first, then search common locations.
+# install.ps1 may place connectedhomeip either at:
+#   <workspace>/connectedhomeip  (standard west layout — workspace is parent of repo)
+#   <repo>/connectedhomeip       (install ran from inside the repo dir)
 if(DEFINED ENV{CHIP_ROOT})
     get_filename_component(CHIP_ROOT "$ENV{CHIP_ROOT}" ABSOLUTE)
+elseif(EXISTS "${WORKSPACE_DIR}/connectedhomeip/src/lib/core/CHIPError.h")
+    set(CHIP_ROOT "${WORKSPACE_DIR}/connectedhomeip")
+elseif(EXISTS "${RT583_PROJECT_DIR}/connectedhomeip/src/lib/core/CHIPError.h")
+    set(CHIP_ROOT "${RT583_PROJECT_DIR}/connectedhomeip")
 else()
     set(CHIP_ROOT "${WORKSPACE_DIR}/connectedhomeip")
 endif()
 
 if(NOT EXISTS "${CHIP_ROOT}/src/lib/core/CHIPError.h")
     message(FATAL_ERROR
-        "connectedhomeip not found at ${CHIP_ROOT}.\n"
-        "Set the CHIP_ROOT environment variable or clone it to ${WORKSPACE_DIR}/connectedhomeip:\n"
-        "  git clone --recurse-submodules https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip\n"
-        "  cd ${WORKSPACE_DIR}/connectedhomeip && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
+        "connectedhomeip not found.\n"
+        "Set the CHIP_ROOT environment variable or clone it:\n"
+        "  git clone --depth=1 https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip\n"
+        "  cd ${WORKSPACE_DIR}/connectedhomeip && git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9 && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
 endif()
 
 get_filename_component(GEN_DIR "${CHIP_ROOT}/zzz_generated" ABSOLUTE)
@@ -61,10 +68,10 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 # mbedtls/private/ecp.h (mbedtls_ecp_group_init, mbedtls_ecp_mul, …).
 # Without it CHIPCryptoPALPSA.cpp fails with 'not declared in this scope'.
 get_filename_component(TF_PSA_CRYPTO_INCLUDE
-    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
+    "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
     ABSOLUTE)
 get_filename_component(TF_PSA_CRYPTO_BUILTIN_INCLUDE
-    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
+    "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
     ABSOLUTE)
 
 set(CHIP_CFLAGS
@@ -83,6 +90,27 @@ set(CHIP_CFLAGS
     "-DCONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR=1"
 )
 
+# ── Pre-set GN_EXECUTABLE ────────────────────────────────────────────────────
+# chip-module's CMakeLists.txt calls find_program(GN_EXECUTABLE gn) during
+# find_package(Zephyr).  On Windows, gn.exe lives in the Zephyr venv alongside
+# west and python.exe.  If gn is not on the system PATH (common in CI and fresh
+# shells), pre-populate the cache variable from WEST_PYTHON (always supplied by
+# west) so find_program() skips the search and uses the known path instead.
+if(DEFINED WEST_PYTHON AND NOT GN_EXECUTABLE)
+    get_filename_component(_venv_scripts "${WEST_PYTHON}" DIRECTORY)
+    if(WIN32)
+        set(_gn_candidate "${_venv_scripts}/gn.exe")
+    else()
+        set(_gn_candidate "${_venv_scripts}/gn")
+    endif()
+    # Only pre-set if the file actually exists; otherwise let find_program()
+    # search PATH (e.g. gn installed at C:\Users\Stanley\bin\gn.exe).
+    if(EXISTS "${_gn_candidate}")
+        set(GN_EXECUTABLE "${_gn_candidate}" CACHE FILEPATH "Path to gn" FORCE)
+        message(STATUS "Pre-set GN_EXECUTABLE: ${GN_EXECUTABLE}")
+    endif()
+endif()
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt583-matter-lighting VERSION 1.0.0)
 
@@ -90,6 +118,18 @@ project(rt583-matter-lighting VERSION 1.0.0)
 include(${CHIP_ROOT}/config/zephyr/app/enable-gnu-std.cmake)
 
 # ── Matter data model (ZAP-generated code + cluster implementations) ─────────
+# connectedhomeip codegen scripts (codegen_paths.py, codegen.py) import
+# 'python_path' (a Pigweed helper) and 'matter.idl.*' from py_matter_idl/.
+# Both live in connectedhomeip/scripts/ — add that directory to PYTHONPATH so
+# CMake's execute_process subprocesses can find them without Pigweed initialised.
+# python_path.py itself is a minimal shim checked into scripts_shim/ and also
+# copied to connectedhomeip/scripts/ (see scripts_shim/python_path.py).
+if(WIN32)
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;$ENV{PYTHONPATH}")
+else()
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:$ENV{PYTHONPATH}")
+endif()
+
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
 
 chip_configure_data_model(app
