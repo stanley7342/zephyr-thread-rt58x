@@ -285,8 +285,14 @@ $westConfig  = Join-Path $Workspace ".west\config"
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
-$westDir = Join-Path $Workspace ".west"
-if (-not (Test-Path $westDir)) {
+# west searches parent directories for .west — use "west topdir" to detect
+# any existing workspace (not just $Workspace\.west).
+Push-Location $Workspace
+$westTopdir = & $python312 -m west topdir 2>$null
+Pop-Location
+if ($westTopdir) {
+    Write-Skip "west init (workspace: $westTopdir)"
+} else {
     Write-Host "    west init ..."
     Push-Location $Workspace
     & $python312 -m west init -l $projectName
@@ -295,8 +301,6 @@ if (-not (Test-Path $westDir)) {
     if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
     if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
     Write-Ok "west init 完成"
-} else {
-    Write-Skip "west init"
 }
 
 $zephyrDir = Join-Path $Workspace "zephyr"
