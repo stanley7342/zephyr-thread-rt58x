@@ -76,19 +76,24 @@ scripts/
 
 ### Windows（PowerShell 7+，以系統管理員執行）
 
+**一鍵安裝（不需先 clone）：**
+
 ```powershell
-# 1. Clone 本專案
+irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
+```
+
+或手動 clone 後安裝：
+
+```powershell
 git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
 Set-Location zephyr-thread-rt58x
-
-# 2. 安裝環境
 .\scripts\windows\install.ps1
+```
 
-# 3. 編譯（Clean build）
-.\scripts\windows\build.ps1
+安裝完成後編譯：
 
-# 增量編譯
-.\scripts\windows\build.ps1 -NoPristine
+```sh
+west build -p always -b rt583_evb examples/matter/lighting-app
 ```
 
 ### Linux / WSL（Bash）

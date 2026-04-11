@@ -339,6 +339,10 @@ foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
 }
 Write-Ok "cryptography 安裝完成（MCUboot imgtool）"
 
+# Matter build tools: GN (Generate Ninja) + jsonschema (Zephyr CMake module)
+& $python312 -m pip install --quiet gn jsonschema
+Write-Ok "gn + jsonschema 安裝完成（Matter build 依賴）"
+
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
 Write-Step "產生 $Workspace\env.ps1"
@@ -508,4 +512,4 @@ Write-Host "每次開啟新 PowerShell 請先執行："
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "編譯請使用："
-Write-Host "  .\scripts\windows\build.ps1" -ForegroundColor Yellow
+Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app" -ForegroundColor Yellow
