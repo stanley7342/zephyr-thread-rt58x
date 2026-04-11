@@ -6,7 +6,7 @@
 irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
 ```
 
-> 以 **PowerShell 7（系統管理員）** 執行。自動 clone 專案並完成環境建置。
+> 以 **PowerShell 7（系統管理員）** 執行。Clone 至當下目錄的 `zephyr-rt58x/` 並完成環境建置。
 
 ---
 
