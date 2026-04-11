@@ -1,21 +1,21 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT583-EVB Zephyr + OpenThread — 編譯腳本
+    RT583-EVB Zephyr + OpenThread — build script
 
 .DESCRIPTION
-    載入環境變數並執行 west build。
-    請先完成 install.ps1 環境建置再使用本腳本。
+    Loads environment variables and runs west build.
+    Run install.ps1 first to set up the environment.
 
 .PARAMETER p
-    編譯目標。
+    Build target.
       thread          → build\thread\thread_zephyr.bin
       bootloader      → build\bootloader\bootloader_zephyr.bin
       test_hci        → build\test_hci\test_hci_zephyr.bin
       lighting-app → build\lighting-app\lighting-app_zephyr.bin
 
 .PARAMETER NoPristine
-    增量編譯（跳過 clean，加快重複編譯速度）。
+    Incremental build (skip clean, faster for iterative development).
 
 .EXAMPLE
     .\scripts\windows\build.ps1 -p thread
@@ -29,8 +29,8 @@ param(
     [ValidateSet("thread", "bootloader", "blinky", "hello_world", "test_flash", "ble_hrs", "test_hci", "lighting-app")]
     [string] $p,
     [switch] $NoPristine,
-    [switch] $NoMCUboot,  # 略過 MCUboot，直接燒到 0x0（blinky / hello_world / test）
-    [switch] $Slot1       # 將 code-partition 指向 slot1（0xD0000），用於 OTA 測試
+    [switch] $NoMCUboot,  # Skip MCUboot, flash directly to 0x0 (blinky / hello_world / test)
+    [switch] $Slot1       # Point code-partition to slot1 (0xD0000) for OTA testing
 )
 
 Set-StrictMode -Version Latest
@@ -39,10 +39,10 @@ $ErrorActionPreference = "Stop"
 $projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectName = Split-Path $projectDir -Leaf
 $Workspace   = Split-Path $projectDir -Parent
-$envPs1      = Join-Path $Workspace "env.ps1"
+$envPs1      = Join-Path $projectDir "env.ps1"
 
 if (-not (Test-Path $envPs1)) {
-    throw "找不到 $envPs1，請先執行：`n  .\scripts\windows\install.ps1"
+    throw "$envPs1 not found. Run install first:`n  .\scripts\windows\install.ps1"
 }
 
 . $envPs1
@@ -54,9 +54,9 @@ $env:ZEPHYR_NO_ENV = "1"
 
 # Use venv Python so that west and all its dependencies (including
 # cryptography for imgtool) are available when CMake sets WEST_PYTHON.
-$venvPython = Join-Path $env:USERPROFILE ".zephyr-venv\Scripts\python.exe"
+$venvPython = Join-Path $Workspace ".zephyr-venv\Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
-    throw "找不到 venv Python：$venvPython`n請先執行：.\scripts\windows\install.ps1"
+    throw "venv Python not found: $venvPython`nRun: .\scripts\windows\install.ps1"
 }
 $python312 = $venvPython
 
@@ -64,17 +64,17 @@ $python312 = $venvPython
 # Clone on first use; subsequent builds are instant (directory already exists).
 $tfPsaCrypto = Join-Path $Workspace "modules\crypto\mbedtls\tf-psa-crypto"
 if (-not (Test-Path $tfPsaCrypto)) {
-    Write-Host "==> west update tf-psa-crypto（首次執行，需要網路）" -ForegroundColor Yellow
+    Write-Host "==> west update tf-psa-crypto (first run, requires network)" -ForegroundColor Yellow
     Push-Location $Workspace
     & $python312 -m west update tf-psa-crypto
-    if ($LASTEXITCODE -ne 0) { throw "west update tf-psa-crypto 失敗" }
+    if ($LASTEXITCODE -ne 0) { throw "west update tf-psa-crypto failed" }
     Pop-Location
 }
 
 $env:CMAKE_BUILD_PARALLEL_LEVEL = [System.Environment]::ProcessorCount
 
 $pristineFlag  = if ($NoPristine) { "auto" } else { "always" }
-$modeLabel     = if ($NoPristine) { "增量" } else { "Clean" }
+$modeLabel     = if ($NoPristine) { "Incremental" } else { "Clean" }
 $slotSuffix    = if ($Slot1) { "_slot1" } else { "" }
 $buildDir      = Join-Path $projectDir "build\${p}${slotSuffix}"
 $outBin        = Join-Path $buildDir "${p}_zephyr.bin"
@@ -89,7 +89,7 @@ function Build-WestArgs {
         [string]   $BuildSubdir,
         [string[]] $ExtraCmake = @()
     )
-    $args = [System.Collections.Generic.List[string]]@(
+    $westArgList = [System.Collections.Generic.List[string]]@(
         '-m', 'west', 'build',
         '-p', $pristineFlag,
         '-b', 'rt583_evb',
@@ -97,15 +97,15 @@ function Build-WestArgs {
         '--build-dir', $BuildSubdir,
         '--'
     )
-    foreach ($a in $ExtraCmake) { $args.Add($a) }
-    return ,$args   # the comma forces return as array/list, not unwrapped
+    foreach ($a in $ExtraCmake) { $westArgList.Add($a) }
+    return ,$westArgList   # the comma forces return as array/list, not unwrapped
 }
 
 if ($p -eq "bootloader") {
     $overlay = Join-Path $projectDir "examples\bootloader\mcuboot.conf"
 
     Write-Host ""
-    Write-Host "==> west build（MCUboot / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (MCUboot / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host "    Overlay : $overlay"
@@ -126,7 +126,7 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -eq "ble_hrs") {
     Write-Host ""
-    Write-Host "==> west build（BLE HRS / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (BLE HRS / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host ""
@@ -143,7 +143,7 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -eq "test_hci") {
     Write-Host ""
-    Write-Host "==> west build（HCI Test / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (HCI Test / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host ""
@@ -164,7 +164,7 @@ if ($p -eq "bootloader") {
     $buildDir = Join-Path $projectDir "build\lighting-app"
     $outBin   = Join-Path $buildDir "zephyr\zephyr.bin"
     Write-Host ""
-    Write-Host "==> west build（Matter Lighting / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (Matter Lighting / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
     Write-Host "    CHIP_ROOT: $chipRoot"
@@ -190,11 +190,11 @@ if ($p -eq "bootloader") {
 
 } elseif ($p -in @("blinky", "hello_world")) {
     Write-Host ""
-    Write-Host "==> west build（$p / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build ($p / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
-    if ($Slot1)     { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
-    if ($NoMCUboot) { Write-Host "    MCUboot : disabled（直燒 0x0）" -ForegroundColor Yellow }
+    if ($Slot1)     { Write-Host "    Slot    : 1 (0xD0000)" -ForegroundColor Yellow }
+    if ($NoMCUboot) { Write-Host "    MCUboot : disabled (flash directly to 0x0)" -ForegroundColor Yellow }
     Write-Host ""
 
     $cmake = [System.Collections.Generic.List[string]]@()
@@ -211,11 +211,11 @@ if ($p -eq "bootloader") {
     Pop-Location
 } elseif ($p -eq "test_flash") {
     Write-Host ""
-    Write-Host "==> west build（Flash Unit Test / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (Flash Unit Test / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
-    if ($Slot1)     { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
-    if ($NoMCUboot) { Write-Host "    MCUboot : disabled（直燒 0x0）" -ForegroundColor Yellow }
+    if ($Slot1)     { Write-Host "    Slot    : 1 (0xD0000)" -ForegroundColor Yellow }
+    if ($NoMCUboot) { Write-Host "    MCUboot : disabled (flash directly to 0x0)" -ForegroundColor Yellow }
     Write-Host ""
 
     $cmake = [System.Collections.Generic.List[string]]@()
@@ -232,10 +232,10 @@ if ($p -eq "bootloader") {
     Pop-Location
 } else {
     Write-Host ""
-    Write-Host "==> west build（Thread FTD CLI / rt583_evb）" -ForegroundColor Cyan
+    Write-Host "==> west build (Thread FTD CLI / rt583_evb)" -ForegroundColor Cyan
     Write-Host "    Mode    : $modeLabel"
     Write-Host "    BuildDir: $buildDir"
-    if ($Slot1) { Write-Host "    Slot    : 1（0xD0000）" -ForegroundColor Yellow }
+    if ($Slot1) { Write-Host "    Slot    : 1 (0xD0000)" -ForegroundColor Yellow }
     Write-Host ""
 
     $cmake = [System.Collections.Generic.List[string]]@()
@@ -253,7 +253,7 @@ if ($p -eq "bootloader") {
 
 if ($rc -ne 0) {
     if (Get-Command deactivate -ErrorAction SilentlyContinue) { deactivate }
-    throw "west build 失敗（exit $rc）"
+    throw "west build failed (exit $rc)"
 }
 
 # Prefer signed binary (MCUboot); fall back to unsigned.
@@ -262,11 +262,11 @@ $zephyrBin    = Join-Path $buildDir "zephyr\zephyr.bin"
 if (Test-Path $zephyrSigned) {
     if ($outBin -ne $zephyrSigned) { Copy-Item $zephyrSigned $outBin }
     Write-Host ""
-    Write-Host "    [OK] 編譯成功（signed）：$zephyrSigned" -ForegroundColor Green
+    Write-Host "    [OK] Build succeeded (signed): $zephyrSigned" -ForegroundColor Green
 } elseif (Test-Path $zephyrBin) {
     if ($outBin -ne $zephyrBin) { Copy-Item $zephyrBin $outBin }
     Write-Host ""
-    Write-Host "    [OK] 編譯成功：$zephyrBin" -ForegroundColor Green
+    Write-Host "    [OK] Build succeeded: $zephyrBin" -ForegroundColor Green
 }
 
 if (Get-Command deactivate -ErrorAction SilentlyContinue) { deactivate }

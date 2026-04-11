@@ -8,43 +8,64 @@ The SDK is vendored into `sdk/` — no external `RAFAEL_SDK_BASE` env var needed
 
 ## Setup and Build
 
+> See [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) for the full step-by-step guide.
+
+**First-time setup (Windows):**
+```powershell
+# Bootstrap from the web (no prior clone needed):
+irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
+
+# Or, if already cloned:
+.\scripts\windows\install.ps1
+```
+
 **First-time setup (Linux/WSL):**
 ```sh
-bash scripts/linux/install.sh          # installs deps, Zephyr SDK, west workspace
+bash scripts/linux/install.sh
 ```
-This creates `~/zephyr-sdk-1.0.1`, a west workspace one level above this repo, and `../env.sh`.
+
+**First-time setup (macOS):**
+```sh
+bash scripts/macos/install.sh
+```
+
+**Load environment** (once per terminal, Windows):
+```powershell
+cd zephyr-thread-rt58x
+. .\env.ps1
+```
+
+**Load environment** (once per terminal, Linux/macOS):
+```sh
+source ../env.sh
+```
+
+**Build (Windows — bootloader first, then app):**
+```powershell
+west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
+    -d build/bootloader `
+    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay"
+
+west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
+```
 
 **Build (Linux/WSL):**
 ```sh
-bash scripts/linux/build.sh            # clean build (default)
-bash scripts/linux/build.sh --incremental
-# Binary output: build/zephyr/zephyr.bin
+west build -p always -b rt583_evb examples/thread
 ```
 
-**Build (macOS):**
-```sh
-bash scripts/macos/build.sh
-bash scripts/macos/build.sh --incremental
-```
-
-**Build (Windows — PowerShell 7+):**
+**Flash (Windows via OpenOCD + CMSIS-DAP):**
 ```powershell
-.\scripts\windows\build.ps1            # clean build
-.\scripts\windows\build.ps1 -NoPristine  # incremental
-```
-
-**Manual build** (after `source ../env.sh` from the workspace root):
-```sh
-west build -p always -b rt583_evb .
+west flash -d build/bootloader
+west flash -d build/lighting-app
 ```
 
 **Flash (WSL/Linux via OpenOCD + CMSIS-DAP):**
 ```sh
-bash tools/linux/flash.sh                    # default: build/zephyr/zephyr.bin
-bash tools/linux/flash.sh --bin path/to.bin  # custom binary
-bash tools/linux/flash.sh --setup-udev       # first-time udev setup
+bash scripts/linux/flash.sh -p thread        # slot0 (0x10000)
+bash scripts/linux/flash.sh --setup-udev     # first-time udev setup
 ```
-Flash target address is **0x00000000** (not 0x8000). Binary contains its own vector table.
 
 **CI:** `.github/workflows/build.yml` — caches `zephyr/` and `modules/` keyed on `west.yml`.
 

@@ -15,10 +15,10 @@ irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scr
 從 `zephyr-thread-rt58x/` 目錄執行：
 
 ```powershell
-. ..\env.ps1
+. .\env.ps1
 ```
 
-`env.ps1` 由 `install.ps1` 自動產生於 workspace 根目錄（`zephyr-thread-rt58x` 的上一層）。
+`env.ps1` 由 `install.ps1` 自動產生於**專案目錄內**（`zephyr-thread-rt58x/env.ps1`）。
 
 ---
 

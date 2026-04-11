@@ -1,45 +1,45 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT583-EVB 自動化測試：Build → Flash → UART banner → OT leader 驗證
+    RT583-EVB automated test: Build → Flash → UART banner → OT leader verification
 
 .DESCRIPTION
-    四個階段（可個別跳過）：
-      1. Build     — 呼叫 build.ps1 編譯目標
-      2. Flash     — 呼叫 flash.ps1 燒錄並 reset
-      3. Banner    — 等待 UART 印出 boot banner
-      4. OT Leader — 透過 CLI 組 Thread 網路，等到 state = leader
-                     （僅 -p thread，可用 -NoOt 跳過）
+    Four stages (each can be skipped individually):
+      1. Build     — calls build.ps1 to compile the target
+      2. Flash     — calls flash.ps1 to flash and reset
+      3. Banner    — waits for the UART boot banner
+      4. OT Leader — forms a Thread network via CLI, waits until state = leader
+                     (thread target only; skip with -NoOt)
 
-    Exit 0 = 全部通過
-    Exit 1 = Build 或 Flash 失敗
-    Exit 2 = Banner 驗證失敗
-    Exit 3 = Banner timeout（COM port 無輸出）
-    Exit 4 = OT leader timeout（Thread 未在期限內成為 leader）
+    Exit 0 = all passed
+    Exit 1 = Build or Flash failed
+    Exit 2 = Banner verification failed
+    Exit 3 = Banner timeout (no output on COM port)
+    Exit 4 = OT leader timeout (Thread did not become leader in time)
 
 .PARAMETER Port
-    COM port 名稱，例如 COM3。（必填）
+    COM port name, e.g. COM3. (Required)
 
 .PARAMETER p
-    目標：thread（預設）、blinky、hello_world、test_flash。
+    Target: thread (default), blinky, hello_world, test_flash.
 
 .PARAMETER Timeout
-    等待 boot banner 的秒數（預設 20）。
+    Seconds to wait for the boot banner (default 20).
 
 .PARAMETER OtTimeout
-    等待 Thread leader 的秒數（預設 40）。
+    Seconds to wait for Thread leader (default 40).
 
 .PARAMETER Expected
-    要在 UART 輸出中尋找的字串陣列。預設為 thread banner + started 訊息。
+    Array of strings to look for in UART output. Defaults to thread banner + started message.
 
 .PARAMETER NoBuild
-    跳過編譯。
+    Skip build.
 
 .PARAMETER NoFlash
-    跳過燒錄（只讀 UART）。
+    Skip flash (read UART only).
 
 .PARAMETER NoOt
-    跳過 OT leader 驗證。
+    Skip OT leader verification.
 
 .EXAMPLE
     .\scripts\windows\test_board.ps1 -Port COM3
@@ -68,7 +68,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ── 預設期望字串 ──────────────────────────────────────────────────────────────
+# ── Default expected strings ──────────────────────────────────────────────────
 if (-not $Expected) {
     $Expected = switch ($p) {
         "thread"      { @("RT583-EVB", "Zephyr + OpenThread CLI", "OpenThread FTD CLI started") }
@@ -83,7 +83,7 @@ $doOt = ($p -eq "thread") -and (-not $NoOt)
 $totalSteps = if ($doOt) { 4 } else { 3 }
 $step       = 0
 
-# ── 輸出函式 ──────────────────────────────────────────────────────────────────
+# ── Output helpers ────────────────────────────────────────────────────────────
 function Write-Step {
     param([string]$Msg)
     $script:step++
@@ -95,14 +95,14 @@ function Write-Fail    { param([string]$Msg) Write-Host "  [!!] $Msg" -Foregroun
 function Write-Info    { param([string]$Msg) Write-Host "  [..] $Msg" -ForegroundColor DarkGray }
 
 # ── OT CLI helper ─────────────────────────────────────────────────────────────
-# 送一條 OT CLI 指令，等待 "Done" 或 "Error"，回傳收到的全部文字。
+# Send one OT CLI command, wait for "Done" or "Error", return all received text.
 function Send-OtCmd {
     param(
         [System.IO.Ports.SerialPort] $S,
         [string] $Cmd,
         [int]    $TimeoutSec = 6
     )
-    # OT CLI 用 \r\n 作為行結尾
+    # OT CLI uses \r\n line endings
     $S.Write("$Cmd`r`n")
     Write-Host "  > $Cmd" -ForegroundColor DarkGray
 
@@ -119,7 +119,7 @@ function Send-OtCmd {
         } catch { }
 
         if ($resp.ToString() -match "Done|Error") {
-            # 繼續讀取直到 50 ms 內無新資料，確保回應完整
+            # Keep reading until no new data for 50 ms to ensure response is complete
             $quiet = (Get-Date).AddMilliseconds(50)
             while ((Get-Date) -lt $quiet) {
                 Start-Sleep -Milliseconds 10
@@ -128,7 +128,7 @@ function Send-OtCmd {
                     if ($tail.Length -gt 0) {
                         [void]$resp.Append($tail)
                         Write-Host $tail -NoNewline -ForegroundColor DarkYellow
-                        $quiet = (Get-Date).AddMilliseconds(50)  # 有新資料就重設靜默計時器
+                        $quiet = (Get-Date).AddMilliseconds(50)  # reset silence timer on new data
                     }
                 } catch { }
             }
@@ -138,7 +138,7 @@ function Send-OtCmd {
         Start-Sleep -Milliseconds 80
     }
 
-    # 清除緩衝區，避免殘留位元組汙染下一個指令的回應
+    # Flush receive buffer to prevent leftover bytes from polluting the next command's response
     try { $S.DiscardInBuffer() } catch { }
 
     Write-Host ""
@@ -148,30 +148,30 @@ function Send-OtCmd {
 # ══════════════════════════════════════════════════════════════════════════════
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════════╗" -ForegroundColor White
-Write-Host "║       RT583-EVB 自動化板測腳本                 ║" -ForegroundColor White
+Write-Host "║       RT583-EVB Automated Board Test           ║" -ForegroundColor White
 Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor White
-Write-Host "  目標      : $p"
-Write-Host "  Port      : $Port  (115200 8N1)"
-Write-Host "  Banner 逾時: ${Timeout}s"
+Write-Host "  Target     : $p"
+Write-Host "  Port       : $Port  (115200 8N1)"
+Write-Host "  Banner tmo : ${Timeout}s"
 if ($doOt) {
-Write-Host "  OT 逾時   : ${OtTimeout}s"
+Write-Host "  OT timeout : ${OtTimeout}s"
 }
-Write-Host "  期望      : $($Expected -join ', ')"
+Write-Host "  Expected   : $($Expected -join ', ')"
 Write-Host ""
 
 # ══ Step 1: Build ══════════════════════════════════════════════════════════════
 if (-not $NoBuild) {
     Write-Step "Build"
     & "$PSScriptRoot\build.ps1" -p $p
-    if ($LASTEXITCODE -ne 0) { Write-Fail "建置失敗（exit $LASTEXITCODE）"; exit 1 }
-    Write-Ok "建置成功"
+    if ($LASTEXITCODE -ne 0) { Write-Fail "Build failed (exit $LASTEXITCODE)"; exit 1 }
+    Write-Ok "Build succeeded"
 } else {
     Write-Info "Build skipped (-NoBuild)"
 }
 
-# ══ 開啟 COM port（在 Flash 前先開，不遺漏早期輸出）═══════════════════════════
+# ══ Open COM port (before Flash to avoid missing early output) ════════════════
 Write-Host ""
-Write-Host "  開啟 $Port..." -ForegroundColor DarkGray
+Write-Host "  Opening $Port..." -ForegroundColor DarkGray
 
 $serial = $null
 try {
@@ -185,10 +185,10 @@ try {
     $serial.WriteTimeout = 2000
     $serial.NewLine      = "`r`n"
     $serial.Open()
-    Write-Ok "$Port 已開啟"
+    Write-Ok "$Port opened"
 } catch {
-    Write-Fail "無法開啟 $Port：$($_.Exception.Message)"
-    Write-Host "  請確認裝置已插上、無其他程式佔用此 port"
+    Write-Fail "Cannot open ${Port}: $($_.Exception.Message)"
+    Write-Host "  Check that the device is connected and no other program is using this port"
     exit 1
 }
 Start-Sleep -Milliseconds 200
@@ -199,17 +199,17 @@ if (-not $NoFlash) {
     Write-Step "Flash"
     & "$PSScriptRoot\flash.ps1" -p $p
     if ($LASTEXITCODE -ne 0) {
-        Write-Fail "燒錄失敗（exit $LASTEXITCODE）"
+        Write-Fail "Flash failed (exit $LASTEXITCODE)"
         $serial.Close(); exit 1
     }
-    Write-Ok "燒錄完成，等待 reset..."
+    Write-Ok "Flash complete, waiting for reset..."
     Start-Sleep -Milliseconds 500
 } else {
     Write-Info "Flash skipped (-NoFlash)"
 }
 
 # ══ Step 3: Banner verify ══════════════════════════════════════════════════════
-Write-Step "UART banner 驗證（逾時 ${Timeout}s）"
+Write-Step "UART banner verification (timeout ${Timeout}s)"
 
 $accumulated = [System.Text.StringBuilder]::new()
 $lastPrint   = ""
@@ -245,45 +245,45 @@ $missing = @()
 Write-Host ""
 Write-Host "─────────────────────────────────────" -ForegroundColor White
 foreach ($s in $Expected) {
-    if ($output -like "*$s*") { Write-Ok  "找到：'$s'" }
-    else                      { Write-Fail "缺少：'$s'"; $missing += $s }
+    if ($output -like "*$s*") { Write-Ok  "Found: '$s'" }
+    else                      { Write-Fail "Missing: '$s'"; $missing += $s }
 }
 Write-Host "─────────────────────────────────────" -ForegroundColor White
 
 if ($output.Length -eq 0) {
-    Write-Fail "TIMEOUT — COM port ${Timeout}s 內無任何輸出"
-    Write-Host "  請確認板子上電、UART 接線（GPIO16=TX, GPIO17=RX）、Bootloader 已燒錄"
+    Write-Fail "TIMEOUT — no output on COM port after ${Timeout}s"
+    Write-Host "  Check board power, UART wiring (GPIO16=TX, GPIO17=RX), and that bootloader is flashed"
     $serial.Close(); exit 3
 }
 if ($missing.Count -gt 0) {
-    Write-Fail "FAIL — Banner 不符，缺少 $($missing.Count) 個字串"
+    Write-Fail "FAIL — banner mismatch, $($missing.Count) string(s) not found"
     $serial.Close(); exit 2
 }
 Write-Ok "Banner PASS"
 
 # ══ Step 4: OT leader ══════════════════════════════════════════════════════════
 if ($doOt) {
-    Write-Step "OT CLI — 組 Thread 網路，等待 leader（逾時 ${OtTimeout}s）"
+    Write-Step "OT CLI — form Thread network, wait for leader (timeout ${OtTimeout}s)"
 
-    # 給 OT stack 穩定一下（banner 印完後 stack 可能還在 init）
+    # Give the OT stack time to settle after the banner (stack may still be initializing)
     Start-Sleep -Seconds 1
 
-    # 組一個新的 Thread 網路
+    # Form a new Thread network
     $r1 = Send-OtCmd $serial "ot dataset init new"
-    if ($r1 -notmatch "Done") { Write-Fail "'ot dataset init new' 失敗：$r1"; $serial.Close(); exit 4 }
+    if ($r1 -notmatch "Done") { Write-Fail "'ot dataset init new' failed: $r1"; $serial.Close(); exit 4 }
 
     $r2 = Send-OtCmd $serial "ot dataset commit active"
-    if ($r2 -notmatch "Done") { Write-Fail "'ot dataset commit active' 失敗：$r2"; $serial.Close(); exit 4 }
+    if ($r2 -notmatch "Done") { Write-Fail "'ot dataset commit active' failed: $r2"; $serial.Close(); exit 4 }
 
     $r3 = Send-OtCmd $serial "ot ifconfig up"
-    if ($r3 -notmatch "Done") { Write-Fail "'ot ifconfig up' 失敗：$r3"; $serial.Close(); exit 4 }
+    if ($r3 -notmatch "Done") { Write-Fail "'ot ifconfig up' failed: $r3"; $serial.Close(); exit 4 }
 
     $r4 = Send-OtCmd $serial "ot thread start"
-    if ($r4 -notmatch "Done") { Write-Fail "'ot thread start' 失敗：$r4"; $serial.Close(); exit 4 }
+    if ($r4 -notmatch "Done") { Write-Fail "'ot thread start' failed: $r4"; $serial.Close(); exit 4 }
 
-    Write-Info "Thread started，輪詢 state..."
+    Write-Info "Thread started, polling state..."
 
-    # 輪詢 state 直到 leader
+    # Poll state until leader
     $deadline  = (Get-Date).AddSeconds($OtTimeout)
     $isLeader  = $false
     $pollCount = 0
@@ -298,7 +298,7 @@ if ($doOt) {
             break
         }
 
-        # 顯示目前狀態
+        # Show current state
         $curState = if ($resp -match "(disabled|detached|child|router|leader)") {
             $Matches[1]
         } else { "unknown" }
@@ -308,9 +308,9 @@ if ($doOt) {
     Write-Host ""
     Write-Host "─────────────────────────────────────" -ForegroundColor White
     if ($isLeader) {
-        Write-Ok "OT leader PASS（$pollCount 次輪詢）"
+        Write-Ok "OT leader PASS ($pollCount polls)"
     } else {
-        Write-Fail "OT leader TIMEOUT — ${OtTimeout}s 內未成為 leader"
+        Write-Fail "OT leader TIMEOUT — did not become leader within ${OtTimeout}s"
         $serial.Close(); exit 4
     }
     Write-Host "─────────────────────────────────────" -ForegroundColor White
@@ -319,5 +319,5 @@ if ($doOt) {
 $serial.Close()
 
 Write-Host ""
-Write-Ok "全部測試通過 ✓"
+Write-Ok "All tests passed"
 exit 0

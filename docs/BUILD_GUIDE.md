@@ -1,34 +1,64 @@
 # RT583-EVB Build & Flash Guide
 
-## Prerequisites
+## 1. First-time Setup
 
-1. **Zephyr SDK + west workspace** — run the install script first:
-   ```powershell
-   .\scripts\windows\install.ps1
-   ```
+### Option A — Bootstrap (no prior clone needed)
 
-2. **connectedhomeip** (Matter only):
-   ```powershell
-   cd C:\Users\Stanley
-   git clone --recurse-submodules https://github.com/project-chip/connectedhomeip
-   cd connectedhomeip
-   git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9
-   ```
+Open PowerShell 7 and run:
 
-3. **GN build tool** (Matter only):
-   ```powershell
-   pip install gn
-   ```
+```powershell
+irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
+```
 
-4. **Load environment** — every new terminal session:
-   ```powershell
-   cd C:\Users\Stanley\zephyr-thread-rt58x
-   . ..\env.ps1
-   ```
+This clones the repo and runs `install.ps1` automatically.
+
+### Option B — Manual install (repo already cloned)
+
+```powershell
+cd zephyr-thread-rt58x
+.\scripts\windows\install.ps1
+```
+
+`install.ps1` downloads and installs (first run takes 15–40 min):
+
+| Step | What it does |
+|------|-------------|
+| Required tools | Python 3.12, CMake, Ninja, Git, 7-Zip via winget |
+| ZAP CLI | Matter code-generation tool (~60 MB) |
+| Zephyr SDK 1.0.1 | ARM toolchain (~2 GB) |
+| West workspace | `west init` + `west update` — downloads Zephyr (~500 MB) |
+| Python deps | `pip install` for Zephyr and connectedhomeip |
+| GN | Generate Ninja binary for the Matter GN build |
+| connectedhomeip submodules | pigweed, jsoncpp, nlassert, nlio, nanopb, abseil-cpp, openthread, uriparser |
+| env.ps1 | Generated inside the project directory |
+
+### connectedhomeip (Matter only)
+
+If not already cloned, clone it beside the workspace:
+
+```powershell
+git clone --depth=1 https://github.com/project-chip/connectedhomeip ..\connectedhomeip
+cd ..\connectedhomeip
+git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9
+git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9
+```
+
+Then re-run `install.ps1` to initialise its submodules.
 
 ---
 
-## Build Targets
+## 2. Load Environment
+
+Run this **once per terminal session** from inside the project directory:
+
+```powershell
+cd zephyr-thread-rt58x
+. .\env.ps1
+```
+
+---
+
+## 3. Build Targets
 
 | Target | Source | Output |
 |--------|--------|--------|
@@ -40,27 +70,9 @@
 
 ---
 
-## Build with west
+## 4. Build
 
-### PowerShell + CMake arguments
-
-PowerShell does not pass `--` correctly to external programs. Two workarounds:
-
-**Option A — use `cmd /c`:**
-```powershell
-cmd /c "west build -p always -b rt583_evb <source> -d <build_dir> -- -DFOO=BAR"
-```
-
-**Option B — use environment variables instead of `-D`:**
-```powershell
-$env:OVERLAY_CONFIG = "C:/Users/Stanley/zephyr-thread-rt58x/examples/bootloader/mcuboot.conf"
-west build -p always -b rt583_evb ..\bootloader\mcuboot\boot\zephyr -d build/bootloader
-Remove-Item env:OVERLAY_CONFIG
-```
-
-If you don't need extra CMake args, `west build` works directly without workarounds.
-
-### MCUboot bootloader (first time)
+### MCUboot bootloader
 
 > **Important:** If the app uses a DTS overlay that changes flash partitions
 > (e.g. Matter lighting-app enlarges slot0/slot1 to 928 KB), the bootloader
@@ -69,18 +81,16 @@ If you don't need extra CMake args, `west build` works directly without workarou
 
 ```powershell
 # For Thread CLI / Blinky / BLE HRS (default 800 KB slots):
-$env:OVERLAY_CONFIG = "C:/Users/Stanley/zephyr-thread-rt58x/examples/bootloader/mcuboot.conf"
-$env:DTC_OVERLAY_FILE = "C:/Users/Stanley/zephyr-thread-rt58x/examples/bootloader/mcuboot.overlay"
-west build -p always -b rt583_evb ..\bootloader\mcuboot\boot\zephyr -d build/bootloader
-Remove-Item env:OVERLAY_CONFIG
-Remove-Item env:DTC_OVERLAY_FILE
+west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
+    -d build/bootloader `
+    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay"
 
 # For Matter lighting-app (928 KB slots):
-$env:OVERLAY_CONFIG = "C:/Users/Stanley/zephyr-thread-rt58x/examples/bootloader/mcuboot.conf"
-$env:DTC_OVERLAY_FILE = "C:/Users/Stanley/zephyr-thread-rt58x/examples/bootloader/mcuboot.overlay;C:/Users/Stanley/zephyr-thread-rt58x/examples/matter/lighting-app/boards/rt583_evb.overlay"
-west build -p always -b rt583_evb ..\bootloader\mcuboot\boot\zephyr -d build/bootloader-matter
-Remove-Item env:OVERLAY_CONFIG
-Remove-Item env:DTC_OVERLAY_FILE
+west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
+    -d build/bootloader-matter `
+    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay;examples/matter/lighting-app/boards/rt583_evb.overlay"
 ```
 
 ### Thread CLI
@@ -95,7 +105,7 @@ west build -p always -b rt583_evb examples/thread -d build/thread
 west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 ```
 
-### Incremental build (after code changes)
+### Incremental build (after code changes only)
 
 ```powershell
 west build -d build/lighting-app
@@ -105,19 +115,12 @@ Use `-p always` only when `prj.conf`, Kconfig, or DTS files changed.
 
 ---
 
-## Flash with west
+## 5. Flash
 
 Hardware: connect **CMSIS-DAP** debugger to RT583-EVB.
 
-### Flash the most recent build
-
 ```powershell
-west flash
-```
-
-### Flash a specific build directory
-
-```powershell
+# Flash a specific build directory
 west flash -d build/bootloader
 west flash -d build/lighting-app
 west flash -d build/thread
@@ -126,7 +129,7 @@ west flash -d build/thread
 ### First-time full flash (bootloader + app)
 
 ```powershell
-# Thread CLI / Blinky / BLE HRS (default slots):
+# Thread CLI / Blinky / BLE HRS:
 west flash -d build/bootloader
 west flash -d build/thread
 
@@ -137,21 +140,24 @@ west flash -d build/lighting-app
 
 ---
 
-## Build script alternative
-
-The PowerShell build/flash scripts handle all the `--` quoting issues automatically:
+## 6. Full Workflow
 
 ```powershell
+# Once per terminal
+cd zephyr-thread-rt58x
+. .\env.ps1
+
 # Build
-.\scripts\windows\build.ps1 -p bootloader
-.\scripts\windows\build.ps1 -p thread
-.\scripts\windows\build.ps1 -p lighting-app
-.\scripts\windows\build.ps1 -p lighting-app -NoPristine    # incremental
+west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
+    -d build/bootloader `
+    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay"
+
+west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 
 # Flash
-.\scripts\windows\flash.ps1 -p bootloader        # default slots
-.\scripts\windows\flash.ps1 -p lighting-app       # auto-uses matching bootloader
-.\scripts\windows\flash.ps1 -p thread
+west flash -d build/bootloader
+west flash -d build/lighting-app
 ```
 
 ---
@@ -183,9 +189,12 @@ Address    Size    Partition
 > Mixing default bootloader with Matter app overlay will cause
 > "Unable to find bootable image".
 
+---
+
 ## Serial Console
 
 After flashing, open a serial terminal:
+
 - **Port**: check Device Manager for USB Serial Port (COM?)
 - **Baud**: 115200
 - **Settings**: 8N1, no flow control
@@ -196,6 +205,8 @@ Expected boot output:
 *** Booting Zephyr OS ***
 ```
 
+---
+
 ## Quick Reference
 
 | Task | Command |
@@ -204,6 +215,19 @@ Expected boot output:
 | Incremental build | `west build -d <dir>` |
 | Flash | `west flash -d <dir>` |
 | Verbose build | `west build -v -d <dir>` |
-| Update modules | `west update` |
+| Update all modules | `west update` |
 | Update one module | `west update tf-psa-crypto` |
 | List modules | `west list` |
+
+---
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `source directory ... does not exist` | Run from inside `zephyr-thread-rt58x` and use `../bootloader/...` |
+| `env.ps1 not found` | Run `.\scripts\windows\install.ps1` first |
+| `west: command not found` | Run `. .\env.ps1` to activate the venv |
+| `openocd.exe not found` | Run `.\scripts\windows\install.ps1` to install it |
+| `connectedhomeip not found` | Clone it: see Section 1 above |
+| `image not found` (MCUboot) | Bootloader and app slot layouts do not match — rebuild bootloader with the correct overlay |
