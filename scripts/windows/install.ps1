@@ -113,9 +113,12 @@ Write-Host ("    {0,-$col1}  {1,-$col2}  {2,-$col3}  {3}" -f ("-" * $col1), ("-"
 foreach ($pkg in $packages) {
     $installedLine = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
     if ($installedLine) {
-        # winget list output: Name  Id  Version  Source
-        $ver = ($installedLine.Line -split '\s{2,}' | Select-Object -Index 2)
-        if (-not $ver) { $ver = "-" }
+        # Extract version: first token immediately after the known Package ID.
+        # Splitting by \s{2,} is unreliable when the ID column is long (only one
+        # space may separate ID from Version in winget output).
+        $ver = if ($installedLine.Line -match ([regex]::Escape($pkg.Id) + '\s+(\S+)')) {
+            $Matches[1]
+        } else { "-" }
         $status = "installed"
         $color  = [ConsoleColor]::DarkGray
     } else {
