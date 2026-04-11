@@ -541,5 +541,6 @@ Write-Host ""
 Write-Host "每次開啟新 PowerShell 請先執行："
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "編譯（從 $projectDir 執行）："
-Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app" -ForegroundColor Yellow
+Write-Host "編譯（從 workspace 根目錄執行）："
+Write-Host "  cd $Workspace" -ForegroundColor Yellow
+Write-Host "  west build -p always -b rt583_evb $projectName/examples/matter/lighting-app" -ForegroundColor Yellow
