@@ -285,7 +285,8 @@ $westConfig  = Join-Path $Workspace ".west\config"
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
-if (-not (Test-Path $westConfig)) {
+$westDir = Join-Path $Workspace ".west"
+if (-not (Test-Path $westDir)) {
     Write-Host "    west init ..."
     Push-Location $Workspace
     & $python312 -m west init -l $projectName
