@@ -292,7 +292,7 @@ set_property(TARGET app PROPERTY SOURCES ${_app_srcs})
 set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
 
 target_include_directories(app PRIVATE
-    main/include
+    src/include
     ${GEN_DIR}
     ${GEN_DIR}/app-common
     ${GEN_DIR}/lighting-app
@@ -305,11 +305,11 @@ target_include_directories(app PRIVATE
 
 # ── Application sources ──────────────────────────────────────────────────────
 target_sources(app PRIVATE
-    main/main.cpp
-    main/AppTask.cpp
-    main/ZclCallbacks.cpp
-    main/MallocWrappers.cpp
-    main/ecp_enum_compat.c
+    src/main.cpp
+    src/AppTask.cpp
+    src/ZclCallbacks.cpp
+    src/MallocWrappers.cpp
+    src/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
 )
 
