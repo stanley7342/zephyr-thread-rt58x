@@ -34,24 +34,23 @@ irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scr
 
 ### lighting-app（Matter）
 
-從 workspace 根目錄（`zephyr-thread-rt58x` 的上一層）執行：
-
 ```sh
-west build -p always -b rt583_evb zephyr-thread-rt58x/examples/matter/lighting-app
+cd zephyr-thread-rt58x
+west build -p always -b rt583_evb examples/matter/lighting-app
 ```
 
 ```sh
-west build -b rt583_evb zephyr-thread-rt58x/examples/matter/lighting-app
+west build -b rt583_evb examples/matter/lighting-app
 ```
 
 ### OpenThread FTD CLI
 
 ```sh
-west build -p always -b rt583_evb zephyr-thread-rt58x
+west build -p always -b rt583_evb .
 ```
 
 ```sh
-west build -b rt583_evb zephyr-thread-rt58x
+west build -b rt583_evb .
 ```
 
 ### Bootloader（MCUboot）
