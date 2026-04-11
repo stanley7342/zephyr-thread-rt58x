@@ -364,9 +364,26 @@ foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
 }
 Write-Ok "cryptography 安裝完成（MCUboot imgtool）"
 
-# Matter build tools: GN (Generate Ninja) + jsonschema (Zephyr CMake module)
-& $python312 -m pip install --quiet gn jsonschema
-Write-Ok "gn + jsonschema 安裝完成（Matter build 依賴）"
+# jsonschema — Zephyr CMake module dependency
+& $python312 -m pip install --quiet jsonschema
+Write-Ok "jsonschema 安裝完成"
+
+# GN (Generate Ninja) — download official Windows binary from chromium infra.
+# pip install gn only installs a Python wrapper that is unreliable on Windows.
+Write-Step "安裝 GN (Generate Ninja)"
+$gnExe = Join-Path $venvDir "Scripts\gn.exe"
+if (Test-Path $gnExe) {
+    Write-Skip "gn（$gnExe）"
+} else {
+    $gnZip = Join-Path $env:TEMP "gn-win.zip"
+    $gnUrl = "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest"
+    Write-Host "    下載 gn.exe（chromium infra）..."
+    curl.exe -L --progress-bar -o $gnZip $gnUrl
+    if ($LASTEXITCODE -ne 0) { throw "下載 gn 失敗（exit $LASTEXITCODE）" }
+    Expand-Archive $gnZip -DestinationPath (Split-Path $gnExe) -Force
+    if (-not (Test-Path $gnExe)) { throw "解壓後找不到 gn.exe" }
+    Write-Ok "gn $(& $gnExe --version 2>$null)"
+}
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
