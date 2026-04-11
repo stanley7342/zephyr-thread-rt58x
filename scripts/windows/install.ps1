@@ -276,8 +276,6 @@ if (Test-Path $sdkSetup) {
 
 # ── 步驟 3：West 工作區 ───────────────────────────────────────────────────────
 
-Write-Step "建立 west 工作區 → $Workspace"
-
 $projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectName = Split-Path $projectDir -Leaf
 $westConfig  = Join-Path $Workspace ".west\config"
@@ -285,16 +283,21 @@ $westConfig  = Join-Path $Workspace ".west\config"
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
-# west searches parent directories for .west — use "west topdir" to detect
-# any existing workspace (not just $Workspace\.west).
+# $effectiveWorkspace: where west modules (zephyr, bootloader, …) actually live.
+# west searches parent directories for .west — detect any existing workspace first.
 Push-Location $Workspace
 $westTopdir = (& $python312 -m west topdir 2>$null) -replace '[/\\]$', ''
 Pop-Location
 
-# $effectiveWorkspace: where west modules (zephyr, bootloader, …) actually live.
-# If an ancestor already has .west, use that workspace; otherwise use $Workspace.
 if ($westTopdir) {
     $effectiveWorkspace = $westTopdir.Trim()
+} else {
+    $effectiveWorkspace = $Workspace
+}
+
+Write-Step "建立 west 工作區 → $effectiveWorkspace"
+
+if ($westTopdir) {
     Write-Skip "west init (既有 workspace: $effectiveWorkspace)"
 } else {
     Write-Host "    west init ..."
@@ -305,7 +308,6 @@ if ($westTopdir) {
     if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
     if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
     Write-Ok "west init 完成"
-    $effectiveWorkspace = $Workspace
 }
 
 $zephyrDir = Join-Path $effectiveWorkspace "zephyr"
@@ -355,9 +357,9 @@ Write-Ok "gn + jsonschema 安裝完成（Matter build 依賴）"
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
-Write-Step "產生 $Workspace\env.ps1"
+Write-Step "產生 $effectiveWorkspace\env.ps1"
 
-$envPs1 = Join-Path $Workspace "env.ps1"
+$envPs1 = Join-Path $effectiveWorkspace "env.ps1"
 $zephyrBase = $zephyrDir -replace "\\", "/"
 $sdkInstall = $SdkDir    -replace "\\", "/"
 $venvActivate = "$venvDir\Scripts\Activate.ps1"
@@ -518,8 +520,11 @@ Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "  環境建置完成！" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "West workspace : $effectiveWorkspace" -ForegroundColor DarkGray
+Write-Host "專案目錄       : $projectDir" -ForegroundColor DarkGray
+Write-Host ""
 Write-Host "每次開啟新 PowerShell 請先執行："
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "編譯請使用："
+Write-Host "編譯（從 $projectDir 執行）："
 Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app" -ForegroundColor Yellow
