@@ -278,28 +278,18 @@ if (Test-Path $sdkSetup) {
 
 $projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectName = Split-Path $projectDir -Leaf
-$westConfig  = Join-Path $Workspace ".west\config"
+$westDir     = Join-Path $Workspace ".west"
+$westConfig  = Join-Path $westDir "config"
 
+# Force west to use $Workspace\.west — prevents west from searching parent
+# directories and finding (or conflicting with) an ancestor workspace.
+$env:WEST_DIR    = $westDir
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
-# $effectiveWorkspace: where west modules (zephyr, bootloader, …) actually live.
-# west searches parent directories for .west — detect any existing workspace first.
-Push-Location $Workspace
-$westTopdir = (& $python312 -m west topdir 2>$null) -replace '[/\\]$', ''
-Pop-Location
+Write-Step "建立 west 工作區 → $Workspace"
 
-if ($westTopdir) {
-    $effectiveWorkspace = $westTopdir.Trim()
-} else {
-    $effectiveWorkspace = $Workspace
-}
-
-Write-Step "建立 west 工作區 → $effectiveWorkspace"
-
-if ($westTopdir) {
-    Write-Skip "west init (既有 workspace: $effectiveWorkspace)"
-} else {
+if (-not (Test-Path $westDir)) {
     Write-Host "    west init ..."
     Push-Location $Workspace
     & $python312 -m west init -l $projectName
@@ -308,14 +298,16 @@ if ($westTopdir) {
     if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
     if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
     Write-Ok "west init 完成"
+} else {
+    Write-Skip "west init"
 }
 
-$zephyrDir = Join-Path $effectiveWorkspace "zephyr"
+$zephyrDir = Join-Path $Workspace "zephyr"
 $req       = Join-Path $zephyrDir "scripts\requirements-base.txt"
 
 if (-not (Test-Path $req)) {
     Write-Host "    west update（下載 Zephyr，約 500 MB）..."
-    Push-Location $effectiveWorkspace
+    Push-Location $Workspace
     & $python312 -m west update
     $rc = $LASTEXITCODE
     Pop-Location
@@ -328,7 +320,7 @@ if (-not (Test-Path $req)) {
 $env:ZEPHYR_BASE = $savedZephyrBase
 
 if (-not (Test-Path $req)) {
-    throw "west update 後仍找不到：$req`n請手動執行：`n  cd $effectiveWorkspace`n  west update"
+    throw "west update 後仍找不到：$req`n請手動執行：`n  cd $Workspace`n  west update"
 }
 
 # ── 步驟 4：Python 依賴 ───────────────────────────────────────────────────────
@@ -340,7 +332,7 @@ Write-Ok "Zephyr Python 依賴安裝完成"
 # MCUboot imgtool 需要 cryptography 套件。
 # Zephyr CMake 以 WEST_PYTHON 呼叫 imgtool.py，該路徑在
 # 某些環境下仍解析為系統 Python，因此兩邊都需要安裝。
-$mcubootReq = Join-Path $effectiveWorkspace "bootloader\mcuboot\scripts\requirements.txt"
+$mcubootReq = Join-Path $Workspace "bootloader\mcuboot\scripts\requirements.txt"
 foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
     if (-not (Test-Path $py)) { continue }
     if (Test-Path $mcubootReq) {
@@ -357,13 +349,14 @@ Write-Ok "gn + jsonschema 安裝完成（Matter build 依賴）"
 
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
-Write-Step "產生 $effectiveWorkspace\env.ps1"
+Write-Step "產生 $Workspace\env.ps1"
 
-$envPs1 = Join-Path $effectiveWorkspace "env.ps1"
+$envPs1 = Join-Path $Workspace "env.ps1"
 $zephyrBase = $zephyrDir -replace "\\", "/"
 $sdkInstall = $SdkDir    -replace "\\", "/"
 $venvActivate = "$venvDir\Scripts\Activate.ps1"
 
+$westDirFwd = $westDir -replace "\\", "/"
 @"
 # Zephyr 環境變數 — 每次開啟新 PowerShell 執行: . $envPs1
 . "$venvActivate"
@@ -371,6 +364,7 @@ $venvActivate = "$venvDir\Scripts\Activate.ps1"
 `$env:ZEPHYR_TOOLCHAIN_VARIANT = "zephyr"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:ZAP_INSTALL_PATH         = "$zapInstallDir"
+`$env:WEST_DIR                 = "$westDirFwd"
 `$env:PATH                    += ";C:\Program Files\7-Zip"
 
 Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -ForegroundColor Green
@@ -520,7 +514,7 @@ Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "  環境建置完成！" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "West workspace : $effectiveWorkspace" -ForegroundColor DarkGray
+Write-Host "West workspace : $Workspace" -ForegroundColor DarkGray
 Write-Host "專案目錄       : $projectDir" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "每次開啟新 PowerShell 請先執行："
