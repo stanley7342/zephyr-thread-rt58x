@@ -385,6 +385,16 @@ if (Test-Path $gnExe) {
     Write-Ok "gn $(& $gnExe --version 2>$null)"
 }
 
+# connectedhomeip codegen Python 依賴
+$chipReq = Join-Path $Workspace "connectedhomeip\scripts\setup\requirements.build.txt"
+if (Test-Path $chipReq) {
+    Write-Host "    安裝 connectedhomeip Python 依賴..."
+    & $python312 -m pip install --quiet -r $chipReq
+    Write-Ok "connectedhomeip Python 依賴安裝完成"
+} else {
+    Write-Host "    [--] connectedhomeip 尚未下載，跳過 Python 依賴安裝" -ForegroundColor DarkGray
+}
+
 # ── 步驟 5：產生 env.ps1 ──────────────────────────────────────────────────────
 
 Write-Step "產生 $Workspace\env.ps1"
@@ -394,8 +404,10 @@ $zephyrBase = $zephyrDir -replace "\\", "/"
 $sdkInstall = $SdkDir    -replace "\\", "/"
 $venvActivate = "$venvDir\Scripts\Activate.ps1"
 
-$westDirFwd   = $westDir -replace "\\", "/"
-$venvScripts  = "$venvDir\Scripts"
+$westDirFwd      = $westDir -replace "\\", "/"
+$venvScripts     = "$venvDir\Scripts"
+$chipScripts     = Join-Path $Workspace "connectedhomeip\scripts"
+$chipScriptsFwd  = $chipScripts -replace "\\", "/"
 @"
 # Zephyr 環境變數 — 每次開啟新 PowerShell 執行: . $envPs1
 . "$venvActivate"
@@ -404,6 +416,8 @@ $venvScripts  = "$venvDir\Scripts"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:ZAP_INSTALL_PATH         = "$zapInstallDir"
 `$env:WEST_DIR                 = "$westDirFwd"
+# connectedhomeip codegen scripts need their own scripts/ dir in PYTHONPATH
+`$env:PYTHONPATH               = "$chipScriptsFwd;" + `$env:PYTHONPATH
 # Explicitly add venv Scripts so CMake find_program can locate gn, west, etc.
 `$env:PATH                     = "$venvScripts;" + `$env:PATH
 `$env:PATH                    += ";C:\Program Files\7-Zip"
