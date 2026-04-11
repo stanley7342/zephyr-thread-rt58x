@@ -377,7 +377,8 @@ $zephyrBase = $zephyrDir -replace "\\", "/"
 $sdkInstall = $SdkDir    -replace "\\", "/"
 $venvActivate = "$venvDir\Scripts\Activate.ps1"
 
-$westDirFwd = $westDir -replace "\\", "/"
+$westDirFwd   = $westDir -replace "\\", "/"
+$venvScripts  = "$venvDir\Scripts"
 @"
 # Zephyr 環境變數 — 每次開啟新 PowerShell 執行: . $envPs1
 . "$venvActivate"
@@ -386,6 +387,8 @@ $westDirFwd = $westDir -replace "\\", "/"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:ZAP_INSTALL_PATH         = "$zapInstallDir"
 `$env:WEST_DIR                 = "$westDirFwd"
+# Explicitly add venv Scripts so CMake find_program can locate gn, west, etc.
+`$env:PATH                     = "$venvScripts;" + `$env:PATH
 `$env:PATH                    += ";C:\Program Files\7-Zip"
 
 Write-Host "Zephyr 環境已載入（ZEPHYR_BASE=`$env:ZEPHYR_BASE）" -ForegroundColor Green
