@@ -118,16 +118,16 @@ project(rt583-matter-lighting VERSION 1.0.0)
 include(${CHIP_ROOT}/config/zephyr/app/enable-gnu-std.cmake)
 
 # ── Matter data model (ZAP-generated code + cluster implementations) ─────────
-# connectedhomeip codegen scripts (codegen_paths.py, codegen.py) import
-# 'python_path' (a Pigweed helper) and 'matter.idl.*' from py_matter_idl/.
-# Both live in connectedhomeip/scripts/ — add that directory to PYTHONPATH so
-# CMake's execute_process subprocesses can find them without Pigweed initialised.
-# python_path.py itself is a minimal shim checked into scripts_shim/ and also
-# copied to connectedhomeip/scripts/ (see scripts_shim/python_path.py).
+# connectedhomeip codegen scripts (codegen_paths.py, codegen.py) import:
+#   'python_path'  — Pigweed helper; provided by our scripts_shim/python_path.py
+#   'matter.idl.*' — from ${CHIP_ROOT}/scripts/py_matter_idl/
+# Add both directories to PYTHONPATH so CMake execute_process subprocesses find
+# them without Pigweed being initialised.
+get_filename_component(_SCRIPTS_SHIM "${CMAKE_CURRENT_LIST_DIR}/scripts_shim" ABSOLUTE)
 if(WIN32)
-    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;$ENV{PYTHONPATH}")
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;${_SCRIPTS_SHIM};$ENV{PYTHONPATH}")
 else()
-    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:$ENV{PYTHONPATH}")
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:${_SCRIPTS_SHIM}:$ENV{PYTHONPATH}")
 endif()
 
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
