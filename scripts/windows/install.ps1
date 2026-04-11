@@ -35,15 +35,18 @@
 #>
 
 param(
-    [string] $SdkDir    = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [string] $SdkDir    = "",   # 預設：$Workspace\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
     [switch] $Bg
 )
 
 # West workspace = 本專案父目錄（west 規範：manifest repo 的上一層）
-# 不可自訂：west init -l 會解析 junction/symlink 實體路徑，
-# 導致 .west 建立在錯誤位置。
 # 腳本位於 <project>\scripts\windows\ → 上三層才是 workspace
 $Workspace = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
+
+# 所有工具預設安裝在 workspace 下，保持環境隔離
+if (-not $SdkDir) { $SdkDir = Join-Path $Workspace "zephyr-sdk-1.0.1\zephyr-sdk-1.0.1" }
+$venvDir       = Join-Path $Workspace ".zephyr-venv"
+$zapInstallDir = Join-Path $Workspace "zap-cli"
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -169,7 +172,6 @@ if (Test-Path "$sevenZipPath\7z.exe") {
 
 # venv + west
 Write-Step "建立 Python venv 並安裝 west"
-$venvDir = Join-Path $env:USERPROFILE ".zephyr-venv"
 if (-not (Test-Path "$venvDir\Scripts\activate.ps1")) {
     & $python312 -m venv $venvDir
     Write-Ok "venv 建立於 $venvDir"
@@ -186,8 +188,7 @@ Write-Ok "west：$(& $python312 -m west --version 2>$null)"
 
 Write-Step "安裝 ZAP CLI（Matter 代碼生成）"
 
-$zapInstallDir = Join-Path $env:USERPROFILE "zap-cli"
-$zapExe        = Join-Path $zapInstallDir "zap-cli.exe"
+$zapExe = Join-Path $zapInstallDir "zap-cli.exe"
 
 if (Test-Path $zapExe) {
     Write-Skip "ZAP CLI（$zapExe）"
