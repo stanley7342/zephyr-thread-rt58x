@@ -180,6 +180,12 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build device-tree-compiler file clang-format
+          # GN (Generate Ninja) — required by connectedhomeip chip_gn.cmake
+          curl -sL "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest" \
+            -o /tmp/gn.zip
+          unzip -q /tmp/gn.zip -d /usr/local/bin gn
+          chmod +x /usr/local/bin/gn
+          gn --version
 
       # ── Python + west ───────────────────────────────────────────────────────
       - name: Set up Python
