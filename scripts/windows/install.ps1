@@ -281,23 +281,43 @@ $projectName = Split-Path $projectDir -Leaf
 $westDir     = Join-Path $Workspace ".west"
 $westConfig  = Join-Path $westDir "config"
 
-# Force west to use $Workspace\.west — prevents west from searching parent
-# directories and finding (or conflicting with) an ancestor workspace.
+# Force west to use $Workspace\.west for all subsequent west commands.
 $env:WEST_DIR    = $westDir
 $savedZephyrBase = $env:ZEPHYR_BASE
 $env:ZEPHYR_BASE = $null
 
 Write-Step "建立 west 工作區 → $Workspace"
 
-if (-not (Test-Path $westDir)) {
-    Write-Host "    west init ..."
+if (-not (Test-Path $westConfig)) {
+    # Check whether a parent directory already has .west — west init would
+    # refuse to run inside an existing workspace.  Work around it by writing
+    # .west/config manually (same content west init would produce).
     Push-Location $Workspace
-    & $python312 -m west init -l $projectName
-    $rc = $LASTEXITCODE
+    $parentTopdir = (& $python312 -m west topdir 2>$null)
     Pop-Location
-    if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
-    if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
-    Write-Ok "west init 完成"
+
+    if ($parentTopdir) {
+        Write-Host "    父層 workspace 偵測到（$($parentTopdir.Trim())），直接建立 .west/config..."
+        New-Item -ItemType Directory -Path $westDir -Force | Out-Null
+        @"
+[manifest]
+path = $projectName
+file = west.yml
+
+[zephyr]
+base = zephyr
+"@ | Set-Content $westConfig -Encoding UTF8
+        Write-Ok "west config 建立完成（繞過父層衝突）"
+    } else {
+        Write-Host "    west init ..."
+        Push-Location $Workspace
+        & $python312 -m west init -l $projectName
+        $rc = $LASTEXITCODE
+        Pop-Location
+        if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
+        if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
+        Write-Ok "west init 完成"
+    }
 } else {
     Write-Skip "west init"
 }
