@@ -288,10 +288,14 @@ $env:ZEPHYR_BASE = $null
 # west searches parent directories for .west — use "west topdir" to detect
 # any existing workspace (not just $Workspace\.west).
 Push-Location $Workspace
-$westTopdir = & $python312 -m west topdir 2>$null
+$westTopdir = (& $python312 -m west topdir 2>$null) -replace '[/\\]$', ''
 Pop-Location
+
+# $effectiveWorkspace: where west modules (zephyr, bootloader, …) actually live.
+# If an ancestor already has .west, use that workspace; otherwise use $Workspace.
 if ($westTopdir) {
-    Write-Skip "west init (workspace: $westTopdir)"
+    $effectiveWorkspace = $westTopdir.Trim()
+    Write-Skip "west init (既有 workspace: $effectiveWorkspace)"
 } else {
     Write-Host "    west init ..."
     Push-Location $Workspace
@@ -301,14 +305,15 @@ if ($westTopdir) {
     if ($rc -ne 0) { throw "west init 失敗（exit $rc）" }
     if (-not (Test-Path $westConfig)) { throw "west init 成功但找不到 $westConfig" }
     Write-Ok "west init 完成"
+    $effectiveWorkspace = $Workspace
 }
 
-$zephyrDir = Join-Path $Workspace "zephyr"
+$zephyrDir = Join-Path $effectiveWorkspace "zephyr"
 $req       = Join-Path $zephyrDir "scripts\requirements-base.txt"
 
 if (-not (Test-Path $req)) {
     Write-Host "    west update（下載 Zephyr，約 500 MB）..."
-    Push-Location $Workspace
+    Push-Location $effectiveWorkspace
     & $python312 -m west update
     $rc = $LASTEXITCODE
     Pop-Location
@@ -321,7 +326,7 @@ if (-not (Test-Path $req)) {
 $env:ZEPHYR_BASE = $savedZephyrBase
 
 if (-not (Test-Path $req)) {
-    throw "west update 後仍找不到：$req`n請手動執行：`n  cd $Workspace`n  west update"
+    throw "west update 後仍找不到：$req`n請手動執行：`n  cd $effectiveWorkspace`n  west update"
 }
 
 # ── 步驟 4：Python 依賴 ───────────────────────────────────────────────────────
@@ -333,7 +338,7 @@ Write-Ok "Zephyr Python 依賴安裝完成"
 # MCUboot imgtool 需要 cryptography 套件。
 # Zephyr CMake 以 WEST_PYTHON 呼叫 imgtool.py，該路徑在
 # 某些環境下仍解析為系統 Python，因此兩邊都需要安裝。
-$mcubootReq = Join-Path $Workspace "bootloader\mcuboot\scripts\requirements.txt"
+$mcubootReq = Join-Path $effectiveWorkspace "bootloader\mcuboot\scripts\requirements.txt"
 foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
     if (-not (Test-Path $py)) { continue }
     if (Test-Path $mcubootReq) {
