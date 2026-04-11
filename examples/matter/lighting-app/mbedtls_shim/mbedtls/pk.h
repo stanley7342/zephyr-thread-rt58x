@@ -57,34 +57,63 @@ extern "C" {
 static inline mbedtls_ecp_group_id mbedtls_pk_ec_psa_to_grp(
         psa_ecc_family_t family, size_t bits)
 {
+    /* Each case is guarded by the corresponding MBEDTLS_ECP_DP_xxx_ENABLED
+     * macro so that curves disabled in the build config are silently skipped
+     * rather than causing undeclared-identifier errors. */
     switch (family) {
         case PSA_ECC_FAMILY_SECP_R1:
             switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192R1_ENABLED)
                 case 192: return MBEDTLS_ECP_DP_SECP192R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224R1_ENABLED)
                 case 224: return MBEDTLS_ECP_DP_SECP224R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED)
                 case 256: return MBEDTLS_ECP_DP_SECP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP384R1_ENABLED)
                 case 384: return MBEDTLS_ECP_DP_SECP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP521R1_ENABLED)
                 case 521: return MBEDTLS_ECP_DP_SECP521R1;
+#endif
                 default:  return MBEDTLS_ECP_DP_NONE;
             }
         case PSA_ECC_FAMILY_SECP_K1:
             switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED)
                 case 192: return MBEDTLS_ECP_DP_SECP192K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED)
                 case 224: return MBEDTLS_ECP_DP_SECP224K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED)
                 case 256: return MBEDTLS_ECP_DP_SECP256K1;
+#endif
                 default:  return MBEDTLS_ECP_DP_NONE;
             }
         case PSA_ECC_FAMILY_BRAINPOOL_P_R1:
             switch (bits) {
+#if defined(MBEDTLS_ECP_DP_BP256R1_ENABLED)
                 case 256: return MBEDTLS_ECP_DP_BP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP384R1_ENABLED)
                 case 384: return MBEDTLS_ECP_DP_BP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP512R1_ENABLED)
                 case 512: return MBEDTLS_ECP_DP_BP512R1;
+#endif
                 default:  return MBEDTLS_ECP_DP_NONE;
             }
         case PSA_ECC_FAMILY_MONTGOMERY:
             switch (bits) {
+#if defined(MBEDTLS_ECP_DP_CURVE25519_ENABLED)
                 case 255: return MBEDTLS_ECP_DP_CURVE25519;
+#endif
+#if defined(MBEDTLS_ECP_DP_CURVE448_ENABLED)
                 case 448: return MBEDTLS_ECP_DP_CURVE448;
+#endif
                 default:  return MBEDTLS_ECP_DP_NONE;
             }
         default:
