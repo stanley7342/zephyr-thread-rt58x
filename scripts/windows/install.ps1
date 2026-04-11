@@ -270,9 +270,8 @@ if (Test-Path $sdkSetup) {
     New-Item -ItemType Directory -Path $sdkParent -Force | Out-Null
     Write-Host "    Extracting SDK ..."
     & 7z x $tmp -o"$sdkParent" -y -bb1 2>&1 | ForEach-Object {
-        Write-Host ("`r    " + $_.ToString().PadRight(72).Substring(0, 72)) -NoNewline
+        Write-Host ("    " + $_.ToString())
     }
-    Write-Host ""
 
     Write-Host "    Running setup.cmd ..."
     & cmd.exe /c "`"$sdkSetup`""
