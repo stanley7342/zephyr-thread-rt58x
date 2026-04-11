@@ -8,7 +8,7 @@
       irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
 
     步驟：
-      1. Clone zephyr-thread-rt58x 至 <當下目錄>\zephyr-rt58x
+      1. Clone zephyr-thread-rt58x 至 <當下目錄>\zephyr-thread-rt58x
       2. 呼叫 install.ps1 完成完整環境建置
 #>
 
@@ -16,7 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repo      = "https://github.com/stanley7342/zephyr-thread-rt58x.git"
-$cloneDir  = Join-Path $PWD "zephyr-rt58x"
+$cloneDir  = Join-Path $PWD "zephyr-thread-rt58x"
 $installPs = Join-Path $cloneDir "scripts\windows\install.ps1"
 
 Write-Host ""
