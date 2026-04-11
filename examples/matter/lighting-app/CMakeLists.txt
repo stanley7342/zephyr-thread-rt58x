@@ -41,32 +41,18 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${RT583_PROJECT_DIR})
 # Matter chip-module (nrfconnect variant — most complete Zephyr BT+OpenThread support)
 list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 
-# mbedTLS 4.0 compat: Zephyr v4.4 ships mbedTLS 4.0 (TF-PSA-Crypto) which
-# moved mbedtls/ecp.h and mbedtls/bignum.h from the public API to the private
-# driver include path (tf-psa-crypto/drivers/builtin/include/mbedtls/private/).
-# connectedhomeip still uses those headers (mbedTLS 2.x/3.x public API).
-# The mbedtls_shim/ directory provides forwarding headers so that
-# #include <mbedtls/ecp.h> finds mbedtls/private/ecp.h.
+# ── mbedTLS 4.0 compat shims (generated in build dir) ───────────────────────
+# Zephyr v4.4 ships mbedTLS 4.0 (TF-PSA-Crypto) which moved public mbedtls/
+# ecp.h, bignum.h, and pk.h APIs into private headers and redesigned
+# mbedtls_pk_context.  connectedhomeip still uses the 3.x public API.
 #
-# Three plain -I flags are required instead of relying on the -isystem paths
-# already injected by zephyr_get_compile_flags:
-#   1. mbedtls_shim/           — provides mbedtls/ecp.h → mbedtls/private/ecp.h
-#   2. .../drivers/builtin/include — provides mbedtls/private/ecp.h itself
-#   3. .../tf-psa-crypto/include   — provides tf-psa-crypto/build_info.h and
-#                                    mbedtls/platform_util.h (included by ecp.h)
+# Instead of committing shim files to the source tree, generate them at
+# CMake configure time into ${CMAKE_BINARY_DIR}/chip_mbedtls_compat/ so the
+# source tree stays clean.  The generated directory is prepended to the GN
+# -I path so the shim headers shadow the installed public headers.
 #
-# zephyr_get_compile_flags emits "-isystemC:/path" (no space between -isystem
-# and the drive-letter path) which arm-zephyr-eabi-g++ on Windows does not parse
-# correctly — the drive letter is swallowed by the flag name.  Plain -I flags
-# are always parsed correctly and take precedence over -isystem.
-#
-# Paths are normalised with get_filename_component(ABSOLUTE) to eliminate the
-# /../ segment so the compiler receives a clean Windows absolute path.
-#
-# MBEDTLS_ALLOW_PRIVATE_ACCESS enables MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
-# (see mbedtls/private_access.h) which guards ALL function declarations in
-# mbedtls/private/ecp.h (mbedtls_ecp_group_init, mbedtls_ecp_mul, …).
-# Without it CHIPCryptoPALPSA.cpp fails with 'not declared in this scope'.
+# Plain -I flags are used (not -isystem) because on Windows arm-zephyr-eabi-
+# g++ mis-parses "-isystemC:/path" (drive letter consumed by flag name).
 get_filename_component(TF_PSA_CRYPTO_INCLUDE
     "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
     ABSOLUTE)
@@ -74,19 +60,137 @@ get_filename_component(TF_PSA_CRYPTO_BUILTIN_INCLUDE
     "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
     ABSOLUTE)
 
+set(_CHIP_MBEDTLS_COMPAT "${CMAKE_BINARY_DIR}/chip_mbedtls_compat")
+
+# ecp.h — redirect to private header (ECP API moved in 4.x)
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/ecp.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#pragma once
+#include <mbedtls/private/ecp.h>
+]=])
+
+# bignum.h — redirect to private header (bignum API moved in 4.x)
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/bignum.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#pragma once
+#include <mbedtls/private/bignum.h>
+]=])
+
+# pk.h — (a) pulls in pk_private.h for legacy PK type symbols, and
+#         (b) provides mbedtls_pk_ec() which was removed in 4.x.
+#
+# mbedtls_pk_context in 4.x is PSA-backed: the public key lives in
+# pub_raw[] (uncompressed point bytes) and ec_family/bits describe the
+# curve.  mbedtls_pk_ec() rebuilds an mbedtls_ecp_keypair from those
+# fields using a static local (safe: connectedhomeip only reads the result).
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/pk.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#ifndef MBEDTLS_PK_SHIM_H
+#define MBEDTLS_PK_SHIM_H
+
+#include_next <mbedtls/pk.h>
+#include <mbedtls/private/pk_private.h>
+#include <mbedtls/private/ecp.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static inline mbedtls_ecp_group_id mbedtls_pk_ec_psa_to_grp(
+        psa_ecc_family_t family, size_t bits)
+{
+    switch (family) {
+        case PSA_ECC_FAMILY_SECP_R1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192R1_ENABLED)
+                case 192: return MBEDTLS_ECP_DP_SECP192R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224R1_ENABLED)
+                case 224: return MBEDTLS_ECP_DP_SECP224R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_SECP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP384R1_ENABLED)
+                case 384: return MBEDTLS_ECP_DP_SECP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP521R1_ENABLED)
+                case 521: return MBEDTLS_ECP_DP_SECP521R1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_SECP_K1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED)
+                case 192: return MBEDTLS_ECP_DP_SECP192K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED)
+                case 224: return MBEDTLS_ECP_DP_SECP224K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_SECP256K1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_BRAINPOOL_P_R1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_BP256R1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_BP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP384R1_ENABLED)
+                case 384: return MBEDTLS_ECP_DP_BP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP512R1_ENABLED)
+                case 512: return MBEDTLS_ECP_DP_BP512R1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_MONTGOMERY:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_CURVE25519_ENABLED)
+                case 255: return MBEDTLS_ECP_DP_CURVE25519;
+#endif
+#if defined(MBEDTLS_ECP_DP_CURVE448_ENABLED)
+                case 448: return MBEDTLS_ECP_DP_CURVE448;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        default:
+            return MBEDTLS_ECP_DP_NONE;
+    }
+}
+
+static inline mbedtls_ecp_keypair *mbedtls_pk_ec(mbedtls_pk_context ctx)
+{
+    static mbedtls_ecp_keypair kp;
+    mbedtls_ecp_keypair_free(&kp);
+    mbedtls_ecp_keypair_init(&kp);
+    mbedtls_ecp_group_id grp_id = mbedtls_pk_ec_psa_to_grp(
+            ctx.MBEDTLS_PRIVATE(ec_family), ctx.MBEDTLS_PRIVATE(bits));
+    if (grp_id == MBEDTLS_ECP_DP_NONE) return NULL;
+    if (mbedtls_ecp_group_load(&kp.MBEDTLS_PRIVATE(grp), grp_id) != 0) return NULL;
+    if (mbedtls_ecp_point_read_binary(&kp.MBEDTLS_PRIVATE(grp), &kp.MBEDTLS_PRIVATE(Q),
+                ctx.MBEDTLS_PRIVATE(pub_raw), ctx.MBEDTLS_PRIVATE(pub_raw_len)) != 0)
+        return NULL;
+    return &kp;
+}
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* MBEDTLS_PK_SHIM_H */
+]=])
+
 set(CHIP_CFLAGS
-    "-I${CMAKE_CURRENT_LIST_DIR}/mbedtls_shim"
+    "-I${_CHIP_MBEDTLS_COMPAT}"
     "-I${TF_PSA_CRYPTO_BUILTIN_INCLUDE}"
     "-I${TF_PSA_CRYPTO_INCLUDE}"
-    # mbedtls/private/ecp.h guards ALL function declarations (mbedtls_ecp_group_init,
-    # mbedtls_ecp_mul, etc.) inside #if defined(MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS).
-    # That macro is only defined when MBEDTLS_ALLOW_PRIVATE_ACCESS is defined
-    # (see private_access.h).  Without it, the functions are not declared and
-    # CHIPCryptoPALPSA.cpp fails with 'not declared in this scope' errors.
+    # MBEDTLS_ALLOW_PRIVATE_ACCESS → private_access.h defines
+    # MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS, enabling all declarations in
+    # mbedtls/private/ecp.h and mbedtls/private/pk_private.h.
     "-DMBEDTLS_ALLOW_PRIVATE_ACCESS"
-    # PSA crypto provides its own entropy; PlatformManagerImpl.cpp must not call
-    # add_entropy_source() (the PSA backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE).
-    # Defining CONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR suppresses that code path.
+    # Suppress add_entropy_source() in PlatformManagerImpl.cpp — the PSA
+    # backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE for that call.
     "-DCONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR=1"
 )
 
@@ -119,15 +223,41 @@ include(${CHIP_ROOT}/config/zephyr/app/enable-gnu-std.cmake)
 
 # ── Matter data model (ZAP-generated code + cluster implementations) ─────────
 # connectedhomeip codegen scripts (codegen_paths.py, codegen.py) import:
-#   'python_path'  — Pigweed helper; provided by our scripts_shim/python_path.py
+#   'python_path'  — Pigweed helper (not present without full Pigweed bootstrap)
 #   'matter.idl.*' — from ${CHIP_ROOT}/scripts/py_matter_idl/
-# Add both directories to PYTHONPATH so CMake execute_process subprocesses find
-# them without Pigweed being initialised.
-get_filename_component(_SCRIPTS_SHIM "${CMAKE_CURRENT_LIST_DIR}/scripts_shim" ABSOLUTE)
+#
+# python_path.py is generated into the build directory at configure time so
+# the source tree needs no committed shim files.
+set(_CHIP_SCRIPTS_COMPAT "${CMAKE_BINARY_DIR}/chip_scripts_compat")
+file(WRITE "${_CHIP_SCRIPTS_COMPAT}/python_path.py"
+[=["""Minimal shim for Pigweed's python_path module (auto-generated, do not edit).
+connectedhomeip codegen scripts import PythonPath from this module when Pigweed
+is not fully bootstrapped.  PythonPath(subdir, relative_to=__file__) is a
+context manager that prepends <dirname(relative_to)>/<subdir> to sys.path.
+"""
+import os, sys
+
+class PythonPath:
+    def __init__(self, subdir, relative_to=None):
+        base = os.path.dirname(os.path.abspath(relative_to)) if relative_to else os.getcwd()
+        self._path = os.path.join(base, subdir)
+        self._added = False
+    def __enter__(self):
+        if self._path not in sys.path:
+            sys.path.insert(0, self._path)
+            self._added = True
+        return self
+    def __exit__(self, *_):
+        if self._added:
+            try: sys.path.remove(self._path)
+            except ValueError: pass
+        return False
+]=])
+
 if(WIN32)
-    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;${_SCRIPTS_SHIM};$ENV{PYTHONPATH}")
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;${_CHIP_SCRIPTS_COMPAT};$ENV{PYTHONPATH}")
 else()
-    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:${_SCRIPTS_SHIM}:$ENV{PYTHONPATH}")
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:${_CHIP_SCRIPTS_COMPAT}:$ENV{PYTHONPATH}")
 endif()
 
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
