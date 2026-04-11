@@ -12,15 +12,13 @@ irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scr
 
 ## 環境載入（每次開新 shell）
 
-```powershell
-. $env:USERPROFILE\..\env.ps1
-```
-
-或完整路徑：
+從 `zephyr-thread-rt58x/` 目錄執行：
 
 ```powershell
-. C:\Users\Stanley\env.ps1
+. ..\env.ps1
 ```
+
+`env.ps1` 由 `install.ps1` 自動產生於 workspace 根目錄（`zephyr-thread-rt58x` 的上一層）。
 
 ---
 

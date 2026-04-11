@@ -12,9 +12,9 @@
       5. 產生 env.ps1（快速載入環境變數）
 
     West workspace = 本專案的父目錄（west 規範）。
-    例如：專案在 C:\Users\Stanley\zephyr-thread-rt58x
-          workspace = C:\Users\Stanley
-          Zephyr    = C:\Users\Stanley\zephyr
+    例如：專案在 C:\dev\zephyr-thread-rt58x
+          workspace = C:\dev
+          Zephyr    = C:\dev\zephyr
 
 .PARAMETER SdkDir
     Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1

@@ -176,7 +176,9 @@ if ($p -eq "bootloader") {
 
     $env:CHIP_ROOT = $chipRoot
     # clang-format is needed by connectedhomeip codegen.py; ensure the wrapper is on PATH.
-    $env:PATH = "C:\Users\Stanley\bin;$env:PATH"
+    # clang-format wrapper: look in <workspace>\bin then skip silently if absent.
+    $localBin = Join-Path $Workspace "bin"
+    if (Test-Path $localBin) { $env:PATH = "$localBin;$env:PATH" }
     $westArgs = Build-WestArgs `
         -Source      "$projectName/examples/matter/lighting-app" `
         -BuildSubdir "$projectName/build/lighting-app" `
