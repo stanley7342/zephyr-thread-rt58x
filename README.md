@@ -330,35 +330,43 @@ export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-1.0.1
 
 ## 6. 編譯
 
-所有指令從 **west 工作區根目錄**執行。
+在 `zephyr-thread-rt58x/` 目錄下執行：
 
-### Clean build（推薦）
+**Clean build（第一次或變更 Kconfig）：**
 
-```bash
-west build -p always -b rt583_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
+```sh
+west build -p always -b rt583_evb examples/matter/lighting-app
 ```
 
-### 增量 build
+**增量編譯：**
 
-```bash
-west build -b rt583_evb zephyr-thread-rt58x --build-dir zephyr-thread-rt58x/build
+```sh
+west build -b rt583_evb examples/matter/lighting-app
 ```
 
-### 輸出檔案
+**OpenThread FTD CLI（非 Matter）：**
 
-| 檔案 | 說明 |
-|------|------|
-| `build/zephyr/zephyr.bin` | 原始 binary，直接燒錄至 `0x00000000` |
-| `build/zephyr/zephyr.elf` | ELF，含 debug 資訊，用於 GDB |
-| `build/zephyr/zephyr.hex` | Intel HEX 格式 |
+```sh
+west build -p always -b rt583_evb .
+```
+
+輸出 binary：`build/lighting-app/zephyr/zephyr.bin`
 
 ---
 
 ## 7. 燒錄
 
-> **重要**：請燒錄至位址 **`0x00000000`**（Flash 起始位址）。
-> Binary 含有自己的 vector table，直接開機——不需要 bootloader。
-> 燒錄至 `0x8000` 將導致無輸出。
+硬體接 CMSIS-DAP（Debugger），在 `zephyr-thread-rt58x/` 下執行：
+
+```sh
+west flash
+```
+
+指定 binary（可選）：
+
+```sh
+west flash --bin-file build/lighting-app/zephyr/zephyr.bin
+```
 
 ### 硬體接線（UART Console）
 
@@ -368,94 +376,6 @@ GPIO16 (TX)  ───►  RX
 GPIO17 (RX)  ◄───  TX
 GND          ───── GND
 ```
-
----
-
-### 7-A. 燒錄（Windows）
-
-```powershell
-$OPENOCD = "C:\Rafael-IoT-SDK-Internal\tools\Debugger\OpenOCD"
-$BIN     = "C:\Users\Stanley\zephyr-thread-rt58x\build\zephyr\zephyr.bin"
-
-& "$OPENOCD\bin\win\openocd.exe" `
-  -s "$OPENOCD\script" `
-  -f interface/cmsis-dap.cfg `
-  -f target/rt58x.cfg `
-  -c "init; halt; flash write_image erase `"$BIN`" 0x0; reset run; exit"
-```
-
----
-
-### 7-B. 燒錄（WSL / Linux）
-
-WSL2 無法直接存取 USB——需先用 **usbipd-win** 將 CMSIS-DAP 橋接至 WSL，再由 WSL 中的 OpenOCD 燒錄。
-
-#### 步驟 1：安裝 usbipd-win（Windows，只需一次）
-
-```powershell
-winget install usbipd
-```
-
-安裝後**重新開啟 PowerShell**。
-
-#### 步驟 2：設定 udev 規則（WSL，只需一次）
-
-```bash
-bash tools/linux/flash.sh --setup-udev
-```
-
-設定完後，若提示需重新登入 WSL：
-
-```powershell
-# PowerShell
-wsl --terminate Ubuntu
-# 再重新開啟 WSL
-```
-
-#### 步驟 3：每次燒錄流程
-
-```powershell
-# ── Windows PowerShell（以系統管理員執行）────
-# 橋接 CMSIS-DAP（自動偵測；或用 -BusId 2-3 指定）
-.\tools\windows\attach-usb.ps1
-```
-
-```bash
-# ── WSL（Bash）────────────────────────────────
-bash tools/linux/flash.sh
-```
-
-```powershell
-# ── Windows PowerShell（燒錄完成後）──────────
-# 中斷橋接（讓其他 Windows 工具可使用該裝置）
-.\tools\windows\attach-usb.ps1 -Detach
-```
-
-#### flash.sh 參數
-
-| 參數 | 說明 |
-|------|------|
-| `--bin <path>` | 指定 binary 路徑（預設：`build/zephyr/zephyr.bin`） |
-| `--setup-udev` | 安裝 CMSIS-DAP udev 規則（首次必須執行） |
-
-#### rt58x.cfg 搜尋順序
-
-`flash.sh` 會依下列順序尋找 OpenOCD scripts：
-
-1. `/mnt/c/Rafael-IoT-SDK-Internal/tools/Debugger/OpenOCD/script`（掛載自 Windows SDK）
-2. `boards/arm/rt583_evb/support/rt58x.cfg`（本專案內）
-
-若兩處都找不到，會提示錯誤並說明如何手動指定路徑。
-
-#### 疑難排解（WSL 燒錄）
-
-| 症狀 | 解法 |
-|------|------|
-| `找不到 CMSIS-DAP 裝置` | 確認已在 PowerShell 執行 `attach-usb.ps1`；確認 WSL 已啟動 |
-| `usbipd: command not found` | `winget install usbipd`，重開 PowerShell |
-| `attach 失敗` | 以**系統管理員**執行 `attach-usb.ps1` |
-| OpenOCD `libusb` 錯誤 | 執行 `--setup-udev` 並重新登入 WSL |
-| `找不到 rt58x.cfg` | 確認 `C:\Rafael-IoT-SDK-Internal` 可從 `/mnt/c/` 存取 |
 
 ---
 
@@ -529,7 +449,7 @@ Done
 | UART RX 中斷從不觸發 | `IRQ_CONNECT` 未呼叫 | 確認 `uart_rt583.c` 中有呼叫 `IRQ_CONNECT` |
 | RF init 後 OT task 卡住 | RF MCU init 阻塞 | 確認 `CONFIG_RF_FW_INCLUDE_PCI=TRUE` compile definition |
 | `>` prompt 不出現 | OT CLI 初始化失敗 | 確認 `main.c` 有呼叫 `otAppCliInit` |
-| OpenOCD: `LIBUSB_ERROR_NOT_FOUND` | CMSIS-DAP 未被識別 | 用 [Zadig](https://zadig.akeo.ie/) 安裝 WinUSB 驅動 |
+| `west flash` 找不到裝置 | CMSIS-DAP 驅動未安裝 | 用 [Zadig](https://zadig.akeo.ie/) 安裝 WinUSB 驅動 |
 | winget 移除失敗（exit 1603） | MSI 資料庫損毀 | `uninstall.ps1` 會自動嘗試 Registry fallback（msiexec + 強制清除） |
 
 ---
