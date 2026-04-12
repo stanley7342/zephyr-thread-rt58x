@@ -219,6 +219,10 @@ jobs:
           pip install -r zephyr/scripts/requirements-base.txt
           pip install imgtool
 
+      - name: Install connectedhomeip Python requirements
+        run: |
+          pip install -r zephyr-thread/connectedhomeip/scripts/setup/requirements.build.txt
+
       # ── Zephyr SDK ──────────────────────────────────────────────────────────
       - name: Cache Zephyr SDK
         id: cache-sdk
@@ -323,13 +327,15 @@ jobs:
           IMGTOOL_BIN="$(python3 -c 'import shutil; print(shutil.which("imgtool") or "")')"
           [ -z "${IMGTOOL_BIN}" ] && { echo "ERROR: imgtool not found" >&2; exit 1; }
 
+          PYTHON3_BIN="$(which python3)"
           west build -p always -b rt583_evb \
             -d build/matter_lighting \
             examples/matter/lighting-app \
             -- \
             -DZephyr_DIR="${ZEPHYR_BASE}/share/zephyr-package/cmake" \
             -DIMGTOOL="${IMGTOOL_BIN}" \
-            -DCHIP_ROOT="${CHIP_ROOT}"
+            -DCHIP_ROOT="${CHIP_ROOT}" \
+            -DPython3_EXECUTABLE="${PYTHON3_BIN}"
 
       # ── Upload ───────────────────────────────────────────────────────────────
       - name: Upload matter_lighting artifacts
