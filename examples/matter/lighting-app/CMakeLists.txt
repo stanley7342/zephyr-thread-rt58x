@@ -28,6 +28,19 @@ if(NOT EXISTS "${CHIP_ROOT}/src/lib/core/CHIPError.h")
         "  cd ${WORKSPACE_DIR}/connectedhomeip && git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9 && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
 endif()
 
+# ── Python3: prefer the active venv so codegen deps (python_path, matter IDL)
+#    are available.  chip_codegen.cmake calls find_package(Python3) which would
+#    otherwise pick the system Python that lacks these packages.
+if(NOT DEFINED Python3_EXECUTABLE)
+    if(DEFINED ENV{VIRTUAL_ENV})
+        if(WIN32)
+            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/Scripts/python.exe" CACHE FILEPATH "")
+        else()
+            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/bin/python" CACHE FILEPATH "")
+        endif()
+    endif()
+endif()
+
 get_filename_component(GEN_DIR "${CHIP_ROOT}/zzz_generated" ABSOLUTE)
 
 # ── Zephyr module setup ──────────────────────────────────────────────────────
