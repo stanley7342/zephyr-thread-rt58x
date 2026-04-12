@@ -476,7 +476,7 @@ $pkgCount = (Get-Content $req | Where-Object { $_ -match '^\s*[^#\s]' }).Count
 Write-Host "    Installing $pkgCount packages from $req ..." -ForegroundColor DarkGray
 $t0 = Get-Date
 & $python312 -m pip install --quiet -r $req
-Write-Ok "Zephyr Python dependencies installed ($([int](Get-Date - $t0).TotalSeconds) s)"
+Write-Ok "Zephyr Python dependencies installed ($([int]((Get-Date) - $t0).TotalSeconds) s)"
 
 # MCUboot requires the cryptography package (for imgtool).
 # Zephyr CMake invokes imgtool.py via WEST_PYTHON, which in some environments
