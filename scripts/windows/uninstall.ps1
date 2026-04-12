@@ -34,7 +34,7 @@
 #>
 
 param(
-    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [string] $SdkDir = "",   # Default derived from workspace after project dir is resolved
     [switch] $Bg,
     [switch] $Force
 )
@@ -77,7 +77,9 @@ if (-not $Workspace) {
     Write-Error "Cannot determine workspace (parent of '$projectDir')."
     exit 1
 }
-$sdkParent = if ($SdkDir) { Split-Path $SdkDir -Parent } else { "" }
+# Mirror install.ps1 default: SDK lives under the workspace, not at a fixed C:\ path.
+if (-not $SdkDir) { $SdkDir = Join-Path $Workspace "zephyr-sdk-1.0.1\zephyr-sdk-1.0.1" }
+$sdkParent = Split-Path $SdkDir -Parent
 
 # ── Background mode ───────────────────────────────────────────────────────────
 if ($Bg) {
