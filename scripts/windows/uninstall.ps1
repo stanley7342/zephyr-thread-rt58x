@@ -207,34 +207,65 @@ foreach ($item in $dirItems) {
 }
 
 # Registry uninstall fallback (for winget errors like 1603 MSI failures).
-# Removes ALL registry entries matching displayNamePattern (handles multiple versions).
+#
+# Root cause of Python 3.12 1603 errors:
+#   Python is a per-user install (AppData\Local).  Running msiexec with
+#   -Verb RunAs (admin) cannot access per-user MSI data → exit 1603.
+#   Additionally, if MSI registry keys are deleted BEFORE the bundled
+#   exe runs, the bundled installer can't find its sub-components → silent fail.
+#
+# Fix:
+#   1. Process exe-based (bundled) uninstallers FIRST — they manage sub-MSIs.
+#   2. Run msiexec in the current user context (no RunAs) for per-user (HKCU)
+#      installs; only elevate for system-wide (HKLM) installs.
+#   3. Only delete registry keys / files as a last resort when msiexec fails.
 function Invoke-RegistryUninstall([string]$displayNamePattern) {
-    $regPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
-    $entries = @()
-    foreach ($path in $regPaths) {
-        $entries += Get-ItemProperty $path -ErrorAction SilentlyContinue |
-                    Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $displayNamePattern }
+    $regSources = [ordered]@{
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"         = $false  # isUser
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" = $false
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"         = $true
     }
-    if (-not $entries) { return -1 }
+    $allEntries = @()
+    foreach ($path in $regSources.Keys) {
+        $isUser = $regSources[$path]
+        Get-ItemProperty $path -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $displayNamePattern } |
+            ForEach-Object { $allEntries += [PSCustomObject]@{ Entry = $_; IsUser = $isUser } }
+    }
+    if (-not $allEntries) { return -1 }
+
+    # Partition: bundled-exe entries first so they clean up sub-MSIs before we touch them.
+    $exeItems = $allEntries | Where-Object { $_.Entry.UninstallString -and $_.Entry.UninstallString -notmatch 'MsiExec' }
+    $msiItems = $allEntries | Where-Object { $_.Entry.UninstallString -and $_.Entry.UninstallString -match  'MsiExec' }
 
     $anyOk = $false
-    foreach ($entry in $entries) {
+    foreach ($item in (@($exeItems) + @($msiItems))) {
+        $entry    = $item.Entry
+        $isUser   = $item.IsUser
         $uninstStr = $entry.UninstallString
         if (-not $uninstStr) { continue }
+
         Write-Host "    [Registry] UninstallString: $uninstStr"
+
         if ($uninstStr -match "MsiExec\.exe\s+[/\\][IXix]\{([^}]+)\}") {
-            $guid = $Matches[1]
+            $guid   = $Matches[1]
             $msiLog = Join-Path $env:TEMP "uninstall_$guid.log"
-            $proc = Start-Process "msiexec.exe" -ArgumentList "/x {$guid} /qn /norestart /L*V `"$msiLog`"" -Wait -PassThru -Verb RunAs
+            # Per-user installs: run in current-user context (no RunAs).
+            # System installs:   try current context first, then elevate.
+            $args = "/x {$guid} /qn /norestart /L*V `"$msiLog`""
+            $proc = Start-Process "msiexec.exe" -ArgumentList $args -Wait -PassThru
             $ec = $proc.ExitCode
-            if ($ec -eq 3010 -or $ec -eq 0) {
-                $anyOk = $true; continue
+            if ($ec -eq 0 -or $ec -eq 3010) { $anyOk = $true; continue }
+
+            if (-not $isUser) {
+                # Retry with elevation for system-wide packages
+                $proc = Start-Process "msiexec.exe" -ArgumentList $args -Wait -PassThru -Verb RunAs
+                $ec = $proc.ExitCode
+                if ($ec -eq 0 -or $ec -eq 3010) { $anyOk = $true; continue }
             }
+
             Write-Warning "    msiexec exit $ec, log: $msiLog"
+            # Only clean up registry + files if msiexec truly cannot proceed
             $installLoc = $entry.InstallLocation
             if ($installLoc -and (Test-Path $installLoc)) {
                 Write-Host "    Deleting directory: $installLoc"
@@ -255,8 +286,7 @@ function Invoke-RegistryUninstall([string]$displayNamePattern) {
                     Write-Host "    Installer not found (already removed): $exePath"
                     $anyOk = $true; continue
                 }
-                # For Python-style bundled installers (/uninstall) add /quiet so the
-                # uninstall runs without a UI.  Other exe uninstallers keep args as-is.
+                # Add /quiet for Python-style bundled installers (/uninstall without /quiet)
                 $runArgs = if ($exeArgs -match '/uninstall' -and $exeArgs -notmatch '/quiet') {
                     "$exeArgs /quiet"
                 } else { $exeArgs }
