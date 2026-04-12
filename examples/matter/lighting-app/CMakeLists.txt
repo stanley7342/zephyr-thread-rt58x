@@ -301,6 +301,35 @@ list(REMOVE_ITEM _app_srcs
 )
 set_property(TARGET app PROPERTY SOURCES ${_app_srcs})
 
+# ── ODR fix: align CMake CHIP_CONFIG_* with GN build ─────────────────────────
+# chip_configure_data_model() adds CodegenIntegration.cpp files to the CMake
+# app target.  These call inline Server accessors (GetFabricTable, etc.) whose
+# compiled offset depends on CHIP_CONFIG_* macros from GN-generated headers in
+# gen/include (AppBuildConfig.h, ICDServerBuildConfig.h, CHIPDeviceBuildConfig.h).
+#
+# Problem 1 — wrong CHIP_HAVE_CONFIG_H value:
+#   Zephyr sets -DCHIP_HAVE_CONFIG_H (no value → expands to empty → #if evaluates
+#   to 0), so AppBuildConfig.h is NOT included and all CHIP_CONFIG_* macros use
+#   their defaults.  GN sets -DCHIP_HAVE_CONFIG_H=1 → AppBuildConfig.h IS
+#   included.  This causes Server member sizes (SessionManager, ExchangeManager)
+#   to differ by 312 bytes between the two build systems.
+#
+# Problem 2 — missing gen/include search path:
+#   The CMake build doesn't add gen/include to its -I list, so even if
+#   CHIP_HAVE_CONFIG_H=1 were set, #include <app/AppBuildConfig.h> would fail.
+#
+# Fix: prepend gen/include to the include search path and redefine
+# CHIP_HAVE_CONFIG_H=1 (using -U to clear the valueless definition first).
+# This makes all CodegenIntegration.cpp TUs see the same struct layouts as the
+# GN-compiled Server.cpp, eliminating the ODR violation on inline accessors.
+target_include_directories(app BEFORE PRIVATE
+    "${CMAKE_BINARY_DIR}/modules/connectedhomeip/gen/include"
+)
+target_compile_options(app PRIVATE
+    -UCHIP_HAVE_CONFIG_H
+    -DCHIP_HAVE_CONFIG_H=1
+)
+
 # ── Include directories ──────────────────────────────────────────────────────
 set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
 
@@ -347,10 +376,32 @@ zephyr_ld_options(
 # mbedtls_ecp_group_load (mbedTLS 3.6.0) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
 # --wrap redirects all callers through __wrap_mbedtls_ecp_group_load (ecp_enum_compat.c)
 # which translates 1→3 before forwarding to OT's __real implementation.
-# The muladd and mul wraps add diagnostic logging to identify PASE failure root cause.
+# Diagnostic wraps: muladd, mul, point_write_binary, check_pubkey log any non-zero
+# return value to pinpoint which PASE step is failing.
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_point_read_binary)
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_muladd)
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_mul)
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_point_write_binary)
+zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_check_pubkey)
+# PSA diagnostic wraps — pinpoint which PSA call in GenerateKeys() returns non-SUCCESS
+zephyr_ld_options(-Wl,--wrap=psa_hash_finish)
+zephyr_ld_options(-Wl,--wrap=psa_key_derivation_output_bytes)
+zephyr_ld_options(-Wl,--wrap=psa_hash_update)
+# MPI write wrap — FEWrite(w0) is the only unmonitored call before GenerateKeys()
+zephyr_ld_options(-Wl,--wrap=mbedtls_mpi_write_binary)
+# KDF diagnostic wraps — psa_key_derivation_output_bytes is present but never called,
+# so the failure is in setup or input_bytes/input_key.  Log always to find it.
+zephyr_ld_options(-Wl,--wrap=psa_key_derivation_setup)
+zephyr_ld_options(-Wl,--wrap=psa_key_derivation_input_bytes)
+zephyr_ld_options(-Wl,--wrap=psa_key_derivation_input_key)
+# PSA init/import wraps — confirm PSA subsystem is initialized before input_key
+zephyr_ld_options(-Wl,--wrap=psa_crypto_init)
+zephyr_ld_options(-Wl,--wrap=psa_import_key)
+# psa_hash_setup wrap — catch BAD_STATE from hash_op->id != 0 in HMAC init
+zephyr_ld_options(-Wl,--wrap=psa_hash_setup)
+# psa_generate_key wrap — diagnose P256Keypair::Initialize failure during CSRRequest
+zephyr_ld_options(-Wl,--wrap=psa_generate_key)
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
 if(CONFIG_BLE_RT583)

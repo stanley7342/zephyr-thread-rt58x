@@ -154,6 +154,16 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
                 event->ThreadConnectivityChange.Result == kConnectivity_Established
                     ? "established" : "lost");
         break;
+    case DeviceEventType::kThreadStateChange:
+        if (event->ThreadStateChange.RoleChanged) {
+#ifdef CONFIG_NET_L2_OPENTHREAD
+            otInstance * inst = openthread_get_default_instance();
+            int role = inst ? (int)otThreadGetDeviceRole(inst) : -1;
+            /* 0=Disabled 1=Detached 2=Child 3=Router 4=Leader */
+            printk("[OT] Role changed → %d\n", role);
+#endif
+        }
+        break;
     case DeviceEventType::kInternetConnectivityChange:
         LOG_INF("Internet connectivity: %s",
                 event->InternetConnectivityChange.IPv6 == kConnectivity_Established
@@ -208,6 +218,11 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
 CHIP_ERROR AppTask::Init()
 {
     CHIP_ERROR err;
+
+    /* ── Firmware version marker ────────────────────────────────────────────
+     * Confirms new firmware is running and AppTask::Init() is entered.
+     * If this line is absent from the log the object file was not rebuilt. */
+    printk("[DIAG] AppTask::Init entered (build " __DATE__ " " __TIME__ ")\n");
 
     /* Initialize RF MCU in multi-protocol mode (BLE + 802.15.4/Thread).
      * Must be called once before InitChipStack() triggers either BLE or OT

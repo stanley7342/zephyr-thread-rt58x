@@ -108,6 +108,27 @@ void otSysProcessDrivers(otInstance *aInstance)
 
     OT_GET_NOTIFY(sevent);
 
+    /* Periodically confirm the OT work queue is alive by logging a brief
+     * summary every 512 invocations (~5–10 s at normal idle rate).
+     * Also log any non-zero event mask immediately so we can see radio/alarm
+     * activity after ConnectNetwork enables Thread with a new dataset. */
+    static uint32_t s_call_count;
+    s_call_count++;
+    if (sevent != OT_SYSTEM_EVENT_NONE) {
+        if (sevent & (OT_SYSTEM_EVENT_RADIO_RX_DONE | OT_SYSTEM_EVENT_RADIO_TX_ALL_MASK)) {
+            /* Radio events are frequent — only print a dot every 64 to keep
+             * the log readable without flooding it.                           */
+            static uint32_t s_radio_ev;
+            if ((++s_radio_ev & 0x3F) == 1) {
+                printk("[OT] radio ev 0x%x (n=%u)\n", (unsigned)sevent, (unsigned)s_call_count);
+            }
+        } else {
+            printk("[OT] sys ev 0x%x (n=%u)\n", (unsigned)sevent, (unsigned)s_call_count);
+        }
+    } else if ((s_call_count & 0x1FF) == 0) {
+        printk("[OT] alive n=%u\n", (unsigned)s_call_count);
+    }
+
     ot_alarmTask(sevent);       /* alarm-milli / alarm-micro event dispatch */
     ot_uartTask(sevent);        /* no-op stub in rt583_otsys.c              */
     ot_radioTask(sevent);       /* TX-done / RX-done event dispatch          */

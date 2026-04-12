@@ -49,6 +49,20 @@ file(GLOB OT_MBEDTLS_SOURCES
 )
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "net_sockets\\.c$")
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "entropy_poll\\.c$")
+# Exclude OT's mbedTLS 3.6.0 psa_crypto_mac.c — it uses a different
+# psa_hash_operation_s / mbedtls_psa_hmac_operation_t layout than
+# TF-PSA-Crypto 4.0 (which the Matter stack is built against).
+# Without this exclusion, --allow-multiple-definition causes OT's version to
+# win the link, placing hmac->opad 4 bytes early (into sha256.is224 = 0x00),
+# producing the wrong HKDF PRK and a wrong cB → PASE integrity check failure.
+list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "psa_crypto_mac\\.c$")
+# Exclude OT's sha256.c — it is compiled with MBEDTLS_SHA224_C (from
+# openthread-mbedtls-config.h), so mbedtls_sha256_starts writes ctx->is224=0
+# at ctx+104 bytes.  TF-PSA-Crypto 4.0's psa_crypto_mac.c is compiled without
+# SHA224_C, placing opad at hmac+116 — exactly where OT's sha256_starts clobbers
+# it.  Using TF-PSA-Crypto's sha256.c (no SHA224_C, no is224 write) removes the
+# corruption.
+list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "sha256\\.c$")
 
 target_sources(app PRIVATE
     # RT583 OT system overrides (must come before libopenthread_platform.a in
