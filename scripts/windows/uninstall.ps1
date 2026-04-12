@@ -81,19 +81,26 @@ $sdkParent = if ($SdkDir) { Split-Path $SdkDir -Parent } else { "" }
 
 # ── Background mode ───────────────────────────────────────────────────────────
 if ($Bg) {
-    if (-not $PSCommandPath) {
-        Write-Warning "-Bg requires the script to be saved on disk (not compatible with irm | iex)."
-        Write-Warning "Save the script first:  Invoke-WebRequest <url> -OutFile uninstall.ps1"
-        Write-Warning "Then run:               .\uninstall.ps1 -Bg"
-        exit 1
-    }
     $logFile = Join-Path $Workspace "uninstall.log"
+    if (-not $PSCommandPath) {
+        # irm|iex mode: download script to a temp file then relaunch as a detached process.
+        $tmpScript = Join-Path $env:TEMP "uninstall_rt583.ps1"
+        $rawUrl    = "https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/uninstall.ps1"
+        Write-Host "    Downloading script to temp for background execution..." -ForegroundColor DarkGray
+        Invoke-WebRequest $rawUrl -OutFile $tmpScript -UseBasicParsing
+        $argList = "-NonInteractive -File `"$tmpScript`" -Force -SdkDir `"$SdkDir`""
+        Start-Process "pwsh.exe" -ArgumentList $argList `
+            -RedirectStandardOutput $logFile -RedirectStandardError $logFile
+        Write-Host "Uninstall running in background." -ForegroundColor Cyan
+        Write-Host "  Watch progress:  Get-Content '$logFile' -Wait" -ForegroundColor DarkGray
+        exit 0
+    }
     Write-Host "Background uninstall — logging to: $logFile" -ForegroundColor Yellow
     $job = Start-Job -ScriptBlock {
         param($script, $sdkDir)
         & $script -SdkDir $sdkDir -Force 2>&1
     } -ArgumentList $PSCommandPath, $SdkDir
-    Write-Host "Job ID: $($job.Id)  |  Check progress: Receive-Job $($job.Id) -Keep" -ForegroundColor DarkGray
+    Write-Host "Job ID: $($job.Id)  |  Watch: Get-Content '$logFile' -Wait" -ForegroundColor DarkGray
     $job | Wait-Job | Receive-Job | Tee-Object -FilePath $logFile
     Write-Host "Uninstall complete. Log: $logFile" -ForegroundColor Green
     exit 0
@@ -142,13 +149,22 @@ foreach ($item in $dirItems) {
     Write-Host $status -ForegroundColor $color
 }
 
+# Detect all installed Python 3.x versions from winget (same IDs as install.ps1).
+$pythonWingetIds = @("Python.Python.3.14","Python.Python.3.13","Python.Python.3.12","Python.Python.3.11","Python.Python.3.10")
+$installedPythonPkgs = $pythonWingetIds | ForEach-Object {
+    $id = $_
+    $hit = winget list --id $id -e --accept-source-agreements 2>$null | Select-String $id
+    if ($hit) { @{ Id = $id; Name = "Python $($id -replace '^Python\.Python\.','')" } }
+}
+
 $wingetPackages = @(
-    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
     @{ Id = "Ninja-build.Ninja";  Name = "Ninja"       },
     @{ Id = "Git.Git";            Name = "Git"         },
     @{ Id = "7zip.7zip";          Name = "7-Zip"       }
 )
+# Prepend detected Python entries
+$wingetPackages = @($installedPythonPkgs) + $wingetPackages
 foreach ($pkg in $wingetPackages) {
     $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
     $status = if ($installed) { "pending" } else { "not installed" }
@@ -239,9 +255,13 @@ function Invoke-RegistryUninstall([string]$displayNamePattern) {
                     Write-Host "    Installer not found (already removed): $exePath"
                     $anyOk = $true; continue
                 }
-                # Use the UninstallString args as-is — do NOT append /S /silent /quiet
-                # since flags are installer-specific (e.g. Python uses /uninstall).
-                $proc = Start-Process $exePath -ArgumentList $exeArgs -Wait -NoNewWindow -PassThru
+                # For Python-style bundled installers (/uninstall) add /quiet so the
+                # uninstall runs without a UI.  Other exe uninstallers keep args as-is.
+                $runArgs = if ($exeArgs -match '/uninstall' -and $exeArgs -notmatch '/quiet') {
+                    "$exeArgs /quiet"
+                } else { $exeArgs }
+                Write-Host "    Running: $exePath $runArgs"
+                $proc = Start-Process $exePath -ArgumentList $runArgs -Wait -NoNewWindow -PassThru
             } else {
                 $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstStr`"" -Wait -NoNewWindow -PassThru
             }
