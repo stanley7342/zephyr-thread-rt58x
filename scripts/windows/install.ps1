@@ -273,6 +273,13 @@ $foundPyVer = (& $python312 --version 2>&1) -replace "Python ", ""
 Write-Ok "Python ${foundPyVer}: $python312"
 $sysPython312 = $python312   # Keep a reference to the system Python for later use
 
+# Add system Python Scripts dir to PATH now so pip does not warn about
+# "installed in '...\Scripts' which is not on PATH" during pip installs.
+$sysPythonScripts = Join-Path (Split-Path $sysPython312 -Parent) "Scripts"
+if ((Test-Path $sysPythonScripts) -and $env:PATH -notlike "*$sysPythonScripts*") {
+    $env:PATH = "$sysPythonScripts;" + $env:PATH
+}
+
 # 7-Zip path
 $sevenZipPath = "C:\Program Files\7-Zip"
 if (Test-Path "$sevenZipPath\7z.exe") {
@@ -644,7 +651,8 @@ if (Test-Path (Join-Path $Workspace "$projectName\connectedhomeip\src\lib\core\C
 } else {
     $chipScripts = $chipScriptsParent
 }
-$chipScriptsFwd  = $chipScripts -replace "\\", "/"
+$chipScriptsFwd     = $chipScripts -replace "\\", "/"
+$sysPythonScriptsFwd = $sysPythonScripts -replace "\\", "/"
 @"
 # Zephyr environment variables — load in every new PowerShell session: . $envPs1
 . "$venvActivate"
@@ -657,6 +665,8 @@ $chipScriptsFwd  = $chipScripts -replace "\\", "/"
 `$env:PYTHONPATH               = "$chipScriptsFwd;" + `$env:PYTHONPATH
 # Explicitly add venv Scripts so CMake find_program can locate gn, west, etc.
 `$env:PATH                     = "$venvScripts;" + `$env:PATH
+# System Python Scripts (pygmentize, pytest, etc.) — suppresses pip PATH warnings
+`$env:PATH                     = "$sysPythonScriptsFwd;" + `$env:PATH
 `$env:PATH                    += ";C:\Program Files\7-Zip"
 
 Write-Host "Zephyr env loaded (ZEPHYR_BASE=`$env:ZEPHYR_BASE)" -ForegroundColor Green
