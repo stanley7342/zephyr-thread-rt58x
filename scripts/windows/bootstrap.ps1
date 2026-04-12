@@ -20,9 +20,9 @@ $cloneDir  = Join-Path $PWD "zephyr-thread-rt58x"
 $installPs = Join-Path $cloneDir "scripts\windows\install.ps1"
 
 Write-Host ""
-Write-Host "=====================================" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  RT583-EVB Zephyr environment bootstrap" -ForegroundColor Cyan
-Write-Host "=====================================" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Check for git ─────────────────────────────────────────────────────────────

@@ -54,7 +54,9 @@ if ($Bg) {
     exit 0
 }
 
-$venvDir = Join-Path $env:USERPROFILE ".zephyr-venv"
+$venvDir = Join-Path $Workspace ".zephyr-venv"
+$zapDir  = Join-Path $Workspace "zap-cli"
+$toolsWin = Join-Path $projectDir "tools\windows"
 
 $col1 = 14
 $col2 = 42
@@ -68,11 +70,13 @@ Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "Item", "Path / ID", "Status")
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
 
 $dirItems = @(
-    @{ Name = ".west";        Path = (Join-Path $Workspace ".west") },
-    @{ Name = "zephyr";       Path = (Join-Path $Workspace "zephyr") },
-    @{ Name = "env.ps1";      Path = (Join-Path $projectDir "env.ps1") },
-    @{ Name = "Zephyr SDK";   Path = $sdkParent },
-    @{ Name = "Python venv";  Path = $venvDir }
+    @{ Name = ".west";         Path = (Join-Path $Workspace ".west") },
+    @{ Name = "zephyr";        Path = (Join-Path $Workspace "zephyr") },
+    @{ Name = "env.ps1";       Path = (Join-Path $projectDir "env.ps1") },
+    @{ Name = "Zephyr SDK";    Path = $sdkParent },
+    @{ Name = "Python venv";   Path = $venvDir },
+    @{ Name = "zap-cli";       Path = $zapDir },
+    @{ Name = "tools\windows"; Path = $toolsWin }
 )
 foreach ($item in $dirItems) {
     $exists = Test-Path $item.Path

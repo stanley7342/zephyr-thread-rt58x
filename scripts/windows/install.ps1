@@ -116,9 +116,8 @@ foreach ($pkg in $packages) {
         # Extract version: first token immediately after the known Package ID.
         # Splitting by \s{2,} is unreliable when the ID column is long (only one
         # space may separate ID from Version in winget output).
-        $ver = if ($installedLine.Line -match ([regex]::Escape($pkg.Id) + '\s+(\S+)')) {
-            $Matches[1]
-        } else { "-" }
+        $m   = [regex]::Match($installedLine.Line, [regex]::Escape($pkg.Id) + '\s+(\S+)')
+        $ver = if ($m.Success) { $m.Groups[1].Value } else { "-" }
         $status = "installed"
         $color  = [ConsoleColor]::DarkGray
     } else {

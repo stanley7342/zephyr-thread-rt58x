@@ -252,7 +252,6 @@ if ($p -eq "bootloader") {
 }
 
 if ($rc -ne 0) {
-    if (Get-Command deactivate -ErrorAction SilentlyContinue) { deactivate }
     throw "west build failed (exit $rc)"
 }
 
@@ -269,4 +268,4 @@ if (Test-Path $zephyrSigned) {
     Write-Host "    [OK] Build succeeded: $zephyrBin" -ForegroundColor Green
 }
 
-if (Get-Command deactivate -ErrorAction SilentlyContinue) { deactivate }
+
