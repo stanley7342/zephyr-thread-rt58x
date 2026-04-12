@@ -219,10 +219,6 @@ jobs:
           pip install -r zephyr/scripts/requirements-base.txt
           pip install imgtool
 
-      - name: Install connectedhomeip Python requirements
-        run: |
-          pip install -r zephyr-thread/connectedhomeip/scripts/setup/requirements.build.txt
-
       # ── Zephyr SDK ──────────────────────────────────────────────────────────
       - name: Cache Zephyr SDK
         id: cache-sdk
@@ -268,6 +264,10 @@ jobs:
           # standalone binary installed separately in the "Install zap-cli" step.
           git submodule update --init --depth=1 \
             third_party/pigweed/repo
+
+      - name: Install connectedhomeip Python requirements
+        run: |
+          pip install -r connectedhomeip/scripts/setup/requirements.build.txt
 
       # ── zap-cli ─────────────────────────────────────────────────────────────
       # ZAP is a standalone code-generation tool (not a git submodule).
