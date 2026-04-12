@@ -84,8 +84,20 @@ function Write-Skip([string]$msg) {
 
 Write-Step "Checking required tools"
 
+# Python: accept any installed Python 3.10+ version; install 3.12 only when none found.
+# Enumerate candidate Python winget IDs in preference order.
+$pythonWingetIds = @("Python.Python.3.14","Python.Python.3.13","Python.Python.3.12","Python.Python.3.11","Python.Python.3.10")
+$detectedPythonId = $pythonWingetIds |
+    Where-Object { winget list --id $_ -e --accept-source-agreements 2>$null | Select-String $_ } |
+    Select-Object -First 1
+$pythonPkg = if ($detectedPythonId) {
+    @{ Id = $detectedPythonId; Name = "Python $($detectedPythonId -replace '^Python\.Python\.','')" }
+} else {
+    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" }
+}
+
 $packages = @(
-    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
+    $pythonPkg,
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
     @{ Id = "Ninja-build.Ninja";  Name = "Ninja"       },
     @{ Id = "Git.Git";            Name = "Git"         },
@@ -148,20 +160,117 @@ if ($toInstall.Count -eq 0) {
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("PATH", "User")
 
-# ── Locate Python 3.12 binary ─────────────────────────────────────────────────
+# ── Locate Python 3.10+ binary ────────────────────────────────────────────────
+# Accept any Python >= 3.10 (Zephyr requirement); prefer highest version found.
+# Variable name kept as $python312 for compatibility with the rest of the script.
+$pyVersionPattern = "3\.(1[0-9]|\d{2,})"   # 3.10, 3.11, 3.12, 3.13, 3.14, …
+
+# 1. Common fixed paths — scan Python3xx directories under LOCALAPPDATA and Program Files
 $python312 = @(
-    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-    "C:\Program Files\Python312\python.exe",
-    "C:\Python312\python.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    "$env:LOCALAPPDATA\Programs\Python"
+) |
+    Where-Object { Test-Path $_ } |
+    ForEach-Object {
+        Get-ChildItem $_ -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "^Python3\d+$" } |
+        Sort-Object Name -Descending |   # highest version first (Python314 > Python312)
+        ForEach-Object { Join-Path $_.FullName "python.exe" }
+    } |
+    Where-Object { Test-Path $_ } |
+    Select-Object -First 1
 
 if (-not $python312) {
-    $python312 = (Get-Command python3.12 -ErrorAction SilentlyContinue)?.Source
+    $python312 = @(
+        "C:\Program Files\Python314\python.exe",
+        "C:\Program Files\Python313\python.exe",
+        "C:\Program Files\Python312\python.exe",
+        "C:\Program Files\Python311\python.exe",
+        "C:\Program Files\Python310\python.exe",
+        "C:\Python314\python.exe",
+        "C:\Python313\python.exe",
+        "C:\Python312\python.exe",
+        "C:\Python311\python.exe",
+        "C:\Python310\python.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
+
+# 2. Try named commands on the refreshed PATH
 if (-not $python312) {
-    throw "Python 3.12 executable not found. Please reopen PowerShell and run this script again"
+    foreach ($cmd in @("python3.14","python3.13","python3.12","python3.11","python3.10","python3","python")) {
+        $found = (Get-Command $cmd -ErrorAction SilentlyContinue)?.Source
+        if ($found) {
+            $ver = & $found --version 2>&1
+            if ($ver -match $pyVersionPattern) { $python312 = $found; break }
+        }
+    }
 }
-Write-Ok "Python 3.12: $python312"
+
+# 3. Check registry — try each supported minor version
+if (-not $python312) {
+    foreach ($minor in @("3.14","3.13","3.12","3.11","3.10")) {
+        $regPaths = @(
+            "HKCU:\SOFTWARE\Python\PythonCore\$minor\InstallPath",
+            "HKLM:\SOFTWARE\Python\PythonCore\$minor\InstallPath",
+            "HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore\$minor\InstallPath"
+        )
+        foreach ($rp in $regPaths) {
+            $props = Get-ItemProperty $rp -ErrorAction SilentlyContinue
+            if (-not $props) { continue }
+            $exeProp  = if ($props.PSObject.Properties['ExecutablePath']) { $props.ExecutablePath } else { $null }
+            $dirProp  = if ($props.PSObject.Properties['(default)'])      { $props.'(default)'    } else { $null }
+            $candidate = if ($exeProp) { $exeProp } elseif ($dirProp) { Join-Path $dirProp "python.exe" } else { $null }
+            if ($candidate -and (Test-Path $candidate)) { $python312 = $candidate; break }
+        }
+        if ($python312) { break }
+    }
+}
+
+# 4. Use the Python Launcher (py.exe)
+if (-not $python312) {
+    foreach ($minorArg in @("-3.14","-3.13","-3.12","-3.11","-3.10","-3")) {
+        try {
+            $pyExe = & py $minorArg -c "import sys; print(sys.executable)" 2>$null
+            if ($pyExe -and (Test-Path $pyExe.Trim())) {
+                $ver = & $pyExe.Trim() --version 2>&1
+                if ($ver -match $pyVersionPattern) { $python312 = $pyExe.Trim(); break }
+            }
+        } catch {}
+    }
+}
+
+# 5. Broad directory scan
+if (-not $python312) {
+    $scanRoots = @(
+        "C:\Program Files",
+        "C:\Program Files (x86)",
+        "$env:LOCALAPPDATA\Programs\Python",
+        "$env:APPDATA\Python"
+    ) | Where-Object { Test-Path $_ }
+    $python312 = Get-ChildItem $scanRoots -Filter "python.exe" -Recurse -Depth 3 `
+                     -ErrorAction SilentlyContinue |
+                 Where-Object { $_.DirectoryName -match "Python3\d+" } |
+                 Where-Object { (& $_.FullName --version 2>&1) -match $pyVersionPattern } |
+                 Select-Object -First 1 -ExpandProperty FullName
+}
+
+# 6. Last resort: where.exe
+if (-not $python312) {
+    $whereLines = where.exe python 2>$null
+    foreach ($line in $whereLines) {
+        $line = $line.Trim()
+        # Skip Windows Store shims — they are app-execution aliases, not real python.exe
+        if ($line -match "WindowsApps") { continue }
+        if ($line -and (Test-Path $line) -and ((& $line --version 2>&1) -match $pyVersionPattern)) {
+            $python312 = $line; break
+        }
+    }
+}
+
+if (-not $python312) {
+    throw "Python 3.10+ executable not found. Please reopen PowerShell and run this script again"
+}
+$foundPyVer = (& $python312 --version 2>&1) -replace "Python ", ""
+Write-Ok "Python ${foundPyVer}: $python312"
 $sysPython312 = $python312   # Keep a reference to the system Python for later use
 
 # 7-Zip path

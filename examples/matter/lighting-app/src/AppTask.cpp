@@ -345,7 +345,9 @@ static void ServerInitWork(intptr_t arg)
 {
     auto * serverParams = reinterpret_cast<chip::CommonCaseDeviceServerInitParams *>(arg);
 
+    uint32_t t0 = k_uptime_get_32();
     CHIP_ERROR err = chip::Server::GetInstance().Init(*serverParams);
+    LOG_INF("[APP] Server::Init took %u ms", k_uptime_get_32() - t0);
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format());
         return;
