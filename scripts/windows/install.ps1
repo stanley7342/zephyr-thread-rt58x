@@ -472,13 +472,17 @@ if (-not (Test-Path $req)) {
 # ── Step 4: Python dependencies ───────────────────────────────────────────────
 
 Write-Step "Installing Zephyr Python dependencies"
+$pkgCount = (Get-Content $req | Where-Object { $_ -match '^\s*[^#\s]' }).Count
+Write-Host "    Installing $pkgCount packages from $req ..." -ForegroundColor DarkGray
+$t0 = Get-Date
 & $python312 -m pip install --quiet -r $req
-Write-Ok "Zephyr Python dependencies installed"
+Write-Ok "Zephyr Python dependencies installed ($([int](Get-Date - $t0).TotalSeconds) s)"
 
 # MCUboot requires the cryptography package (for imgtool).
 # Zephyr CMake invokes imgtool.py via WEST_PYTHON, which in some environments
 # still resolves to the system Python — install into both to be safe.
 $mcubootReq = Join-Path $Workspace "bootloader\mcuboot\scripts\requirements.txt"
+Write-Host "    Installing MCUboot / cryptography ..." -ForegroundColor DarkGray
 foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
     if (-not (Test-Path $py)) { continue }
     if (Test-Path $mcubootReq) {
@@ -490,6 +494,7 @@ foreach ($py in @($python312, $sysPython312) | Select-Object -Unique) {
 Write-Ok "cryptography installed (MCUboot imgtool)"
 
 # jsonschema — Zephyr CMake module dependency
+Write-Host "    Installing jsonschema ..." -ForegroundColor DarkGray
 & $python312 -m pip install --quiet jsonschema
 Write-Ok "jsonschema installed"
 

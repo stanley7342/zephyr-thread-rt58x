@@ -48,19 +48,20 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Locate the project root by looking for west.yml — works whether the script is
-# run as .\scripts\windows\uninstall.ps1 OR via irm … | iex from any directory.
+# Locate the project root using a marker unique to this repo (not just west.yml,
+# since the zephyr directory also contains west.yml).
+$_marker = "scripts\windows\install.ps1"
 function Resolve-ProjectDir {
-    # 1. Running as a .ps1 file: derive from script path (scripts\windows\uninstall.ps1 → up 2)
+    # 1. Running as a saved .ps1 file: derive from script path (scripts\windows\ → up 2)
     if ($PSCommandPath) {
         $d = Split-Path (Split-Path $PSCommandPath -Parent) -Parent
-        if ($d -and (Test-Path (Join-Path $d "west.yml"))) { return $d }
+        if ($d -and (Test-Path (Join-Path $d $script:_marker))) { return $d }
     }
     # 2. cwd IS the project root
-    if (Test-Path (Join-Path $PWD.Path "west.yml")) { return $PWD.Path }
-    # 3. cwd is the workspace — project is a direct subdirectory with west.yml
+    if (Test-Path (Join-Path $PWD.Path $script:_marker)) { return $PWD.Path }
+    # 3. cwd is the workspace — scan direct subdirectories for the marker
     $sub = Get-ChildItem $PWD.Path -Directory -ErrorAction SilentlyContinue |
-           Where-Object { Test-Path (Join-Path $_.FullName "west.yml") } |
+           Where-Object { Test-Path (Join-Path $_.FullName $script:_marker) } |
            Select-Object -First 1
     if ($sub) { return $sub.FullName }
     return $null
@@ -102,6 +103,17 @@ $venvDir = Join-Path $Workspace ".zephyr-venv"
 $zapDir  = Join-Path $Workspace "zap-cli"
 $toolsWin = Join-Path $projectDir "tools\windows"
 
+# Return a workspace-relative display path (e.g. ".\zephyr") when possible;
+# fall back to the absolute path for locations outside the workspace.
+function Get-RelPath([string]$path) {
+    if ($path -and $Workspace -and
+        $path.StartsWith($Workspace, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $path.Substring($Workspace.Length).TrimStart('\')
+        return ".\$rel"
+    }
+    return $path
+}
+
 $col1 = 14
 $col2 = 42
 
@@ -126,7 +138,7 @@ foreach ($item in $dirItems) {
     $exists = Test-Path $item.Path
     $status = if ($exists) { "pending" } else { "not found" }
     $color  = if ($exists) { [ConsoleColor]::Yellow } else { [ConsoleColor]::DarkGray }
-    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $item.Name, $item.Path) -NoNewline
+    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $item.Name, (Get-RelPath $item.Path)) -NoNewline
     Write-Host $status -ForegroundColor $color
 }
 
