@@ -150,12 +150,12 @@ foreach ($item in $dirItems) {
 }
 
 # Detect all installed Python 3.x versions from winget (same IDs as install.ps1).
-$pythonWingetIds = @("Python.Python.3.14","Python.Python.3.13","Python.Python.3.12","Python.Python.3.11","Python.Python.3.10")
-$installedPythonPkgs = $pythonWingetIds | ForEach-Object {
-    $id = $_
-    $hit = winget list --id $id -e --accept-source-agreements 2>$null | Select-String $id
-    if ($hit) { @{ Id = $id; Name = "Python $($id -replace '^Python\.Python\.','')" } }
-}
+$pythonTargetId = "Python.Python.3.14"
+$installedPythonPkgs = @(
+    if (winget list --id $pythonTargetId -e --accept-source-agreements 2>$null | Select-String $pythonTargetId) {
+        @{ Id = $pythonTargetId; Name = "Python 3.14" }
+    }
+)
 
 $wingetPackages = @(
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
