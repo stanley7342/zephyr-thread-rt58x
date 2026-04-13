@@ -995,6 +995,20 @@ int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
         k_sem_take(&g_rf_cmd_sem, K_NO_WAIT);
     }
     _crit_relock(nest);
+
+    /* Drain any stale unsolicited events queued before this command.
+     * In MULTI_PROTOCOL mode the RF MCU sends an extra async notification
+     * after INITIATE_ZIGBEE that sits in g_rf_evt_msgq.  If not flushed,
+     * the next hosal_rf_read_event() (waiting for SET_RFB_AUTO_STATE CNF)
+     * consumes the stale event → CONTENT_ERROR → 15.4 auto-RX never starts. */
+    {
+        uint8_t *stale;
+        while (k_msgq_get(&g_rf_evt_msgq, (void *)&stale, K_NO_WAIT) == 0) {
+            printk("[RF] discard stale evt sub=0x%02x\n", stale[4]);
+            free(stale);
+        }
+    }
+
     RfMcu_HostWakeUpMcu();
     if (RfMcu_PowerStateCheck() != 0x03) {
         k_sem_give(&g_rf_cmd_sem);
