@@ -41,6 +41,12 @@ extern "C" {
 #include "mcu.h"           /* Gpio_IRQn, NVIC_SetPriority, NVIC_EnableIRQ,
                               gpio.h → DEBOUNCE_SLOWCLOCKS_1024 */
 extern bool hci_rt58x_rf_already_init;
+}
+
+/* Hardware crypto self-test (CryptoSelfTest.cpp) */
+void crypto_selftest(void);
+
+extern "C" {
 void ot_radioInit(void);
 void ot_alarmInit(void);
 void ot_entropy_init(void);
@@ -366,6 +372,10 @@ CHIP_ERROR AppTask::Init()
      * Confirms new firmware is running and AppTask::Init() is entered.
      * If this line is absent from the log the object file was not rebuilt. */
     printk("[DIAG] AppTask::Init entered (build " __DATE__ " " __TIME__ ")\n");
+
+    /* Hardware crypto self-test — must run before hosal_rf_init() so the
+     * shared AES/ECC accelerator is idle and lmac15p4 has not started. */
+    crypto_selftest();
 
     /* Initialize RF MCU in multi-protocol mode (BLE + 802.15.4/Thread).
      * Must be called once before InitChipStack() triggers either BLE or OT

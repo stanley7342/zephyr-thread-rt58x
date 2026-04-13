@@ -342,6 +342,7 @@ target_include_directories(app PRIVATE
     ${CHIP_ROOT}/examples/providers
     ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
     ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
+    ${RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc
     ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
 )
 
@@ -349,6 +350,7 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
     src/main.cpp
     src/AppTask.cpp
+    src/CryptoSelfTest.cpp
     src/ZclCallbacks.cpp
     src/MallocWrappers.cpp
     src/ecp_enum_compat.c
