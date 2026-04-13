@@ -55,10 +55,11 @@
 #define OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_DIRECT   4
 
 /* Heap — internal pool for OT dynamic allocations.
- * 4 KB is sufficient for FTD idle state and initial BLE commissioning;
- * Thread network join and SRP client registration may consume up to ~6 KB.
- * Reduced from 8 KB so the freed 4 KB can go to CONFIG_CHIP_MALLOC_SYS_HEAP_SIZE. */
-#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (4 * 1024)
+ * 6 KB covers: FTD idle state + BLE commissioning + SRP client registration
+ * + SRP server service record storage (enabled for standalone Leader mode).
+ * Raised from 4 KB to accommodate the SRP server storing the Matter
+ * operational service record alongside the SRP client's working buffers. */
+#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (6 * 1024)
 
 /* CoAP API — needed for OTA subsystem */
 #define OPENTHREAD_CONFIG_COAP_API_ENABLE                1
@@ -73,6 +74,16 @@
 /* SRP Client — required by Matter for service advertisement via Thread */
 #define OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE 1
+
+/* SRP Server — required when the RT583 is a standalone Thread Leader.
+ * Without an OTBR, the device must run its own SRP server so the local
+ * SRP client can register services and the Matter DNS-SD init callback
+ * (OpenThreadDnssdInit) can fire.  AppTask enables/disables it via
+ * otSrpServerSetEnabled() based on the Thread role.
+ * Dependencies: TMF_NETDATA_SERVICE (explicit), NETDATA_PUBLISHER
+ * (auto-derives from SRP_SERVER_ENABLE), ECDSA (already set above). */
+#define OPENTHREAD_CONFIG_SRP_SERVER_ENABLE              1
+#define OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE     1
 
 /* DNS Client — required by Matter for service discovery (mDNS-over-Thread) */
 #define OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE              1
