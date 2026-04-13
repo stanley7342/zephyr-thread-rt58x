@@ -160,6 +160,15 @@ __STATIC_FORCEINLINE void __rf_signal(void) {
 
 uint32_t s_isr_count;
 uint8_t  s_last_int_status;   /* last intStatus seen by ISR — visible from HCI driver */
+
+void hosal_rf_dump_diag(void)
+{
+    extern uint32_t s_evt_count;
+    extern uint32_t s_proc_wakeups;
+    printk("[RF-DIAG] isr=%u evt=%u wake=%u last_sts=0x%02x pwr=0x%02x\n",
+           s_isr_count, s_evt_count, s_proc_wakeups,
+           s_last_int_status, RfMcu_PowerStateCheck());
+}
 static void __rf_event_callback(uint8_t intStatus) {
     s_isr_count++;
     s_last_int_status = intStatus;
@@ -347,6 +356,16 @@ static hosal_rf_status_t __rf_sub_command_set(uint8_t *cmd_ptr,
     hosal_rf_read_event((uint8_t *)&sCnfEvent);
     RUCI_ENDIAN_CONVERT((uint8_t *)&sCnfEvent, RUCI_CNF_EVENT);
     if (sCnfEvent.pci_cmd_subheader != expected_subheader) {
+        /* Dump raw CNF bytes so we can see what the RF MCU actually returned. */
+        printk("[RF-CMD] CNF mismatch: exp_sub=0x%02x got evthdr=0x%02x sub=0x%02x len=%u"
+               " cmd_hdr=0x%02x cmd_sub=0x%02x status=%u\n",
+               expected_subheader,
+               ((uint8_t *)&sCnfEvent)[0],
+               ((uint8_t *)&sCnfEvent)[1],
+               ((uint8_t *)&sCnfEvent)[2],
+               ((uint8_t *)&sCnfEvent)[3],
+               ((uint8_t *)&sCnfEvent)[4],
+               ((uint8_t *)&sCnfEvent)[5]);
         return HOSAL_RF_STATUS_CONTENT_ERROR;
     }
     if (sCnfEvent.status != HOSAL_RF_STATUS_SUCCESS) {
@@ -1199,13 +1218,11 @@ hosal_rf_status_t hosal_rf_ioctl(hosal_rf_ioctl_t ctl, void *p_arg) {
         break;
     }
     if (rval != HOSAL_RF_STATUS_SUCCESS) {
-        /* CONTENT_ERROR (10) on AUTO_STATE_SET is expected in MULTI_PROTOCOL
-         * mode — RF MCU manages state transitions internally. Not an error. */
-        if (rval == HOSAL_RF_STATUS_CONTENT_ERROR) {
-            log_debug("RF IOCTL(%d) content_error (expected in multi-protocol)", ctl);
-        } else {
-            log_error("RF IOCTL(%d) status %d", ctl, rval);
-        }
+        /* Print ALL errors via printk so they appear on the serial console
+         * regardless of log level.  CONTENT_ERROR on AUTO_STATE_SET may be
+         * expected in MULTI_PROTOCOL mode (RF MCU manages state internally),
+         * but we want to see which IOCTLs fail and when. */
+        printk("[RF-IOCTL] ctl=%d err=%d\n", ctl, rval);
     }
     return rval;
 }

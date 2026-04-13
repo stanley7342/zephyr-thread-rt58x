@@ -369,8 +369,10 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
                 (lmac154_channel_t)(sCurrentChannel - kMinChannel));
         }
         if (!sAuto_State_Set) {
+            printk("[OT-RADIO] Receive: enabling auto-state ch=%u\n", aChannel);
             lmac15p4_auto_state_set(true);
             sAuto_State_Set = true;
+            printk("[OT-RADIO] Receive: auto-state enabled\n");
         }
     }
     return error;
@@ -860,11 +862,13 @@ void ot_radioInit(void)
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
 
+    printk("[OT-RADIO] ot_radioInit: calling lmac15p4_init\n");
     /* Must be called before any lmac15p4_tx_data_send — initialises the TX
      * gate semaphore (lmac_tx_sem) and registers RUCI RX/TX callbacks with
      * hosal_rf.  Without this, lmac_tx_sem.count == 0 (BSS zero-init) and
      * the first k_sem_take in lmac15p4_tx_data_send blocks forever. */
     lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
+    printk("[OT-RADIO] ot_radioInit: lmac15p4_init done\n");
 
     if (sMacAddrReadMode == 1) {
         rafael_otp_mac_addr(sIEEE_EUI64Addr);

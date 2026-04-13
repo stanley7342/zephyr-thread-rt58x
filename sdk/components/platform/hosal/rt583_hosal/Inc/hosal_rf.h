@@ -291,6 +291,9 @@ int hosal_rf_callback_set(int callback_type, hosal_rf_callback_t pfn_callback,
 void hosal_rf_suspend(void);
 void hosal_rf_resume(void);
 
+/* Diagnostic: print ISR/event/wakeup counters and current RF MCU power state. */
+void hosal_rf_dump_diag(void);
+
 /*@}*/ /* end of RT58X_HOSAL HOSAL_RF */
 
 #ifdef __cplusplus
