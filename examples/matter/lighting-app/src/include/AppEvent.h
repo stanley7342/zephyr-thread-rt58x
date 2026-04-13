@@ -14,6 +14,8 @@ enum class AppEventType : uint8_t
     Lighting,
     IdentifyStart,
     IdentifyStop,
+    Button,
+    Timer,
 };
 
 enum class FunctionEvent : uint8_t
@@ -42,6 +44,17 @@ struct AppEvent
             LightingAction::Type Action;
             uint8_t              Level; /* 0–254, used when Action == Level */
         } LightingEvent;
+
+        struct
+        {
+            uint8_t ButtonIdx; /* GPIO pin number */
+            bool    Pressed;   /* true = pressed (active-low with pull-up → falling edge) */
+        } ButtonEvent;
+
+        struct
+        {
+            void * Context;
+        } TimerEvent;
     };
 
     AppEventType Type{ AppEventType::None };

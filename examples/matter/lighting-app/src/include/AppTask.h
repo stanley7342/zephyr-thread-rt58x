@@ -13,6 +13,7 @@
 
 #include <app/clusters/identify-server/identify-server.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <system/SystemLayer.h>
 
 #include <cstdint>
 
@@ -50,9 +51,19 @@ private:
     static void ChipEventHandler(const chip::DeviceLayer::ChipDeviceEvent * event,
                                  intptr_t arg);
 
+    /* Button factory reset (GPIO0 = factory reset hold 6 s, GPIO1 = light toggle) */
+    static void ButtonEventHandler(uint32_t pin, void * isr_param);
+    static void FunctionHandler(const AppEvent & event);
+    static void FunctionTimerEventHandler(const AppEvent & event);
+    static void TimerEventHandler(chip::System::Layer * layer, void * appState);
+    void StartTimer(uint32_t timeoutMs);
+    void CancelTimer();
+
     /* Simulated LED — replace with real GPIO driver when hardware is wired */
     static void SetLed(bool on, uint8_t level);
 
-    bool    mLightOn    = false;
-    uint8_t mLightLevel = 254; /* 0–254 */
+    bool          mLightOn             = false;
+    uint8_t       mLightLevel          = 254; /* 0–254 */
+    FunctionEvent mFunction            = FunctionEvent::NoneSelected;
+    bool          mFunctionTimerActive = false;
 };

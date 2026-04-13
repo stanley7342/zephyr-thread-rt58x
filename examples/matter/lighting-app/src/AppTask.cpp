@@ -36,6 +36,10 @@
 extern "C" {
 #include "hosal_rf.h"
 #include "hosal_lpm.h"
+#include "hosal_gpio.h"    /* hosal_gpio_cfg_input, hosal_gpio_pin_get, … */
+#include "hosal_sysctrl.h" /* hosal_pin_set_pullopt, HOSAL_PULL_UP_100K */
+#include "mcu.h"           /* Gpio_IRQn, NVIC_SetPriority, NVIC_EnableIRQ,
+                              gpio.h → DEBOUNCE_SLOWCLOCKS_1024 */
 extern bool hci_rt58x_rf_already_init;
 void ot_radioInit(void);
 void ot_alarmInit(void);
@@ -67,8 +71,11 @@ using namespace ::chip::DeviceLayer;
 
 namespace {
 
-constexpr EndpointId kLightEndpointId = 1;
-constexpr int        kAppEventQueueSize = 10;
+constexpr EndpointId kLightEndpointId          = 1;
+constexpr int        kAppEventQueueSize         = 10;
+constexpr uint32_t   kFactoryResetTriggerTimeMs = 6000; /* hold GPIO0 6 s to factory reset */
+constexpr uint8_t    kButtonFactoryReset        = 0;    /* GPIO pin for factory reset */
+constexpr uint8_t    kButtonLightToggle         = 1;    /* GPIO pin for light toggle */
 
 K_MSGQ_DEFINE(sAppEventQueue, sizeof(AppEvent), kAppEventQueueSize, alignof(AppEvent));
 
@@ -239,6 +246,116 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
     }
 }
 
+/* ── Button factory reset ───────────────────────────────────────────────────── */
+
+static void DoFactoryReset(intptr_t /* arg */)
+{
+    printk("[BTN] Executing factory reset\n");
+    chip::Server::GetInstance().ScheduleFactoryReset();
+}
+
+/* Called by CHIP SystemLayer timer when GPIO0 has been held for 6 s.
+ * Runs on the CHIP event loop thread (via TimerEventHandler → PostEvent →
+ * DispatchEvent).  Safe to call PlatformMgr().ScheduleWork() from here. */
+void AppTask::FunctionTimerEventHandler(const AppEvent & event)
+{
+    if (event.Type != AppEventType::Timer) {
+        return;
+    }
+    AppTask & task = AppTask::Instance();
+    if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
+        task.mFunction            = FunctionEvent::NoneSelected;
+        task.mFunctionTimerActive = false;
+        printk("[BTN] Factory reset triggered (6 s hold)\n");
+        chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
+    }
+}
+
+/* Runs on the CHIP SystemLayer timer thread → posts a Timer event to the app
+ * queue so FunctionTimerEventHandler runs in the app event loop. */
+void AppTask::TimerEventHandler(chip::System::Layer * /* layer */, void * appState)
+{
+    AppEvent event;
+    event.Type                = AppEventType::Timer;
+    event.TimerEvent.Context  = appState;
+    event.Handler             = FunctionTimerEventHandler;
+    AppTask::PostEvent(event);
+}
+
+void AppTask::StartTimer(uint32_t timeoutMs)
+{
+    CHIP_ERROR err;
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    err = chip::DeviceLayer::SystemLayer().StartTimer(
+        chip::System::Clock::Milliseconds32(timeoutMs), TimerEventHandler, this);
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    if (err != CHIP_NO_ERROR) {
+        LOG_ERR("StartTimer failed: %" CHIP_ERROR_FORMAT, err.Format());
+        return;
+    }
+    mFunctionTimerActive = true;
+}
+
+void AppTask::CancelTimer()
+{
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    chip::DeviceLayer::SystemLayer().CancelTimer(TimerEventHandler, this);
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    mFunctionTimerActive = false;
+}
+
+/* Handles button press/release events dispatched from the app event loop.
+ * GPIO0 = factory reset: press starts 6 s timer, release before 6 s cancels.
+ * GPIO1 = light toggle: toggle on release. */
+void AppTask::FunctionHandler(const AppEvent & event)
+{
+    AppTask & task = AppTask::Instance();
+
+    if (event.ButtonEvent.ButtonIdx == kButtonFactoryReset) {
+        if (event.ButtonEvent.Pressed) {
+            if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
+                printk("[BTN] GPIO0 pressed — hold 6 s for factory reset\n");
+                task.mFunction = FunctionEvent::FactoryReset;
+                task.StartTimer(kFactoryResetTriggerTimeMs);
+            }
+        } else {
+            if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
+                task.CancelTimer();
+                task.mFunction = FunctionEvent::NoneSelected;
+                printk("[BTN] GPIO0 released — factory reset cancelled\n");
+            }
+        }
+    } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
+        if (!event.ButtonEvent.Pressed) {
+            /* Toggle light on release */
+            AppEvent lightEvent;
+            lightEvent.Type                  = AppEventType::Lighting;
+            lightEvent.LightingEvent.Action  = LightingAction::Toggle;
+            lightEvent.LightingEvent.Level   = 0;
+            lightEvent.Handler               = LightingActionEventHandler;
+            AppTask::PostEvent(lightEvent);
+        }
+    }
+}
+
+/* GPIO ISR callback — called from hardware ISR context.
+ * Must NOT call printk or LOG_* (spinlock deadlock on single-core Cortex-M3).
+ * Uses k_msgq_put with K_NO_WAIT which is ISR-safe in Zephyr. */
+void AppTask::ButtonEventHandler(uint32_t pin, void * /* isr_param */)
+{
+    uint32_t pin_status = 1; /* default: not pressed */
+    hosal_gpio_pin_get(pin, &pin_status);
+    /* Active-low with 100k pull-up: 0 = pressed, 1 = released */
+
+    AppEvent event                  = {};
+    event.Type                      = AppEventType::Button;
+    event.ButtonEvent.ButtonIdx     = static_cast<uint8_t>(pin);
+    event.ButtonEvent.Pressed       = (pin_status == 0);
+    event.Handler                   = FunctionHandler;
+
+    k_msgq_put(&sAppEventQueue, &event, K_NO_WAIT);
+}
+
 /* ── Initialisation ─────────────────────────────────────────────────────────── */
 
 CHIP_ERROR AppTask::Init()
@@ -366,6 +483,33 @@ CHIP_ERROR AppTask::Init()
     /* Data model provider — required since connectedhomeip removed the default. */
     sServerInitParams.dataModelProvider =
         chip::app::CodegenDataModelProviderInstance(sServerInitParams.persistentStorageDelegate);
+
+    /* ── Button GPIO init ───────────────────────────────────────────────────────
+     * GPIO0 = factory reset (hold 6 s), GPIO1 = light toggle.
+     * Active-low with 100 kΩ pull-up.  Both edges so we can detect press and
+     * release.  Debounce = 1024 slow clocks (~31 ms at 32 kHz slow clock).
+     * Gpio_IRQn = IRQ0 on RT583 — must call NVIC_SetPriority/EnableIRQ here
+     * because hosal_gpio_cfg_input registers the callback but does not enable
+     * the NVIC line (unlike Zephyr's IRQ_CONNECT which does both). */
+    {
+        hosal_gpio_input_config_t pin_cfg;
+        pin_cfg.param        = nullptr;
+        pin_cfg.pin_int_mode = HOSAL_GPIO_PIN_INT_BOTH_EDGE;
+        pin_cfg.usr_cb       = reinterpret_cast<void *>(ButtonEventHandler);
+
+        hosal_gpio_set_debounce_time(DEBOUNCE_SLOWCLOCKS_1024);
+        NVIC_SetPriority(Gpio_IRQn, 7);
+        NVIC_EnableIRQ(Gpio_IRQn);
+
+        for (uint8_t i = kButtonFactoryReset; i <= kButtonLightToggle; i++) {
+            hosal_pin_set_pullopt(i, HOSAL_PULL_UP_100K);
+            hosal_gpio_cfg_input(i, pin_cfg);
+            hosal_gpio_debounce_enable(i);
+            hosal_gpio_int_enable(i);
+        }
+        printk("[BTN] GPIO%u=factory-reset GPIO%u=light-toggle configured\n",
+               kButtonFactoryReset, kButtonLightToggle);
+    }
 
     return CHIP_NO_ERROR;
 }
