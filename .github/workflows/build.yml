@@ -240,6 +240,20 @@ jobs:
       - name: Register Zephyr SDK
         run: ~/zephyr-sdk/setup.sh -c
 
+      # Zephyr SDK 1.0.1 ships only picolibc.specs (no newlib/nosys).
+      # connectedhomeip's chip-module/CMakeLists.txt unconditionally adds
+      # --specs=nosys.specs for CONFIG_ARM targets; create an empty stub so
+      # arm-zephyr-eabi-gcc accepts the flag without failing.
+      - name: Create nosys.specs stub
+        run: |
+          NOSYS="$HOME/zephyr-sdk/gnu/arm-zephyr-eabi/arm-zephyr-eabi/lib/nosys.specs"
+          if [ ! -f "${NOSYS}" ]; then
+            touch "${NOSYS}"
+            echo "Created nosys.specs stub: ${NOSYS}"
+          else
+            echo "nosys.specs already exists: ${NOSYS}"
+          fi
+
       # ── connectedhomeip ─────────────────────────────────────────────────────
       # Cache key includes CHIP_CACHE_VERSION so bumping it forces a fresh clone.
       - name: Cache connectedhomeip
