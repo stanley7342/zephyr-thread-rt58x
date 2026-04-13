@@ -806,6 +806,9 @@ void ot_radioTask(ot_system_event_t trxEvent)
                               otRadio_var.pAckFrame, OT_ERROR_NONE);
         }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_NO_ACK) {
+            printk("[OT-RADIO] TX NO_ACK ch=%u len=%u\n",
+                   sCurrentChannel,
+                   txframe ? txframe->mLength : 0u);
             otPlatRadioTxDone(otRadio_var.aInstance, txframe, NULL,
                               OT_ERROR_NO_ACK);
         }

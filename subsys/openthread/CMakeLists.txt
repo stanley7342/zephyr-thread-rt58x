@@ -82,6 +82,16 @@ target_sources(app PRIVATE
     ${OT_PORT_SRC}/rt583_compat.c
     ${OT_PORT_SRC}/log_shim.c
 
+    # RT583 hardware crypto ALT backends (AES + ECC share one accelerator)
+    # rt583_crypto_mutex.c provides crypto_mutex_lock/unlock via Zephyr k_mutex.
+    # aes_alt.c / ecdsa_alt.c / ecdh_alt.c wire mbedTLS ALT hooks to hardware.
+    # CONFIG_SUPPORT_MULTITASKING (below) activates the mutex calls in rt_aes.c
+    # and rt_crypto.c so that concurrent AES and ECC requests serialise safely.
+    ${OT_PORT_SRC}/rt583_crypto_mutex.c
+    ${OT_PORT_SRC}/aes_alt.c
+    ${OT_PORT_SRC}/ecdsa_alt.c
+    ${OT_PORT_SRC}/ecdh_alt.c
+
     # LMAC + RF MCU
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
@@ -163,9 +173,15 @@ target_sources(app PRIVATE
 if(NOT DEFINED OT_INCLUDE_CLI OR OT_INCLUDE_CLI)
     target_sources(app PRIVATE ${OT_PORT_SRC}/ot_zephyr.c)
     target_sources(app PRIVATE ${OT_PORT_SRC}/ot_uart.c)
+    # Tell rt583_otsys.c NOT to compile the no-op ot_uartTask stub —
+    # ot_uart.c provides the real implementation for the CLI build.
+    target_compile_definitions(app PRIVATE OT_INCLUDE_CLI=1)
 else()
     target_sources(app PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/platform/ot_matter_sysq.c)
+    # Tell rt583_otsys.c to compile the no-op ot_uartTask stub —
+    # ot_uart.c is not compiled in the Matter build.
+    target_compile_definitions(app PRIVATE OT_INCLUDE_CLI=0)
 endif()
 
 target_include_directories(app PRIVATE
@@ -220,6 +236,12 @@ target_compile_definitions(app PRIVATE
     OPENTHREAD_RADIO=0
     CHIP_TYPE=3
     CONFIG_CRYPTO_SECP256R1_ENABLE=1
+    # Enable AES hardware acceleration in rt_aes.c (guards aes_key_init,
+    # aes_ecb_encrypt, etc. behind #if defined(CONFIG_CRYPTO_AES_ENABLE)).
+    CONFIG_CRYPTO_AES_ENABLE=1
+    # Enable mutex calls in rt_aes.c and rt_crypto.c so that concurrent AES
+    # and ECC operations serialise through crypto_mutex_lock/unlock.
+    CONFIG_SUPPORT_MULTITASKING=1
     # Matter needs its own state-change callback alongside Zephyr L2's.
     OPENTHREAD_CONFIG_MAX_STATECHANGE_HANDLERS=3
     "PACKAGE_NAME=\"OpenThread\""
