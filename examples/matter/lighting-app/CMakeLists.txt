@@ -211,21 +211,51 @@ set(CHIP_CFLAGS
 # chip-module's CMakeLists.txt calls find_program(GN_EXECUTABLE gn) during
 # find_package(Zephyr).  On Windows, gn.exe lives in the Zephyr venv alongside
 # west and python.exe.  If gn is not on the system PATH (common in CI and fresh
-# shells), pre-populate the cache variable from WEST_PYTHON (always supplied by
-# west) so find_program() skips the search and uses the known path instead.
-if(DEFINED WEST_PYTHON AND NOT GN_EXECUTABLE)
-    get_filename_component(_venv_scripts "${WEST_PYTHON}" DIRECTORY)
+# shells), pre-populate the cache variable before find_program() runs.
+#
+# Search order:
+#  1. Next to WEST_PYTHON (set by west when invoking cmake)
+#  2. Next to Python3_EXECUTABLE if explicitly provided
+#  3. Well-known venv locations relative to the workspace root
+if(NOT GN_EXECUTABLE)
+    # Collect candidate script directories to search
+    set(_gn_search_dirs "")
+
+    if(DEFINED WEST_PYTHON)
+        get_filename_component(_d "${WEST_PYTHON}" DIRECTORY)
+        list(APPEND _gn_search_dirs "${_d}")
+    endif()
+
+    if(DEFINED Python3_EXECUTABLE)
+        get_filename_component(_d "${Python3_EXECUTABLE}" DIRECTORY)
+        list(APPEND _gn_search_dirs "${_d}")
+    endif()
+
+    # Fallback: common venv locations relative to workspace root
+    # (workspace = parent of repo; also check inside repo itself)
+    foreach(_venv
+            "${WORKSPACE_DIR}/.zephyr-venv/Scripts"
+            "${RT583_PROJECT_DIR}/.zephyr-venv/Scripts"
+            "${WORKSPACE_DIR}/.venv/Scripts"
+            "${RT583_PROJECT_DIR}/.venv/Scripts"
+    )
+        list(APPEND _gn_search_dirs "${_venv}")
+    endforeach()
+
     if(WIN32)
-        set(_gn_candidate "${_venv_scripts}/gn.exe")
+        set(_gn_name "gn.exe")
     else()
-        set(_gn_candidate "${_venv_scripts}/gn")
+        set(_gn_name "gn")
     endif()
-    # Only pre-set if the file actually exists; otherwise let find_program()
-    # search PATH (e.g. gn installed at C:\Users\Stanley\bin\gn.exe).
-    if(EXISTS "${_gn_candidate}")
-        set(GN_EXECUTABLE "${_gn_candidate}" CACHE FILEPATH "Path to gn" FORCE)
-        message(STATUS "Pre-set GN_EXECUTABLE: ${GN_EXECUTABLE}")
-    endif()
+
+    foreach(_dir ${_gn_search_dirs})
+        set(_candidate "${_dir}/${_gn_name}")
+        if(EXISTS "${_candidate}")
+            set(GN_EXECUTABLE "${_candidate}" CACHE FILEPATH "Path to gn" FORCE)
+            message(STATUS "Pre-set GN_EXECUTABLE: ${GN_EXECUTABLE}")
+            break()
+        endif()
+    endforeach()
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
