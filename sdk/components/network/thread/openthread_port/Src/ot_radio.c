@@ -567,6 +567,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         sCurrentChannel = aFrame->mChannel;
         lmac15p4_channel_set(
             (lmac154_channel_t)(sCurrentChannel - kMinChannel));
+        printk("[OT-RADIO] TX ch=%u len=%u\n", sCurrentChannel, aFrame->mLength);
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -709,9 +710,11 @@ static void _RxDoneEvent(uint16_t packet_length, uint8_t *rx_data,
     static uint8_t  rx_cnt = 0;
 
     if (crc_status != 0) {
+        printk("[OT-RADIO] RX CRC err ch=%u rssi=-%d\n", sCurrentChannel, (int)rssi);
         OT_NOTIFY_ISR(OT_SYSTEM_EVENT_RADIO_RX_CRC_FIALED);
         return;
     }
+    printk("[OT-RADIO] RX ok ch=%u len=%u rssi=-%d\n", sCurrentChannel, (unsigned)(packet_length - 9), (int)rssi);
 
     otRadio_rxFrame_t *p = NULL;
     OT_ENTER_CRITICAL_ISR();
