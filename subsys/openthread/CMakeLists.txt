@@ -256,6 +256,12 @@ target_compile_definitions(app PRIVATE
 target_compile_options(app PRIVATE
     -UCONFIG_RF_FW_INCLUDE_PCI
     -DCONFIG_RF_FW_INCLUDE_PCI=TRUE
+    # Multi-protocol (BLE + 15.4) firmware blob — required when
+    # hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL) is used (Matter build).
+    # Without this, firmware_program_multi[] = {0} (stub) and the RF MCU
+    # loads an invalid firmware → Thread RX completely non-functional.
+    -UCONFIG_RF_FW_INCLUDE_MULTI_2P4G
+    -DCONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
     -UMBEDTLS_CONFIG_FILE
     "-DMBEDTLS_CONFIG_FILE=\"openthread-mbedtls-config.h\""
 )
