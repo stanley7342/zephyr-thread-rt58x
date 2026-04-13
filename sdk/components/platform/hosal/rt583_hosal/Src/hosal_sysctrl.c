@@ -74,11 +74,9 @@ int hosal_sysctrl_ioctrl(hosal_sys_tmo_t* sys_tmo, int ctl, void* para) {
         case HOSAL_SYSCTRL_TIMEOUT_INIT: ret = timeout_init(); break;
         case HOSAL_SYSCTRL_TIMEOUT_UNINIT: ret = timeout_uninit(); break;
         case HOSAL_SYSCTRL_TIMEOUT_START: {
-            uint32_t timeout = *(uint32_t*)para; //
             if (para == NULL)
                 return STATUS_INVALID_PARAM;
 
-            /* ���o�ǤJ���W�ɼƭ� */
             uint32_t ms = *(uint32_t*)para;
 
             ret = timeout_start(&sys_tmo->tmo, ms, sys_tmo->cb, /* ���T�Ϊk */

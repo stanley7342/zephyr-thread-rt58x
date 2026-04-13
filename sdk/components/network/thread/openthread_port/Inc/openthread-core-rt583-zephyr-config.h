@@ -95,4 +95,11 @@
  * before the promotion request is sent. */
 #define OPENTHREAD_CONFIG_MLE_ROUTER_SELECTION_JITTER    15
 
+/* Leader Weight — set to minimum so OTBR (default weight=64) always wins
+ * partition merge when both RT583 and OTBR form separate partitions.
+ * Without this, both have weight=64 and the winner is random (partition ID
+ * comparison), so RT583 might stay Leader and OTBR joins RT583 instead.
+ * Weight=1 ensures RT583 always yields and joins OTBR's partition. */
+#define OPENTHREAD_CONFIG_MLE_LEADER_WEIGHT              1
+
 #endif /* OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_ */
