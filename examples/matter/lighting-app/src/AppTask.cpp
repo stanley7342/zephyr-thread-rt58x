@@ -49,6 +49,11 @@ void ot_set_instance(struct otInstance *inst);
 #include <zephyr/net/net_if.h>       /* net_if_up, net_if_get_default */
 #endif
 
+#if CHIP_SYSTEM_CONFIG_USE_OPENTHREAD_ENDPOINT
+#include <inet/EndPointStateOpenThread.h>
+#include <platform/Zephyr/ThreadStackManagerImpl.h>  /* ThreadStackMgrImpl().OTInstance() */
+#endif
+
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
 using namespace ::chip;
@@ -304,25 +309,15 @@ CHIP_ERROR AppTask::Init()
 #endif
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
-    /* Bring up the OT IPv6 interface so that Server::Init can bind UDP
-     * sockets.  Thread itself stays idle (MANUAL_START) — commissioning
-     * via BLE will provision and start Thread later.  Without this,
-     * bind(::, 5540) returns EADDRNOTAVAIL because no interface is up. */
-    {
-        openthread_mutex_lock();
-        otIp6SetEnabled(openthread_get_default_instance(), true);
-        openthread_mutex_unlock();
-
-        /* Bring Zephyr net interfaces up so bind() succeeds. */
-        for (int idx = 1; idx <= 4; idx++) {
-            struct net_if *iface = net_if_get_by_index(idx);
-            if (iface) {
-                net_if_up(iface);
-            }
-        }
-        /* Give the stack a moment to assign the link-local address. */
-        k_sleep(K_MSEC(200));
-    }
+    /* Enable OT IPv6 so that OT UDP endpoints (mDNS, CASE) work.
+     * With CONFIG_CHIP_USE_OT_ENDPOINT=y, Matter uses otUdp* directly —
+     * no POSIX socket bind() needed, so the net_if_up() workaround is gone.
+     * otIp6SetEnabled must still be called here because InitThreadStack()
+     * only enables IPv6 under THREAD_AUTOSTART when the dataset is already
+     * commissioned, which is not the case on first boot. */
+    openthread_mutex_lock();
+    otIp6SetEnabled(openthread_get_default_instance(), true);
+    openthread_mutex_unlock();
 #endif
 
     /* Initialise Matter server (GATT, mDNS, session management) */
@@ -359,6 +354,22 @@ CHIP_ERROR AppTask::Init()
 static void ServerInitWork(intptr_t arg)
 {
     auto * serverParams = reinterpret_cast<chip::CommonCaseDeviceServerInitParams *>(arg);
+
+#if CHIP_SYSTEM_CONFIG_USE_OPENTHREAD_ENDPOINT
+    /* Wire OpenThread's native UDP stack into Matter's inet layer.
+     * With CONFIG_CHIP_USE_OT_ENDPOINT=y, all UDP endpoints (CASE, mDNS)
+     * use otUdp* directly — no POSIX socket bind() required.  This fixes
+     * the "Failed to advertise commissionable node: 3" (CHIP_ERROR_INCORRECT_STATE)
+     * that occurred because Advertiser_ImplMinimalMdns::Init() couldn't bind
+     * a POSIX socket (EADDRNOTAVAIL: no Zephyr net_if for the vendored lmac15p4
+     * Thread radio).  With a valid OT instance here, Init() uses otUdpBind()
+     * on the Thread interface and succeeds. */
+    chip::Inet::EndPointStateOpenThread::OpenThreadEndpointInitParam nativeParams;
+    nativeParams.lockCb   = []() { chip::DeviceLayer::ThreadStackMgr().LockThreadStack(); };
+    nativeParams.unlockCb = []() { chip::DeviceLayer::ThreadStackMgr().UnlockThreadStack(); };
+    nativeParams.openThreadInstancePtr = chip::DeviceLayer::ThreadStackMgrImpl().OTInstance();
+    serverParams->endpointNativeParams = static_cast<void *>(&nativeParams);
+#endif
 
     uint32_t t0 = k_uptime_get_32();
     CHIP_ERROR err = chip::Server::GetInstance().Init(*serverParams);
