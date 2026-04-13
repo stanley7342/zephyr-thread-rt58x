@@ -355,6 +355,9 @@ target_sources(app PRIVATE
     src/MallocWrappers.cpp
     src/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
+    # HOSAL GPIO / sysctrl (button init, pull-up, debounce, interrupt enable)
+    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
+    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
 )
 
 # Redirect ALL heap allocations to our sys_heap wrapper (MallocWrappers.cpp).
@@ -424,6 +427,9 @@ target_compile_definitions(app PRIVATE
     # Zephyr even though the write succeeds via the same AHB DMA path used
     # for firmware image load).
     CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
+    # Enable hardware AES functions in rt_aes.c (guarded by this define).
+    # Required for crypto_selftest() in CryptoSelfTest.cpp.
+    CONFIG_CRYPTO_AES_ENABLE=1
 )
 
 # Suppress warnings in vendored SDK sources

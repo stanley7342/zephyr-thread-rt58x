@@ -36,10 +36,15 @@
 extern "C" {
 #include "hosal_rf.h"
 #include "hosal_lpm.h"
+/* Include low-level SDK headers before HOSAL wrappers so that the underlying
+ * enum/constant names (GPIO_PIN_INT_BOTH_EDGE, PULLUP_100K, etc.) that the
+ * HOSAL macros expand to are already declared when the macros are used. */
+#include "gpio.h"          /* gpio_pin_int_mode_t, GPIO_PIN_INT_BOTH_EDGE */
+#include "sysctrl.h"       /* PULLUP_100K */
 #include "hosal_gpio.h"    /* hosal_gpio_cfg_input, hosal_gpio_pin_get, … */
 #include "hosal_sysctrl.h" /* hosal_pin_set_pullopt, HOSAL_PULL_UP_100K */
 #include "mcu.h"           /* Gpio_IRQn, NVIC_SetPriority, NVIC_EnableIRQ,
-                              gpio.h → DEBOUNCE_SLOWCLOCKS_1024 */
+                              DEBOUNCE_SLOWCLOCKS_1024 */
 extern bool hci_rt58x_rf_already_init;
 }
 
