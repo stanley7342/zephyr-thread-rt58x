@@ -854,6 +854,12 @@ void ot_radioInit(void)
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
 
+    /* Must be called before any lmac15p4_tx_data_send — initialises the TX
+     * gate semaphore (lmac_tx_sem) and registers RUCI RX/TX callbacks with
+     * hosal_rf.  Without this, lmac_tx_sem.count == 0 (BSS zero-init) and
+     * the first k_sem_take in lmac15p4_tx_data_send blocks forever. */
+    lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
+
     if (sMacAddrReadMode == 1) {
         rafael_otp_mac_addr(sIEEE_EUI64Addr);
         if (!memcmp(ff, sIEEE_EUI64Addr, OT_EXT_ADDRESS_SIZE)) {

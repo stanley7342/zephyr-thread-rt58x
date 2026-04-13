@@ -46,7 +46,11 @@ void ot_set_instance(struct otInstance *inst);
 #ifdef CONFIG_NET_L2_OPENTHREAD
 #include <zephyr/net/openthread.h>  /* openthread_init(), openthread_get_default_instance() */
 #include <openthread/ip6.h>          /* otIp6SetEnabled */
+#include <openthread/thread.h>       /* OT_DEVICE_ROLE_LEADER */
 #include <zephyr/net/net_if.h>       /* net_if_up, net_if_get_default */
+#endif
+#ifdef CONFIG_OPENTHREAD_SRP_SERVER
+#include <openthread/srp_server.h>   /* otSrpServerSetEnabled */
 #endif
 
 #if CHIP_SYSTEM_CONFIG_USE_OPENTHREAD_ENDPOINT
@@ -166,6 +170,20 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
             int role = inst ? (int)otThreadGetDeviceRole(inst) : -1;
             /* 0=Disabled 1=Detached 2=Child 3=Router 4=Leader */
             printk("[OT] Role changed → %d\n", role);
+#ifdef CONFIG_OPENTHREAD_SRP_SERVER
+            /* Enable the built-in SRP server when this device is the Thread
+             * Leader (standalone — no Border Router).  The SRP server
+             * publishes its anycast address via NETDATA_PUBLISHER, the SRP
+             * client auto-starts and registers services, and the Matter DNS-SD
+             * init callback fires → mState=kInitialized → advertising works.
+             * When an OTBR is present the device is not Leader; the SRP server
+             * stays off and the OTBR provides the SRP server instead. */
+            if (inst) {
+                openthread_mutex_lock();
+                otSrpServerSetEnabled(inst, role == OT_DEVICE_ROLE_LEADER);
+                openthread_mutex_unlock();
+            }
+#endif
 #endif
         }
         break;

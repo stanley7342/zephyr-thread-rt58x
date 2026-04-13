@@ -374,34 +374,12 @@ zephyr_ld_options(
 
 # ECP enum compatibility: CHIP (TF-PSA-Crypto) passes SECP256R1=1 but OT's linked
 # mbedtls_ecp_group_load (mbedTLS 3.6.0) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
-# --wrap redirects all callers through __wrap_mbedtls_ecp_group_load (ecp_enum_compat.c)
-# which translates 1→3 before forwarding to OT's __real implementation.
-# Diagnostic wraps: muladd, mul, point_write_binary, check_pubkey log any non-zero
-# return value to pinpoint which PASE step is failing.
+# --wrap redirects all callers through __wrap_mbedtls_ecp_group_load which translates
+# 1→3 before forwarding to OT's __real implementation.
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
-zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_point_read_binary)
-zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_muladd)
-zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_mul)
-zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_point_write_binary)
-zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_check_pubkey)
-# PSA diagnostic wraps — pinpoint which PSA call in GenerateKeys() returns non-SUCCESS
-zephyr_ld_options(-Wl,--wrap=psa_hash_finish)
-zephyr_ld_options(-Wl,--wrap=psa_key_derivation_output_bytes)
-zephyr_ld_options(-Wl,--wrap=psa_hash_update)
-# MPI write wrap — FEWrite(w0) is the only unmonitored call before GenerateKeys()
-zephyr_ld_options(-Wl,--wrap=mbedtls_mpi_write_binary)
-# KDF diagnostic wraps — psa_key_derivation_output_bytes is present but never called,
-# so the failure is in setup or input_bytes/input_key.  Log always to find it.
+# psa_key_derivation_setup safety-net: restores operation->alg and capacity when
+# a linker resolution bug zeroes them.  Root cause also fixed in psa_crypto.c.
 zephyr_ld_options(-Wl,--wrap=psa_key_derivation_setup)
-zephyr_ld_options(-Wl,--wrap=psa_key_derivation_input_bytes)
-zephyr_ld_options(-Wl,--wrap=psa_key_derivation_input_key)
-# PSA init/import wraps — confirm PSA subsystem is initialized before input_key
-zephyr_ld_options(-Wl,--wrap=psa_crypto_init)
-zephyr_ld_options(-Wl,--wrap=psa_import_key)
-# psa_hash_setup wrap — catch BAD_STATE from hash_op->id != 0 in HMAC init
-zephyr_ld_options(-Wl,--wrap=psa_hash_setup)
-# psa_generate_key wrap — diagnose P256Keypair::Initialize failure during CSRRequest
-zephyr_ld_options(-Wl,--wrap=psa_generate_key)
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
 if(CONFIG_BLE_RT583)
