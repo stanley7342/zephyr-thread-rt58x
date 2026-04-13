@@ -167,9 +167,12 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
         if (event->ThreadStateChange.RoleChanged) {
 #ifdef CONFIG_NET_L2_OPENTHREAD
             otInstance * inst = openthread_get_default_instance();
-            int role = inst ? (int)otThreadGetDeviceRole(inst) : -1;
-            /* 0=Disabled 1=Detached 2=Child 3=Router 4=Leader */
-            printk("[OT] Role changed → %d\n", role);
+            otDeviceRole role = inst ? otThreadGetDeviceRole(inst) : OT_DEVICE_ROLE_DISABLED;
+            static const char * const kRoleStr[] = {
+                "Disabled", "Detached", "Child", "Router", "Leader"
+            };
+            const char *roleStr = (role < (int)ARRAY_SIZE(kRoleStr)) ? kRoleStr[role] : "Unknown";
+            printk("[OT] Role changed → %s\n", roleStr);
 #ifdef CONFIG_OPENTHREAD_SRP_SERVER
             /* Enable the built-in SRP server when this device is the Thread
              * Leader (standalone — no Border Router).  The SRP server
