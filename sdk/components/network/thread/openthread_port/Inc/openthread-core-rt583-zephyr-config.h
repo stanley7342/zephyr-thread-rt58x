@@ -89,4 +89,10 @@
 #define OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE 1
 
+/* Router Selection Jitter — reduce from default 120 s so a Child promotes to
+ * Router faster after joining the Thread partition.  15 s is well above the
+ * MLE REED advertisement period (5 s) so the network has time to stabilise
+ * before the promotion request is sent. */
+#define OPENTHREAD_CONFIG_MLE_ROUTER_SELECTION_JITTER    15
+
 #endif /* OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_ */
