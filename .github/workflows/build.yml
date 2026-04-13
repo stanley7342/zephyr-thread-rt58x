@@ -263,7 +263,8 @@ jobs:
           # Note: third_party/zap/repo is NOT a submodule; zap-cli is a
           # standalone binary installed separately in the "Install zap-cli" step.
           git submodule update --init --depth=1 \
-            third_party/pigweed/repo
+            third_party/pigweed/repo \
+            third_party/jsoncpp/repo
 
       - name: Install connectedhomeip Python requirements
         run: |
