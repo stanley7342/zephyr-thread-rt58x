@@ -266,7 +266,8 @@ jobs:
             third_party/pigweed/repo \
             third_party/jsoncpp/repo \
             third_party/nlassert/repo \
-            third_party/nlio/repo
+            third_party/nlio/repo \
+            third_party/uriparser/repo
 
       - name: Install connectedhomeip Python requirements
         run: |
