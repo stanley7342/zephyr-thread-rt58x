@@ -400,6 +400,15 @@ static void ServerInitWork(intptr_t arg)
         return;
     }
 
+#if defined(CONFIG_MATTER_FACTORY_RESET_ON_BOOT) && CONFIG_MATTER_FACTORY_RESET_ON_BOOT
+    /* One-shot factory reset: clears all Matter KVS data + OT NVM, then reboots.
+     * Build with CONFIG_MATTER_FACTORY_RESET_ON_BOOT=y to wipe the device once;
+     * rebuild without it for normal operation. */
+    printk("[DIAG] CONFIG_MATTER_FACTORY_RESET_ON_BOOT set — initiating factory reset\n");
+    chip::Server::GetInstance().ScheduleFactoryReset();
+    return;
+#endif
+
     /* Set initial light state */
     AppTask & task = AppTask::Instance();
     task.SetLightOn(task.IsLightOn());
