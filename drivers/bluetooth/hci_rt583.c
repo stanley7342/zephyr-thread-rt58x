@@ -28,7 +28,7 @@
 #include "hosal_lpm.h"
 #include "rf_mcu.h"
 #include "ruci.h"
-/* #include "flashctl.h" — not safe during early BLE setup */
+#include "flashctl.h"
 
 #define LOG_PREFIX "[HCI] "
 
@@ -326,11 +326,30 @@ static int hci_rt58x_setup(const struct device *dev,
 			    const struct bt_hci_setup_params *params)
 {
 	/*
-	 * TODO: read factory MAC from flash Security Register 0x1100
-	 * after flash controller init is confirmed safe at this stage.
-	 * For now use a fixed unique address.
+	 * Read factory MAC from flash Security Register 0x1100.
+	 * Layout matches ot_radio.c::rafael_otp_mac_addr(): the 8-byte
+	 * EUI-64 sits at offset 8 in the 256-byte page.  BLE uses a 6-byte
+	 * address, so take the last 6 bytes of the EUI-64.  If the OTP is
+	 * blank (all 0xFF), fall back to flash unique ID.
 	 */
-	uint8_t addr[6] = {0x58, 0x82, 0xBE, 0xEF, 0xCA, 0xFE};
+	uint8_t addr[6];
+	{
+		uint8_t otp[256];
+		uint8_t eui64[8];
+		uint8_t ff[8];
+
+		memset(ff, 0xFF, sizeof(ff));
+		flash_read_sec_register((uint32_t)(uintptr_t)otp, 0x1100);
+		memcpy(eui64, otp + 8, 8);
+
+		if (!memcmp(eui64, ff, 8)) {
+			/* OTP blank — derive from flash unique ID */
+			flash_get_unique_id((uint32_t)(uintptr_t)eui64, 8);
+		}
+
+		/* BLE 6-byte address from EUI-64: take bytes [2..7] */
+		memcpy(addr, eui64 + 2, 6);
+	}
 
 	int rc;
 

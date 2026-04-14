@@ -42,16 +42,21 @@ void platformRadioProcess(otInstance *aInstance)
 }
 
 /**
- * ot_uartTask — no-op stub for the Matter build.
+ * ot_uartTask — no-op stub for the Matter build only.
  *
- * The OT UART CLI (ot_uart.c) is excluded in the Matter build because the OT
- * CLI sources are not compiled (OT_INCLUDE_CLI=0).  ot_zephyr.c's
- * otSysProcessDrivers() calls ot_uartTask(); provide a no-op so the linker
- * is satisfied.  The typedef below avoids including openthread_port.h which
- * has C++ incompatible inline functions.
+ * When OT_INCLUDE_CLI=1 (Thread CLI example), ot_uart.c is compiled and
+ * provides the real ot_uartTask implementation — this stub must be absent so
+ * the real version wins the link.
+ *
+ * When OT_INCLUDE_CLI=0 (Matter build), ot_uart.c is NOT compiled; provide
+ * this no-op so otSysProcessDrivers() (ot_zephyr.c) has a symbol to link
+ * against.  The typedef avoids including openthread_port.h which has C++
+ * incompatible inline functions.
  */
+#if !defined(OT_INCLUDE_CLI) || !OT_INCLUDE_CLI
 typedef uint32_t ot_system_event_t;
 void ot_uartTask(ot_system_event_t sevent)
 {
     (void)sevent;
 }
+#endif /* !OT_INCLUDE_CLI */

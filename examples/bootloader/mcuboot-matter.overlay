@@ -1,0 +1,24 @@
+/*
+ * MCUboot DTS overlay for Matter lighting-app.
+ *
+ * Combines two changes:
+ *  1. Link bootloader at boot_partition (0x0), not slot0 (0x10000).
+ *  2. Resize slot0/slot1 to 928 KB to match the lighting-app image size.
+ *
+ * The lighting-app is ~862 KB, which exceeds the default 800 KB slot.
+ * Bootloader and app MUST be built with the same slot layout.
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};
+
+&slot0_partition {
+	reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+&slot1_partition {
+	reg = <0x000F8000 0x000E8000>;  /* 928 KB */
+};

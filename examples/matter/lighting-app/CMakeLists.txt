@@ -6,18 +6,39 @@ get_filename_component(RT583_PROJECT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../.." AB
 # Workspace root is one level above the repo (standard west workspace layout)
 get_filename_component(WORKSPACE_DIR "${RT583_PROJECT_DIR}/.." ABSOLUTE)
 
-# CHIP_ROOT: use CHIP_ROOT env var first, fall back to <workspace>/connectedhomeip
+# CHIP_ROOT: use CHIP_ROOT env var first, then search common locations.
+# install.ps1 may place connectedhomeip either at:
+#   <workspace>/connectedhomeip  (standard west layout — workspace is parent of repo)
+#   <repo>/connectedhomeip       (install ran from inside the repo dir)
 if(DEFINED ENV{CHIP_ROOT})
     get_filename_component(CHIP_ROOT "$ENV{CHIP_ROOT}" ABSOLUTE)
+elseif(EXISTS "${WORKSPACE_DIR}/connectedhomeip/src/lib/core/CHIPError.h")
+    set(CHIP_ROOT "${WORKSPACE_DIR}/connectedhomeip")
+elseif(EXISTS "${RT583_PROJECT_DIR}/connectedhomeip/src/lib/core/CHIPError.h")
+    set(CHIP_ROOT "${RT583_PROJECT_DIR}/connectedhomeip")
 else()
     set(CHIP_ROOT "${WORKSPACE_DIR}/connectedhomeip")
 endif()
 
 if(NOT EXISTS "${CHIP_ROOT}/src/lib/core/CHIPError.h")
     message(FATAL_ERROR
-        "connectedhomeip not found at ${CHIP_ROOT}.\n"
-        "Set the CHIP_ROOT environment variable or clone it to ${WORKSPACE_DIR}/connectedhomeip:\n"
-        "  git clone --recurse-submodules https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip")
+        "connectedhomeip not found.\n"
+        "Set the CHIP_ROOT environment variable or clone it:\n"
+        "  git clone --depth=1 https://github.com/project-chip/connectedhomeip ${WORKSPACE_DIR}/connectedhomeip\n"
+        "  cd ${WORKSPACE_DIR}/connectedhomeip && git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9 && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
+endif()
+
+# ── Python3: prefer the active venv so codegen deps (python_path, matter IDL)
+#    are available.  chip_codegen.cmake calls find_package(Python3) which would
+#    otherwise pick the system Python that lacks these packages.
+if(NOT DEFINED Python3_EXECUTABLE)
+    if(DEFINED ENV{VIRTUAL_ENV})
+        if(WIN32)
+            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/Scripts/python.exe" CACHE FILEPATH "")
+        else()
+            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/bin/python" CACHE FILEPATH "")
+        endif()
+    endif()
 endif()
 
 get_filename_component(GEN_DIR "${CHIP_ROOT}/zzz_generated" ABSOLUTE)
@@ -33,54 +54,209 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${RT583_PROJECT_DIR})
 # Matter chip-module (nrfconnect variant — most complete Zephyr BT+OpenThread support)
 list(APPEND ZEPHYR_EXTRA_MODULES ${CHIP_ROOT}/config/zephyr/chip-module)
 
-# mbedTLS 4.0 compat: Zephyr v4.4 ships mbedTLS 4.0 (TF-PSA-Crypto) which
-# moved mbedtls/ecp.h and mbedtls/bignum.h from the public API to the private
-# driver include path (tf-psa-crypto/drivers/builtin/include/mbedtls/private/).
-# connectedhomeip still uses those headers (mbedTLS 2.x/3.x public API).
-# The mbedtls_shim/ directory provides forwarding headers so that
-# #include <mbedtls/ecp.h> finds mbedtls/private/ecp.h.
+# ── mbedTLS 4.0 compat shims (generated in build dir) ───────────────────────
+# Zephyr v4.4 ships mbedTLS 4.0 (TF-PSA-Crypto) which moved public mbedtls/
+# ecp.h, bignum.h, and pk.h APIs into private headers and redesigned
+# mbedtls_pk_context.  connectedhomeip still uses the 3.x public API.
 #
-# Three plain -I flags are required instead of relying on the -isystem paths
-# already injected by zephyr_get_compile_flags:
-#   1. mbedtls_shim/           — provides mbedtls/ecp.h → mbedtls/private/ecp.h
-#   2. .../drivers/builtin/include — provides mbedtls/private/ecp.h itself
-#   3. .../tf-psa-crypto/include   — provides tf-psa-crypto/build_info.h and
-#                                    mbedtls/platform_util.h (included by ecp.h)
+# Instead of committing shim files to the source tree, generate them at
+# CMake configure time into ${CMAKE_BINARY_DIR}/chip_mbedtls_compat/ so the
+# source tree stays clean.  The generated directory is prepended to the GN
+# -I path so the shim headers shadow the installed public headers.
 #
-# zephyr_get_compile_flags emits "-isystemC:/path" (no space between -isystem
-# and the drive-letter path) which arm-zephyr-eabi-g++ on Windows does not parse
-# correctly — the drive letter is swallowed by the flag name.  Plain -I flags
-# are always parsed correctly and take precedence over -isystem.
-#
-# Paths are normalised with get_filename_component(ABSOLUTE) to eliminate the
-# /../ segment so the compiler receives a clean Windows absolute path.
-#
-# MBEDTLS_ALLOW_PRIVATE_ACCESS enables MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
-# (see mbedtls/private_access.h) which guards ALL function declarations in
-# mbedtls/private/ecp.h (mbedtls_ecp_group_init, mbedtls_ecp_mul, …).
-# Without it CHIPCryptoPALPSA.cpp fails with 'not declared in this scope'.
+# Plain -I flags are used (not -isystem) because on Windows arm-zephyr-eabi-
+# g++ mis-parses "-isystemC:/path" (drive letter consumed by flag name).
 get_filename_component(TF_PSA_CRYPTO_INCLUDE
-    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
+    "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/include"
     ABSOLUTE)
 get_filename_component(TF_PSA_CRYPTO_BUILTIN_INCLUDE
-    "${ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
+    "$ENV{ZEPHYR_BASE}/../modules/crypto/mbedtls/tf-psa-crypto/drivers/builtin/include"
     ABSOLUTE)
 
+set(_CHIP_MBEDTLS_COMPAT "${CMAKE_BINARY_DIR}/chip_mbedtls_compat")
+
+# ecp.h — redirect to private header (ECP API moved in 4.x)
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/ecp.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#pragma once
+#include <mbedtls/private/ecp.h>
+]=])
+
+# bignum.h — redirect to private header (bignum API moved in 4.x)
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/bignum.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#pragma once
+#include <mbedtls/private/bignum.h>
+]=])
+
+# pk.h — (a) pulls in pk_private.h for legacy PK type symbols, and
+#         (b) provides mbedtls_pk_ec() which was removed in 4.x.
+#
+# mbedtls_pk_context in 4.x is PSA-backed: the public key lives in
+# pub_raw[] (uncompressed point bytes) and ec_family/bits describe the
+# curve.  mbedtls_pk_ec() rebuilds an mbedtls_ecp_keypair from those
+# fields using a static local (safe: connectedhomeip only reads the result).
+file(WRITE "${_CHIP_MBEDTLS_COMPAT}/mbedtls/pk.h"
+[=[/* Auto-generated compat shim — do not edit. */
+#ifndef MBEDTLS_PK_SHIM_H
+#define MBEDTLS_PK_SHIM_H
+
+#include_next <mbedtls/pk.h>
+#include <mbedtls/private/pk_private.h>
+#include <mbedtls/private/ecp.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static inline mbedtls_ecp_group_id mbedtls_pk_ec_psa_to_grp(
+        psa_ecc_family_t family, size_t bits)
+{
+    switch (family) {
+        case PSA_ECC_FAMILY_SECP_R1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192R1_ENABLED)
+                case 192: return MBEDTLS_ECP_DP_SECP192R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224R1_ENABLED)
+                case 224: return MBEDTLS_ECP_DP_SECP224R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256R1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_SECP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP384R1_ENABLED)
+                case 384: return MBEDTLS_ECP_DP_SECP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP521R1_ENABLED)
+                case 521: return MBEDTLS_ECP_DP_SECP521R1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_SECP_K1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_SECP192K1_ENABLED)
+                case 192: return MBEDTLS_ECP_DP_SECP192K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP224K1_ENABLED)
+                case 224: return MBEDTLS_ECP_DP_SECP224K1;
+#endif
+#if defined(MBEDTLS_ECP_DP_SECP256K1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_SECP256K1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_BRAINPOOL_P_R1:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_BP256R1_ENABLED)
+                case 256: return MBEDTLS_ECP_DP_BP256R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP384R1_ENABLED)
+                case 384: return MBEDTLS_ECP_DP_BP384R1;
+#endif
+#if defined(MBEDTLS_ECP_DP_BP512R1_ENABLED)
+                case 512: return MBEDTLS_ECP_DP_BP512R1;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        case PSA_ECC_FAMILY_MONTGOMERY:
+            switch (bits) {
+#if defined(MBEDTLS_ECP_DP_CURVE25519_ENABLED)
+                case 255: return MBEDTLS_ECP_DP_CURVE25519;
+#endif
+#if defined(MBEDTLS_ECP_DP_CURVE448_ENABLED)
+                case 448: return MBEDTLS_ECP_DP_CURVE448;
+#endif
+                default:  return MBEDTLS_ECP_DP_NONE;
+            }
+        default:
+            return MBEDTLS_ECP_DP_NONE;
+    }
+}
+
+static inline mbedtls_ecp_keypair *mbedtls_pk_ec(mbedtls_pk_context ctx)
+{
+    static mbedtls_ecp_keypair kp;
+    mbedtls_ecp_keypair_free(&kp);
+    mbedtls_ecp_keypair_init(&kp);
+    mbedtls_ecp_group_id grp_id = mbedtls_pk_ec_psa_to_grp(
+            ctx.MBEDTLS_PRIVATE(ec_family), ctx.MBEDTLS_PRIVATE(bits));
+    if (grp_id == MBEDTLS_ECP_DP_NONE) return NULL;
+    if (mbedtls_ecp_group_load(&kp.MBEDTLS_PRIVATE(grp), grp_id) != 0) return NULL;
+    if (mbedtls_ecp_point_read_binary(&kp.MBEDTLS_PRIVATE(grp), &kp.MBEDTLS_PRIVATE(Q),
+                ctx.MBEDTLS_PRIVATE(pub_raw), ctx.MBEDTLS_PRIVATE(pub_raw_len)) != 0)
+        return NULL;
+    return &kp;
+}
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* MBEDTLS_PK_SHIM_H */
+]=])
+
 set(CHIP_CFLAGS
-    "-I${CMAKE_CURRENT_LIST_DIR}/mbedtls_shim"
+    "-I${_CHIP_MBEDTLS_COMPAT}"
     "-I${TF_PSA_CRYPTO_BUILTIN_INCLUDE}"
     "-I${TF_PSA_CRYPTO_INCLUDE}"
-    # mbedtls/private/ecp.h guards ALL function declarations (mbedtls_ecp_group_init,
-    # mbedtls_ecp_mul, etc.) inside #if defined(MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS).
-    # That macro is only defined when MBEDTLS_ALLOW_PRIVATE_ACCESS is defined
-    # (see private_access.h).  Without it, the functions are not declared and
-    # CHIPCryptoPALPSA.cpp fails with 'not declared in this scope' errors.
+    # MBEDTLS_ALLOW_PRIVATE_ACCESS → private_access.h defines
+    # MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS, enabling all declarations in
+    # mbedtls/private/ecp.h and mbedtls/private/pk_private.h.
     "-DMBEDTLS_ALLOW_PRIVATE_ACCESS"
-    # PSA crypto provides its own entropy; PlatformManagerImpl.cpp must not call
-    # add_entropy_source() (the PSA backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE).
-    # Defining CONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR suppresses that code path.
+    # Suppress add_entropy_source() in PlatformManagerImpl.cpp — the PSA
+    # backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE for that call.
     "-DCONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR=1"
 )
+
+# ── Pre-set GN_EXECUTABLE ────────────────────────────────────────────────────
+# chip-module's CMakeLists.txt calls find_program(GN_EXECUTABLE gn) during
+# find_package(Zephyr).  On Windows, gn.exe lives in the Zephyr venv alongside
+# west and python.exe.  If gn is not on the system PATH (common in CI and fresh
+# shells), pre-populate the cache variable before find_program() runs.
+#
+# Search order:
+#  1. Next to WEST_PYTHON (set by west when invoking cmake)
+#  2. Next to Python3_EXECUTABLE if explicitly provided
+#  3. Well-known venv locations relative to the workspace root
+if(NOT GN_EXECUTABLE)
+    # Collect candidate script directories to search
+    set(_gn_search_dirs "")
+
+    if(DEFINED WEST_PYTHON)
+        get_filename_component(_d "${WEST_PYTHON}" DIRECTORY)
+        list(APPEND _gn_search_dirs "${_d}")
+    endif()
+
+    if(DEFINED Python3_EXECUTABLE)
+        get_filename_component(_d "${Python3_EXECUTABLE}" DIRECTORY)
+        list(APPEND _gn_search_dirs "${_d}")
+    endif()
+
+    # Fallback: common venv locations relative to workspace root
+    # (workspace = parent of repo; also check inside repo itself)
+    foreach(_venv
+            "${WORKSPACE_DIR}/.zephyr-venv/Scripts"
+            "${RT583_PROJECT_DIR}/.zephyr-venv/Scripts"
+            "${WORKSPACE_DIR}/.venv/Scripts"
+            "${RT583_PROJECT_DIR}/.venv/Scripts"
+    )
+        list(APPEND _gn_search_dirs "${_venv}")
+    endforeach()
+
+    if(WIN32)
+        set(_gn_name "gn.exe")
+    else()
+        set(_gn_name "gn")
+    endif()
+
+    foreach(_dir ${_gn_search_dirs})
+        set(_candidate "${_dir}/${_gn_name}")
+        if(EXISTS "${_candidate}")
+            set(GN_EXECUTABLE "${_candidate}" CACHE FILEPATH "Path to gn" FORCE)
+            message(STATUS "Pre-set GN_EXECUTABLE: ${GN_EXECUTABLE}")
+            break()
+        endif()
+    endforeach()
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt583-matter-lighting VERSION 1.0.0)
@@ -89,6 +265,44 @@ project(rt583-matter-lighting VERSION 1.0.0)
 include(${CHIP_ROOT}/config/zephyr/app/enable-gnu-std.cmake)
 
 # ── Matter data model (ZAP-generated code + cluster implementations) ─────────
+# connectedhomeip codegen scripts (codegen_paths.py, codegen.py) import:
+#   'python_path'  — Pigweed helper (not present without full Pigweed bootstrap)
+#   'matter.idl.*' — from ${CHIP_ROOT}/scripts/py_matter_idl/
+#
+# python_path.py is generated into the build directory at configure time so
+# the source tree needs no committed shim files.
+set(_CHIP_SCRIPTS_COMPAT "${CMAKE_BINARY_DIR}/chip_scripts_compat")
+file(WRITE "${_CHIP_SCRIPTS_COMPAT}/python_path.py"
+[=["""Minimal shim for Pigweed's python_path module (auto-generated, do not edit).
+connectedhomeip codegen scripts import PythonPath from this module when Pigweed
+is not fully bootstrapped.  PythonPath(subdir, relative_to=__file__) is a
+context manager that prepends <dirname(relative_to)>/<subdir> to sys.path.
+"""
+import os, sys
+
+class PythonPath:
+    def __init__(self, subdir, relative_to=None):
+        base = os.path.dirname(os.path.abspath(relative_to)) if relative_to else os.getcwd()
+        self._path = os.path.join(base, subdir)
+        self._added = False
+    def __enter__(self):
+        if self._path not in sys.path:
+            sys.path.insert(0, self._path)
+            self._added = True
+        return self
+    def __exit__(self, *_):
+        if self._added:
+            try: sys.path.remove(self._path)
+            except ValueError: pass
+        return False
+]=])
+
+if(WIN32)
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts;${_CHIP_SCRIPTS_COMPAT};$ENV{PYTHONPATH}")
+else()
+    set(ENV{PYTHONPATH} "${CHIP_ROOT}/scripts:${_CHIP_SCRIPTS_COMPAT}:$ENV{PYTHONPATH}")
+endif()
+
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
 
 chip_configure_data_model(app
@@ -117,11 +331,40 @@ list(REMOVE_ITEM _app_srcs
 )
 set_property(TARGET app PROPERTY SOURCES ${_app_srcs})
 
+# ── ODR fix: align CMake CHIP_CONFIG_* with GN build ─────────────────────────
+# chip_configure_data_model() adds CodegenIntegration.cpp files to the CMake
+# app target.  These call inline Server accessors (GetFabricTable, etc.) whose
+# compiled offset depends on CHIP_CONFIG_* macros from GN-generated headers in
+# gen/include (AppBuildConfig.h, ICDServerBuildConfig.h, CHIPDeviceBuildConfig.h).
+#
+# Problem 1 — wrong CHIP_HAVE_CONFIG_H value:
+#   Zephyr sets -DCHIP_HAVE_CONFIG_H (no value → expands to empty → #if evaluates
+#   to 0), so AppBuildConfig.h is NOT included and all CHIP_CONFIG_* macros use
+#   their defaults.  GN sets -DCHIP_HAVE_CONFIG_H=1 → AppBuildConfig.h IS
+#   included.  This causes Server member sizes (SessionManager, ExchangeManager)
+#   to differ by 312 bytes between the two build systems.
+#
+# Problem 2 — missing gen/include search path:
+#   The CMake build doesn't add gen/include to its -I list, so even if
+#   CHIP_HAVE_CONFIG_H=1 were set, #include <app/AppBuildConfig.h> would fail.
+#
+# Fix: prepend gen/include to the include search path and redefine
+# CHIP_HAVE_CONFIG_H=1 (using -U to clear the valueless definition first).
+# This makes all CodegenIntegration.cpp TUs see the same struct layouts as the
+# GN-compiled Server.cpp, eliminating the ODR violation on inline accessors.
+target_include_directories(app BEFORE PRIVATE
+    "${CMAKE_BINARY_DIR}/modules/connectedhomeip/gen/include"
+)
+target_compile_options(app PRIVATE
+    -UCHIP_HAVE_CONFIG_H
+    -DCHIP_HAVE_CONFIG_H=1
+)
+
 # ── Include directories ──────────────────────────────────────────────────────
 set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
 
 target_include_directories(app PRIVATE
-    main/include
+    src/include
     ${GEN_DIR}
     ${GEN_DIR}/app-common
     ${GEN_DIR}/lighting-app
@@ -129,17 +372,22 @@ target_include_directories(app PRIVATE
     ${CHIP_ROOT}/examples/providers
     ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
     ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
+    ${RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc
     ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
 )
 
 # ── Application sources ──────────────────────────────────────────────────────
 target_sources(app PRIVATE
-    main/main.cpp
-    main/AppTask.cpp
-    main/ZclCallbacks.cpp
-    main/MallocWrappers.cpp
-    main/ecp_enum_compat.c
+    src/main.cpp
+    src/AppTask.cpp
+    src/CryptoSelfTest.cpp
+    src/ZclCallbacks.cpp
+    src/MallocWrappers.cpp
+    src/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
+    # HOSAL GPIO / sysctrl (button init, pull-up, debounce, interrupt enable)
+    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
+    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
 )
 
 # Redirect ALL heap allocations to our sys_heap wrapper (MallocWrappers.cpp).
@@ -160,10 +408,13 @@ zephyr_ld_options(
 )
 
 # ECP enum compatibility: CHIP (TF-PSA-Crypto) passes SECP256R1=1 but OT's linked
-# mbedtls_ecp_group_load (mbedTLS 2.x) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
-# --wrap redirects all callers through __wrap_mbedtls_ecp_group_load (ecp_enum_compat.c)
-# which translates 1→3 before forwarding to OT's __real implementation.
+# mbedtls_ecp_group_load (mbedTLS 3.6.0) expects SECP256R1=3 → FEATURE_UNAVAILABLE.
+# --wrap redirects all callers through __wrap_mbedtls_ecp_group_load which translates
+# 1→3 before forwarding to OT's __real implementation.
 zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
+# psa_key_derivation_setup safety-net: restores operation->alg and capacity when
+# a linker resolution bug zeroes them.  Root cause also fixed in psa_crypto.c.
+zephyr_ld_options(-Wl,--wrap=psa_key_derivation_setup)
 
 # ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
 if(CONFIG_BLE_RT583)
@@ -206,6 +457,9 @@ target_compile_definitions(app PRIVATE
     # Zephyr even though the write succeeds via the same AHB DMA path used
     # for firmware image load).
     CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
+    # Enable hardware AES functions in rt_aes.c (guarded by this define).
+    # Required for crypto_selftest() in CryptoSelfTest.cpp.
+    CONFIG_CRYPTO_AES_ENABLE=1
 )
 
 # Suppress warnings in vendored SDK sources

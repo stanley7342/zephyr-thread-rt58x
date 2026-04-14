@@ -42,11 +42,34 @@
 
 #define MBEDTLS_PLATFORM_SNPRINTF_MACRO snprintf
 
+/*
+ * RT583 hardware accelerator ALT hooks.
+ *
+ * MBEDTLS_AES_ALT         — AES ECB/CBC/CCM via RT583 AES engine (aes_alt.c)
+ * MBEDTLS_ECDSA_SIGN_ALT  — ECDSA signing via RT583 ECC engine (ecdsa_alt.c)
+ * MBEDTLS_ECDSA_VERIFY_ALT — ECDSA verify via RT583 ECC engine (ecdsa_alt.c)
+ * MBEDTLS_ECDH_GEN_PUBLIC_ALT   — ECDH key gen via RT583 ECC (ecdh_alt.c)
+ * MBEDTLS_ECDH_COMPUTE_SHARED_ALT — ECDH shared secret via RT583 ECC (ecdh_alt.c)
+ *
+ * AES and ECC share the same hardware accelerator.  Thread safety is provided
+ * by crypto_mutex_lock/unlock (rt583_crypto_mutex.c) which serialize all
+ * accesses.  CONFIG_SUPPORT_MULTITASKING enables the mutex calls in rt_aes.c
+ * and rt_crypto.c; it is set in subsys/openthread/CMakeLists.txt.
+ *
+ * MBEDTLS_ECP_RESTARTABLE must NOT be defined — it is incompatible with ALT
+ * hooks (enforced by mbedtls/check_config.h).
+ */
+#define MBEDTLS_AES_ALT
+#define MBEDTLS_ECDSA_SIGN_ALT
+#define MBEDTLS_ECDSA_VERIFY_ALT
+#define MBEDTLS_ECDH_GEN_PUBLIC_ALT
+#define MBEDTLS_ECDH_COMPUTE_SHARED_ALT
+
 #define MBEDTLS_AES_C
 #if (MBEDTLS_VERSION_NUMBER >= 0x03050000)
 #define MBEDTLS_AES_ONLY_128_BIT_KEY_LENGTH
 #endif
-#define MBEDTLS_AES_ROM_TABLES
+/* MBEDTLS_AES_ROM_TABLES not needed — we use hardware, not software S-boxes */
 #define MBEDTLS_ASN1_PARSE_C
 #define MBEDTLS_ASN1_WRITE_C
 #define MBEDTLS_BIGNUM_C

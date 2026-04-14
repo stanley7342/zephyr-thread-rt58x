@@ -1,97 +1,175 @@
-#Requires -Version 7.0
 <#
 .SYNOPSIS
-    RT583-EVB Zephyr + OpenThread — 移除腳本
+    RT583-EVB Zephyr + OpenThread — uninstall script
 
 .DESCRIPTION
-    移除所有由 install.ps1 安裝的元件：
-      - .west 目錄（west workspace 設定）
-      - zephyr 目錄（Zephyr 原始碼）
-      - Zephyr SDK 目錄
-      - Python venv（~\.zephyr-venv）
+    Removes all components installed by install.ps1:
+      - .west directory (west workspace config)
+      - zephyr directory (Zephyr source code)
+      - Zephyr SDK directory
+      - Python venv (.zephyr-venv)
       - env.ps1
+      - zap-cli
+      - tools\windows
+      - System tools: Python 3.12, CMake, Ninja, Git, 7-Zip
 
-    Python / CMake / Ninja / Git / 7-Zip 等系統工具不會自動移除。
+    Run from inside the project directory (zephyr-thread-rt58x).
 
 .PARAMETER SdkDir
-    Zephyr SDK 安裝目錄。預設：C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
+    Zephyr SDK install directory. Default: C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1
 
 .PARAMETER Bg
-    在背景執行（自動確認移除），log 輸出至 <workspace>\uninstall.log。
-    需在**系統管理員** PowerShell 內執行。
+    Run in background (auto-confirm removal), logging to <workspace>\uninstall.log.
+    Requires the script to be saved on disk (not compatible with irm | iex).
 
 .EXAMPLE
+    # One-liner (run from inside the project directory):
+    irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/uninstall.ps1 | iex
+
+    # If already cloned:
     .\scripts\windows\uninstall.ps1
 
-    # 背景執行（自動確認，不互動）
+    # Background (auto-confirm, non-interactive):
     .\scripts\windows\uninstall.ps1 -Bg
 #>
 
 param(
-    [string] $SdkDir = "C:\zephyr-sdk-1.0.1\zephyr-sdk-1.0.1",
+    [string] $SdkDir = "",   # Default derived from workspace after project dir is resolved
     [switch] $Bg,
     [switch] $Force
 )
 
+# #Requires is ignored by iex — check manually.
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Error "PowerShell 7 or later is required. Install from: https://aka.ms/powershell"
+    exit 1
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$projectDir = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$Workspace  = Split-Path $projectDir -Parent
-$sdkParent  = Split-Path $SdkDir -Parent
+# Locate the project root using a marker unique to this repo (not just west.yml,
+# since the zephyr directory also contains west.yml).
+$_marker = "scripts\windows\install.ps1"
+function Resolve-ProjectDir {
+    # 1. Running as a saved .ps1 file: derive from script path (scripts\windows\ → up 2)
+    if ($PSCommandPath) {
+        $d = Split-Path (Split-Path $PSCommandPath -Parent) -Parent
+        if ($d -and (Test-Path (Join-Path $d $script:_marker))) { return $d }
+    }
+    # 2. cwd IS the project root
+    if (Test-Path (Join-Path $PWD.Path $script:_marker)) { return $PWD.Path }
+    # 3. cwd is the workspace — scan direct subdirectories for the marker
+    $sub = Get-ChildItem $PWD.Path -Directory -ErrorAction SilentlyContinue |
+           Where-Object { Test-Path (Join-Path $_.FullName $script:_marker) } |
+           Select-Object -First 1
+    if ($sub) { return $sub.FullName }
+    return $null
+}
 
-# ── 背景模式 ──────────────────────────────────────────────────────────────────
+$projectDir = Resolve-ProjectDir
+if (-not $projectDir) {
+    Write-Error "Cannot find project directory (west.yml not found).`nRun from inside zephyr-thread-rt58x, or from the workspace directory that contains it."
+    exit 1
+}
+$Workspace = Split-Path $projectDir -Parent
+if (-not $Workspace) {
+    Write-Error "Cannot determine workspace (parent of '$projectDir')."
+    exit 1
+}
+# Mirror install.ps1 default: SDK lives under the workspace, not at a fixed C:\ path.
+if (-not $SdkDir) { $SdkDir = Join-Path $Workspace "zephyr-sdk-1.0.1\zephyr-sdk-1.0.1" }
+$sdkParent = Split-Path $SdkDir -Parent
+
+# ── Background mode ───────────────────────────────────────────────────────────
 if ($Bg) {
     $logFile = Join-Path $Workspace "uninstall.log"
-    Write-Host "背景移除中，log 輸出至：$logFile" -ForegroundColor Yellow
+    if (-not $PSCommandPath) {
+        # irm|iex mode: download script to a temp file then relaunch as a detached process.
+        $tmpScript = Join-Path $env:TEMP "uninstall_rt583.ps1"
+        $rawUrl    = "https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/uninstall.ps1"
+        Write-Host "    Downloading script to temp for background execution..." -ForegroundColor DarkGray
+        Invoke-WebRequest $rawUrl -OutFile $tmpScript -UseBasicParsing
+        $argList = "-NonInteractive -File `"$tmpScript`" -Force -SdkDir `"$SdkDir`""
+        Start-Process "pwsh.exe" -ArgumentList $argList `
+            -RedirectStandardOutput $logFile -RedirectStandardError $logFile
+        Write-Host "Uninstall running in background." -ForegroundColor Cyan
+        Write-Host "  Watch progress:  Get-Content '$logFile' -Wait" -ForegroundColor DarkGray
+        exit 0
+    }
+    Write-Host "Background uninstall — logging to: $logFile" -ForegroundColor Yellow
     $job = Start-Job -ScriptBlock {
         param($script, $sdkDir)
         & $script -SdkDir $sdkDir -Force 2>&1
     } -ArgumentList $PSCommandPath, $SdkDir
-    Write-Host "Job ID: $($job.Id)  |  查看進度：Receive-Job $($job.Id) -Keep" -ForegroundColor DarkGray
+    Write-Host "Job ID: $($job.Id)  |  Watch: Get-Content '$logFile' -Wait" -ForegroundColor DarkGray
     $job | Wait-Job | Receive-Job | Tee-Object -FilePath $logFile
-    Write-Host "移除完成，log：$logFile" -ForegroundColor Green
+    Write-Host "Uninstall complete. Log: $logFile" -ForegroundColor Green
     exit 0
 }
 
-$venvDir = Join-Path $env:USERPROFILE ".zephyr-venv"
+$venvDir = Join-Path $Workspace ".zephyr-venv"
+$zapDir  = Join-Path $Workspace "zap-cli"
+$toolsWin = Join-Path $projectDir "tools\windows"
+
+# Return a workspace-relative display path (e.g. ".\zephyr") when possible;
+# fall back to the absolute path for locations outside the workspace.
+function Get-RelPath([string]$path) {
+    if ($path -and $Workspace -and
+        $path.StartsWith($Workspace, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $path.Substring($Workspace.Length).TrimStart('\')
+        return ".\$rel"
+    }
+    return $path
+}
 
 $col1 = 14
 $col2 = 42
 
-# ── 列出所有待移除項目 ────────────────────────────────────────────────────────
+# ── List all items to remove ──────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "移除 Zephyr 開發環境" -ForegroundColor Yellow
+Write-Host "Remove Zephyr development environment" -ForegroundColor Yellow
 Write-Host ""
-Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "項目", "路徑 / ID", "狀態")
+Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f "Item", "Path / ID", "Status")
 Write-Host ("    {0,-$col1}  {1,-$col2}  {2}" -f ("-" * $col1), ("-" * $col2), "------")
 
 $dirItems = @(
-    @{ Name = ".west";        Path = (Join-Path $Workspace ".west") },
-    @{ Name = "zephyr";       Path = (Join-Path $Workspace "zephyr") },
-    @{ Name = "env.ps1";      Path = (Join-Path $Workspace "env.ps1") },
-    @{ Name = "Zephyr SDK";   Path = $sdkParent },
-    @{ Name = "Python venv";  Path = $venvDir }
+    @{ Name = ".west";         Path = (Join-Path $Workspace ".west") },
+    @{ Name = "zephyr";        Path = (Join-Path $Workspace "zephyr") },
+    @{ Name = "env.ps1";       Path = (Join-Path $projectDir "env.ps1") },
+    @{ Name = "Zephyr SDK";    Path = $sdkParent },
+    @{ Name = "Python venv";   Path = $venvDir },
+    @{ Name = "zap-cli";       Path = $zapDir },
+    @{ Name = "tools\windows"; Path = $toolsWin }
 )
 foreach ($item in $dirItems) {
     $exists = Test-Path $item.Path
-    $status = if ($exists) { "待移除" } else { "不存在" }
+    $status = if ($exists) { "pending" } else { "not found" }
     $color  = if ($exists) { [ConsoleColor]::Yellow } else { [ConsoleColor]::DarkGray }
-    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $item.Name, $item.Path) -NoNewline
+    Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $item.Name, (Get-RelPath $item.Path)) -NoNewline
     Write-Host $status -ForegroundColor $color
 }
 
+# Detect all installed Python 3.x versions from winget (same IDs as install.ps1).
+$pythonTargetId = "Python.Python.3.14"
+$installedPythonPkgs = @(
+    if (winget list --id $pythonTargetId -e --accept-source-agreements 2>$null | Select-String $pythonTargetId) {
+        @{ Id = $pythonTargetId; Name = "Python 3.14" }
+    }
+)
+
 $wingetPackages = @(
-    @{ Id = "Python.Python.3.12"; Name = "Python 3.12" },
     @{ Id = "Kitware.CMake";      Name = "CMake"       },
     @{ Id = "Ninja-build.Ninja";  Name = "Ninja"       },
     @{ Id = "Git.Git";            Name = "Git"         },
     @{ Id = "7zip.7zip";          Name = "7-Zip"       }
 )
+# Prepend detected Python entries
+$wingetPackages = @($installedPythonPkgs) + $wingetPackages
 foreach ($pkg in $wingetPackages) {
     $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
-    $status = if ($installed) { "待移除" } else { "未安裝" }
+    $status = if ($installed) { "pending" } else { "not installed" }
     $color  = if ($installed) { [ConsoleColor]::Yellow } else { [ConsoleColor]::DarkGray }
     Write-Host ("    {0,-$col1}  {1,-$col2}  " -f $pkg.Name, $pkg.Id) -NoNewline
     Write-Host $status -ForegroundColor $color
@@ -100,107 +178,198 @@ foreach ($pkg in $wingetPackages) {
 Write-Host ""
 
 if ($Force) {
-    Write-Host "（-Force，自動確認）" -ForegroundColor DarkGray
+    Write-Host "(-Force, auto-confirmed)" -ForegroundColor DarkGray
 } else {
-    $confirm = Read-Host "確認移除以上所有項目？(y/N)"
+    $confirm = Read-Host "Remove all items listed above? (y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-        Write-Host "已取消。" -ForegroundColor DarkGray
+        Write-Host "Cancelled." -ForegroundColor DarkGray
         exit 0
     }
 }
 
 Write-Host ""
 
-# ── 執行移除 ──────────────────────────────────────────────────────────────────
+# ── Execute removal ───────────────────────────────────────────────────────────
 
-# 1. 目錄 / 檔案
+# 1. Directories / files
 foreach ($item in $dirItems) {
     if (Test-Path $item.Path) {
-        Write-Host "  移除 $($item.Name) ..."
+        Write-Host "  Removing $($item.Name) ..."
         if ((Get-Item $item.Path).PSIsContainer) {
             cmd /c rmdir /s /q `"$($item.Path)`"
         } else {
             Remove-Item $item.Path -Force
         }
         if ($LASTEXITCODE -eq 0 -or -not (Test-Path $item.Path)) {
-            Write-Host "  [OK] $($item.Name) 已移除" -ForegroundColor Green
+            Write-Host "  [OK] $($item.Name) removed" -ForegroundColor Green
         } else {
-            Write-Warning "  移除失敗，請手動刪除：$($item.Path)"
+            Write-Warning "  Removal failed — please delete manually: $($item.Path)"
         }
     }
 }
 
-# Registry uninstall fallback（適用 winget 回傳 1603 等 MSI 錯誤）
+# Registry uninstall fallback (for winget errors like 1603 MSI failures).
+#
+# Root cause of Python 3.12 1603 errors:
+#   Python is a per-user install (AppData\Local).  Running msiexec with
+#   -Verb RunAs (admin) cannot access per-user MSI data → exit 1603.
+#   Additionally, if MSI registry keys are deleted BEFORE the bundled
+#   exe runs, the bundled installer can't find its sub-components → silent fail.
+#
+# Fix:
+#   1. Process exe-based (bundled) uninstallers FIRST — they manage sub-MSIs.
+#   2. Run msiexec in the current user context (no RunAs) for per-user (HKCU)
+#      installs; only elevate for system-wide (HKLM) installs.
+#   3. Only delete registry keys / files as a last resort when msiexec fails.
 function Invoke-RegistryUninstall([string]$displayNamePattern) {
-    $regPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    )
-    foreach ($path in $regPaths) {
-        $entry = Get-ItemProperty $path -ErrorAction SilentlyContinue |
-                 Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $displayNamePattern } |
-                 Select-Object -First 1
-        if ($entry) {
-            $uninstStr = $entry.UninstallString
-            if (-not $uninstStr) { continue }
-            Write-Host "    [Registry] UninstallString: $uninstStr"
-            if ($uninstStr -match "MsiExec\.exe\s+[/\\][IXix]\{([^}]+)\}") {
-                $guid = $Matches[1]
-                $msiLog = Join-Path $env:TEMP "uninstall_$guid.log"
-                $proc = Start-Process "msiexec.exe" -ArgumentList "/x {$guid} /qn /norestart /L*V `"$msiLog`"" -Wait -PassThru -Verb RunAs
+    $regSources = [ordered]@{
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"         = $false  # isUser
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" = $false
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"         = $true
+    }
+    $allEntries = @()
+    foreach ($path in $regSources.Keys) {
+        $isUser = $regSources[$path]
+        Get-ItemProperty $path -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -like $displayNamePattern } |
+            ForEach-Object { $allEntries += [PSCustomObject]@{ Entry = $_; IsUser = $isUser } }
+    }
+    if (-not $allEntries) { return -1 }
+
+    # Partition: bundled-exe entries first so they clean up sub-MSIs before we touch them.
+    $exeItems = $allEntries | Where-Object { $_.Entry.UninstallString -and $_.Entry.UninstallString -notmatch 'MsiExec' }
+    $msiItems = $allEntries | Where-Object { $_.Entry.UninstallString -and $_.Entry.UninstallString -match  'MsiExec' }
+
+    $anyOk = $false
+    foreach ($item in (@($exeItems) + @($msiItems))) {
+        $entry    = $item.Entry
+        $isUser   = $item.IsUser
+        $uninstStr = $entry.UninstallString
+        if (-not $uninstStr) { continue }
+
+        Write-Host "    [Registry] UninstallString: $uninstStr"
+
+        if ($uninstStr -match "MsiExec\.exe\s+[/\\][IXix]\{([^}]+)\}") {
+            $guid   = $Matches[1]
+            $msiLog = Join-Path $env:TEMP "uninstall_$guid.log"
+            # Per-user installs: run in current-user context (no RunAs).
+            # System installs:   try current context first, then elevate.
+            $args = "/x {$guid} /qn /norestart /L*V `"$msiLog`""
+            $proc = Start-Process "msiexec.exe" -ArgumentList $args -Wait -PassThru
+            $ec = $proc.ExitCode
+            if ($ec -eq 0 -or $ec -eq 3010) { $anyOk = $true; continue }
+
+            if (-not $isUser) {
+                # Retry with elevation for system-wide packages
+                $proc = Start-Process "msiexec.exe" -ArgumentList $args -Wait -PassThru -Verb RunAs
                 $ec = $proc.ExitCode
-                if ($ec -eq 3010 -or $ec -eq 0) { return 0 }
-                Write-Warning "    msiexec exit $ec，log：$msiLog"
-                $installLoc = $entry.InstallLocation
-                if ($installLoc -and (Test-Path $installLoc)) {
-                    Write-Host "    刪除目錄：$installLoc"
-                    cmd /c rmdir /s /q `"$installLoc`"
-                }
-                $regKey = $entry.PSPath
-                if ($regKey) {
-                    Write-Host "    移除 Registry key：$regKey"
-                    Remove-Item -Path $regKey -Force -ErrorAction SilentlyContinue
-                }
-                return 0
-            } else {
-                $parts = [System.Text.RegularExpressions.Regex]::Match($uninstStr, '^"([^"]+)"\s*(.*)')
-                if ($parts.Success) {
-                    $proc = Start-Process $parts.Groups[1].Value -ArgumentList ($parts.Groups[2].Value + " /S /silent /quiet") -Wait -NoNewWindow -PassThru
-                } else {
-                    $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstStr`"" -Wait -NoNewWindow -PassThru
-                }
-                return $proc.ExitCode
+                if ($ec -eq 0 -or $ec -eq 3010) { $anyOk = $true; continue }
             }
+
+            Write-Warning "    msiexec exit $ec, log: $msiLog"
+            # Only clean up registry + files if msiexec truly cannot proceed
+            $installLoc = $entry.InstallLocation
+            if ($installLoc -and (Test-Path $installLoc)) {
+                Write-Host "    Deleting directory: $installLoc"
+                cmd /c rmdir /s /q `"$installLoc`"
+            }
+            $regKey = $entry.PSPath
+            if ($regKey) {
+                Write-Host "    Removing registry key: $regKey"
+                Remove-Item -Path $regKey -Force -ErrorAction SilentlyContinue
+            }
+            $anyOk = $true
+        } else {
+            $parts = [System.Text.RegularExpressions.Regex]::Match($uninstStr, '^"([^"]+)"\s*(.*)')
+            if ($parts.Success) {
+                $exePath = $parts.Groups[1].Value
+                $exeArgs = $parts.Groups[2].Value.Trim()
+                if (-not (Test-Path $exePath)) {
+                    Write-Host "    Installer not found (already removed): $exePath"
+                    $anyOk = $true; continue
+                }
+                # Add /quiet for Python-style bundled installers (/uninstall without /quiet)
+                $runArgs = if ($exeArgs -match '/uninstall' -and $exeArgs -notmatch '/quiet') {
+                    "$exeArgs /quiet"
+                } else { $exeArgs }
+                Write-Host "    Running: $exePath $runArgs"
+                $proc = Start-Process $exePath -ArgumentList $runArgs -Wait -NoNewWindow -PassThru
+            } else {
+                $proc = Start-Process "cmd.exe" -ArgumentList "/c `"$uninstStr`"" -Wait -NoNewWindow -PassThru
+            }
+            if ($proc.ExitCode -eq 0) { $anyOk = $true }
         }
     }
-    return -1
+    return $(if ($anyOk) { 0 } else { -1 })
 }
 
-# 3. winget 套件
+# Uninstall all installed versions of a winget package.
+# Returns $true if no versions remain after the attempt.
+function Remove-WingetPackage([string]$id, [string]$displayName) {
+    Write-Host "  Removing $displayName ..."
+
+    # Suppress winget's localised stdout; check exit code only.
+    $null = winget uninstall --id $id -e --silent --accept-source-agreements 2>&1
+    $ec = $LASTEXITCODE
+
+    if ($ec -eq 0) {
+        Write-Host "  [OK] $displayName removed" -ForegroundColor Green
+        return $true
+    }
+
+    # -1978335210 = APPINSTALLER_CLI_ERROR_MULTIPLE_APPLICATIONS_FOUND
+    # winget refuses to pick one when multiple versions are installed.
+    # Enumerate every version from the list and uninstall each.
+    if ($ec -eq -1978335210) {
+        Write-Host "    Multiple versions found — uninstalling each ..." -ForegroundColor DarkGray
+        $listLines = winget list --id $id -e --accept-source-agreements 2>$null
+        $versions = $listLines |
+            Where-Object { $_ -match [regex]::Escape($id) } |
+            ForEach-Object {
+                # Columns: Name  Id  Version  [Available]  [Source]
+                # Split on 2+ whitespace to handle names/IDs with spaces.
+                $parts = $_ -split '\s{2,}'
+                if ($parts.Count -ge 3) { $parts[2].Trim() }
+            } |
+            Where-Object { $_ -match '^\d' }   # keep only version-like strings
+
+        foreach ($ver in $versions) {
+            Write-Host "    Uninstalling version $ver ..." -ForegroundColor DarkGray
+            $null = winget uninstall --id $id --version $ver -e --silent --accept-source-agreements 2>&1
+        }
+
+        $still = winget list --id $id -e --accept-source-agreements 2>$null | Select-String $id
+        if (-not $still) {
+            Write-Host "  [OK] $displayName removed" -ForegroundColor Green
+            return $true
+        }
+        # Fall through to registry fallback if some versions remain.
+        Write-Warning "  winget per-version removal incomplete, trying registry fallback ..."
+    } else {
+        Write-Warning "  winget uninstall failed (exit $ec), trying registry fallback ..."
+    }
+
+    $rc = Invoke-RegistryUninstall "*$displayName*"
+    if ($rc -ge 0) {
+        $still = winget list --id $id -e --accept-source-agreements 2>$null | Select-String $id
+        if (-not $still) {
+            Write-Host "  [OK] $displayName removed (registry fallback)" -ForegroundColor Green
+            return $true
+        }
+        Write-Warning "  $displayName removal failed — please uninstall manually: $id"
+    } else {
+        Write-Warning "  $displayName UninstallString not found in registry — please uninstall manually"
+    }
+    return $false
+}
+
+# 3. winget packages
 foreach ($pkg in $wingetPackages) {
     $installed = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
     if ($installed) {
-        Write-Host "  移除 $($pkg.Name) ..."
-        winget uninstall --id $pkg.Id -e --silent 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [OK] $($pkg.Name) 已移除" -ForegroundColor Green
-        } else {
-            Write-Warning "  winget 移除失敗（exit $LASTEXITCODE），嘗試 Registry fallback ..."
-            $rc = Invoke-RegistryUninstall "*$($pkg.Name)*"
-            if ($rc -ge 0) {
-                $stillInstalled = winget list --id $pkg.Id -e --accept-source-agreements 2>$null | Select-String $pkg.Id
-                if (-not $stillInstalled) {
-                    Write-Host "  [OK] $($pkg.Name) 已移除（Registry fallback）" -ForegroundColor Green
-                } else {
-                    Write-Warning "  $($pkg.Name) 移除失敗，請手動移除：$($pkg.Id)"
-                }
-            } else {
-                Write-Warning "  $($pkg.Name) 在 Registry 找不到 UninstallString，請手動移除"
-            }
-        }
+        Remove-WingetPackage -id $pkg.Id -displayName $pkg.Name
     }
 }
 
 Write-Host ""
-Write-Host "移除完成。" -ForegroundColor Cyan
+Write-Host "Uninstall complete." -ForegroundColor Cyan

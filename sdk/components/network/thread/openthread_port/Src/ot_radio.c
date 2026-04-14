@@ -369,8 +369,10 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
                 (lmac154_channel_t)(sCurrentChannel - kMinChannel));
         }
         if (!sAuto_State_Set) {
+            printk("[OT-RADIO] Receive: enabling auto-state ch=%u\n", aChannel);
             lmac15p4_auto_state_set(true);
             sAuto_State_Set = true;
+            printk("[OT-RADIO] Receive: auto-state enabled\n");
         }
     }
     return error;
@@ -567,6 +569,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         sCurrentChannel = aFrame->mChannel;
         lmac15p4_channel_set(
             (lmac154_channel_t)(sCurrentChannel - kMinChannel));
+        printk("[OT-RADIO] TX ch=%u len=%u\n", sCurrentChannel, aFrame->mLength);
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -709,9 +712,11 @@ static void _RxDoneEvent(uint16_t packet_length, uint8_t *rx_data,
     static uint8_t  rx_cnt = 0;
 
     if (crc_status != 0) {
+        printk("[OT-RADIO] RX CRC err ch=%u rssi=-%d\n", sCurrentChannel, (int)rssi);
         OT_NOTIFY_ISR(OT_SYSTEM_EVENT_RADIO_RX_CRC_FIALED);
         return;
     }
+    printk("[OT-RADIO] RX ok ch=%u len=%u rssi=-%d\n", sCurrentChannel, (unsigned)(packet_length - 9), (int)rssi);
 
     otRadio_rxFrame_t *p = NULL;
     OT_ENTER_CRITICAL_ISR();
@@ -803,6 +808,9 @@ void ot_radioTask(ot_system_event_t trxEvent)
                               otRadio_var.pAckFrame, OT_ERROR_NONE);
         }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_NO_ACK) {
+            printk("[OT-RADIO] TX NO_ACK ch=%u len=%u\n",
+                   sCurrentChannel,
+                   txframe ? txframe->mLength : 0u);
             otPlatRadioTxDone(otRadio_var.aInstance, txframe, NULL,
                               OT_ERROR_NO_ACK);
         }
@@ -853,6 +861,14 @@ void ot_radioInit(void)
     lmac15p4_callback_t mac_cb;
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
+
+    printk("[OT-RADIO] ot_radioInit: calling lmac15p4_init\n");
+    /* Must be called before any lmac15p4_tx_data_send — initialises the TX
+     * gate semaphore (lmac_tx_sem) and registers RUCI RX/TX callbacks with
+     * hosal_rf.  Without this, lmac_tx_sem.count == 0 (BSS zero-init) and
+     * the first k_sem_take in lmac15p4_tx_data_send blocks forever. */
+    lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
+    printk("[OT-RADIO] ot_radioInit: lmac15p4_init done\n");
 
     if (sMacAddrReadMode == 1) {
         rafael_otp_mac_addr(sIEEE_EUI64Addr);

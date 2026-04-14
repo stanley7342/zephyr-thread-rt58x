@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# RT583-EVB Zephyr + OpenThread — macOS 環境建置腳本
+# RT583-EVB Zephyr + OpenThread — macOS environment setup script
 #
-# 用法：
+# Usage:
 #   bash scripts/macos/install.sh
 #   bash scripts/macos/install.sh --sdk-dir ~/zephyr-sdk-1.0.1
 
@@ -21,7 +21,7 @@ SDK_DIR="${HOME}/zephyr-sdk-${_SDK_VER}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --sdk-dir) SDK_DIR="$2"; shift 2 ;;
-        *) echo "未知參數：$1"; exit 1 ;;
+        *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
 
@@ -32,30 +32,30 @@ PROJECT_NAME="$(basename "$PROJECT_DIR")"
 
 step()  { echo -e "\n\033[36m==> $*\033[0m"; }
 ok()    { echo -e "    \033[32m[OK]\033[0m $*"; }
-skip()  { echo -e "    \033[90m[--]\033[0m $* (已存在，略過)"; }
+skip()  { echo -e "    \033[90m[--]\033[0m $* (already exists, skipping)"; }
 warn()  { echo -e "    \033[33m[!!]\033[0m $*"; }
 
-# ── 步驟 0：Homebrew ──────────────────────────────────────────────────────────
-step "檢查 Homebrew"
+# ── Step 0: Homebrew ──────────────────────────────────────────────────────────
+step "Checking Homebrew"
 if ! command -v brew &>/dev/null; then
-    echo "    未偵測到 Homebrew，正在安裝..."
+    echo "    Homebrew not found, installing..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     if [[ -f /opt/homebrew/bin/brew ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 fi
-ok "Homebrew：$(brew --version | head -1)"
+ok "Homebrew: $(brew --version | head -1)"
 
-step "更新 Homebrew"
+step "Updating Homebrew"
 brew update 2>/dev/null || {
-    warn "brew update 失敗，嘗試清除快取後重試..."
+    warn "brew update failed, clearing cache and retrying..."
     rm -rf "$(brew --cache)" 2>/dev/null
     brew update
 }
-ok "Homebrew 已更新"
+ok "Homebrew updated"
 
-# ── 步驟 1：必要工具 ──────────────────────────────────────────────────────────
-step "檢查並安裝必要工具"
+# ── Step 1: Required tools ────────────────────────────────────────────────────
+step "Checking and installing required tools"
 
 BREW_ORDER=(wget git cmake ninja "python@3.12" xz)
 BREW_NAMES=("wget" "Git" "CMake" "Ninja" "Python 3.12" "xz")
@@ -78,31 +78,31 @@ done
 echo ""
 
 if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
-    step "安裝缺少的工具 (共 ${#TO_INSTALL[@]} 項)"
+    step "Installing missing tools (${#TO_INSTALL[@]} total)"
     for pkg in "${TO_INSTALL[@]}"; do
-        echo "    安裝 $pkg ..."
+        echo "    Installing $pkg ..."
         brew install "$pkg" 2>&1 || {
-            warn "$pkg 安裝失敗，清除快取後重試..."
+            warn "$pkg installation failed, clearing cache and retrying..."
             rm -rf "$(brew --cache)" 2>/dev/null
             brew install "$pkg"
         }
     done
-    ok "工具安裝完成"
+    ok "Tools installed"
 else
-    ok "所有工具已安裝，略過"
+    ok "All tools already installed, nothing to do"
 fi
 
 PYTHON3="$(brew --prefix python@3.12)/bin/python3.12"
 [[ -f "$PYTHON3" ]] || PYTHON3="$(command -v python3.12 2>/dev/null || command -v python3)"
-ok "Python：$PYTHON3 ($($PYTHON3 --version))"
+ok "Python: $PYTHON3 ($($PYTHON3 --version))"
 
-# ── 步驟 2：建立 venv 並安裝 west ────────────────────────────────────────────
-step "建立 Python venv 並安裝 west"
+# ── Step 2: Create venv and install west ──────────────────────────────────────
+step "Creating Python venv and installing west"
 
 VENV_DIR="$HOME/.zephyr-venv"
 if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
     "$PYTHON3" -m venv "$VENV_DIR"
-    ok "venv 建立於 $VENV_DIR"
+    ok "venv created at $VENV_DIR"
 else
     skip "venv ($VENV_DIR)"
 fi
@@ -111,10 +111,10 @@ source "$VENV_DIR/bin/activate"
 PYTHON3="$VENV_DIR/bin/python3"
 pip install --quiet --upgrade pip
 pip install --quiet west
-ok "west：$(west --version 2>/dev/null || echo 已安裝)"
+ok "west: $(west --version 2>/dev/null || echo installed)"
 
-# ── 步驟 3：Zephyr SDK ────────────────────────────────────────────────────────
-step "安裝 Zephyr SDK ${_SDK_VER} → $SDK_DIR"
+# ── Step 3: Zephyr SDK ────────────────────────────────────────────────────────
+step "Installing Zephyr SDK ${_SDK_VER} → $SDK_DIR"
 
 SDK_SETUP="$SDK_DIR/setup.sh"
 
@@ -141,39 +141,39 @@ else
     }
 
     if [[ -f "$TMP" ]] && ! check_xz_magic "$TMP"; then
-        warn "快取檔 $TMP 不是有效的 tar.xz，重新下載..."
+        warn "Cached file $TMP is not a valid tar.xz — re-downloading..."
         rm -f "$TMP"
     fi
 
     if [[ ! -f "$TMP" ]]; then
-        echo "    下載 $SDK_FILE ..."
+        echo "    Downloading $SDK_FILE ..."
         echo "    URL: $SDK_URL"
         curl -L --progress-bar -o "$TMP" "$SDK_URL"
         if ! check_xz_magic "$TMP"; then
-            rm -f "$TMP"; echo "下載失敗：非有效的 tar.xz 檔案" >&2; exit 1
+            rm -f "$TMP"; echo "Download failed: not a valid tar.xz file" >&2; exit 1
         fi
     else
-        skip "SDK 壓縮檔 ($TMP)"
+        skip "SDK archive ($TMP)"
     fi
 
     mkdir -p "$(dirname "$SDK_DIR")"
-    echo "    解壓縮 SDK ..."
+    echo "    Extracting SDK ..."
     tar -xvf "$TMP" -C "$(dirname "$SDK_DIR")" | while IFS= read -r line; do
         printf "\r    \033[90m%-72s\033[0m" "${line:0:72}"
     done
     echo ""
-    echo "    執行 setup.sh ..."
+    echo "    Running setup.sh ..."
     if [[ "$SDK_VER" == "1.0.1" ]]; then
         bash "$SDK_SETUP"
     else
         # v0.17.0: -t <toolchain> to install, -c to register CMake package
         bash "$SDK_SETUP" -t arm-zephyr-eabi -h -c
     fi
-    ok "Zephyr SDK ${SDK_VER} 安裝完成"
+    ok "Zephyr SDK ${SDK_VER} installed"
 fi
 
-# ── 步驟 4：West 工作區 ───────────────────────────────────────────────────────
-step "建立 west 工作區 → $WORKSPACE"
+# ── Step 4: West workspace ────────────────────────────────────────────────────
+step "Setting up west workspace → $WORKSPACE"
 
 WEST_CONFIG="$WORKSPACE/.west/config"
 ZEPHYR_DIR="$WORKSPACE/zephyr"
@@ -183,53 +183,53 @@ if [[ ! -f "$WEST_CONFIG" ]]; then
     echo "    west init ..."
     cd "$WORKSPACE"
     west init -l "$PROJECT_NAME"
-    [[ -f "$WEST_CONFIG" ]] || { echo "west init 成功但找不到 $WEST_CONFIG" >&2; exit 1; }
-    ok "west init 完成"
+    [[ -f "$WEST_CONFIG" ]] || { echo "west init succeeded but $WEST_CONFIG not found" >&2; exit 1; }
+    ok "west init complete"
 else
     skip "west init"
 fi
 
 REQ="$ZEPHYR_DIR/scripts/requirements-base.txt"
 if [[ ! -f "$REQ" ]]; then
-    echo "    west update（下載 Zephyr，約 500 MB）..."
+    echo "    west update (downloading Zephyr, ~500 MB)..."
     cd "$WORKSPACE"
     west update
-    ok "west update 完成"
+    ok "west update complete"
 else
-    skip "zephyr（已下載）"
+    skip "zephyr (already downloaded)"
 fi
 
-[[ -f "$REQ" ]] || { echo "west update 後仍找不到：$REQ" >&2; exit 1; }
+[[ -f "$REQ" ]] || { echo "Still cannot find: $REQ after west update" >&2; exit 1; }
 
-# ── 步驟 5：Python 依賴 ───────────────────────────────────────────────────────
-step "安裝 Zephyr Python 依賴"
+# ── Step 5: Python dependencies ───────────────────────────────────────────────
+step "Installing Zephyr Python dependencies"
 pip install --quiet -r "$REQ"
-ok "Python 依賴安裝完成"
+ok "Python dependencies installed"
 
-# ── 步驟 6：產生 env.sh ───────────────────────────────────────────────────────
-step "產生 $WORKSPACE/env.sh"
+# ── Step 6: Generate env.sh ───────────────────────────────────────────────────
+step "Generating $WORKSPACE/env.sh"
 
 ENV_SH="$WORKSPACE/env.sh"
 cat > "$ENV_SH" <<EOF
-# Zephyr 環境變數 — 每次開啟新 shell 執行: source $ENV_SH
+# Zephyr environment variables — load in every new shell session: source $ENV_SH
 source "$VENV_DIR/bin/activate"
 export ZEPHYR_BASE="$ZEPHYR_DIR"
 export ZEPHYR_TOOLCHAIN_VARIANT="zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="$SDK_DIR"
 
-echo "Zephyr 環境已載入 (ZEPHYR_BASE=\$ZEPHYR_BASE)"
+echo "Zephyr env loaded (ZEPHYR_BASE=\$ZEPHYR_BASE)"
 EOF
 chmod +x "$ENV_SH"
-ok "env.sh 產生完成"
-echo "    載入方式：source $ENV_SH"
+ok "env.sh generated"
+echo "    Load with: source $ENV_SH"
 
 echo ""
 echo -e "\033[36m======================================\033[0m"
-echo -e "\033[36m  環境建置完成！\033[0m"
+echo -e "\033[36m  Environment setup complete!\033[0m"
 echo -e "\033[36m======================================\033[0m"
 echo ""
-echo "每次開啟新 shell 請先執行："
+echo "Load the environment in every new shell session:"
 echo -e "  \033[33msource $ENV_SH\033[0m"
 echo ""
-echo "編譯請使用："
+echo "Build with:"
 echo -e "  \033[33mbash scripts/macos/build.sh\033[0m"

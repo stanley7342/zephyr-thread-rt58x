@@ -17,6 +17,11 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt583_ot_ftd_cli VERSION 1.0.0)
 
 target_sources(app PRIVATE src/main.c)
+
+# Increase OT task stack from default 4 KB to 8 KB — CLI command processing
+# (otCliInputLine → version/state/dataset handlers) can consume 3-4 KB of stack
+# on top of the base OT FTD loop frame, overflowing the 4 KB default.
+target_compile_definitions(app PRIVATE CONFIG_OPENTHREAD_TASK_SIZE=8192)
 if(CONFIG_OTA)
     target_sources(app PRIVATE src/ota_app.c)
 endif()

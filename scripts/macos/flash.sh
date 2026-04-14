@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# RT583-EVB — macOS 燒錄腳本（CMSIS-DAP + OpenOCD）
+# RT583-EVB — macOS flash script (CMSIS-DAP + OpenOCD)
 #
-# 用法：
+# Usage:
 #   bash scripts/macos/flash.sh -p thread        # slot0 (0x10000)
 #   bash scripts/macos/flash.sh -p bootloader    # 0x00000000
-#   bash scripts/macos/flash.sh -p thread --addr 0x0   # 覆蓋位址
+#   bash scripts/macos/flash.sh -p thread --addr 0x0   # override address
 #   bash scripts/macos/flash.sh --bin path/to/custom.bin --addr 0x0
 
 set -euo pipefail
@@ -22,13 +22,13 @@ while [[ $# -gt 0 ]]; do
         -p)    TARGET="$2"; shift 2 ;;
         --bin) BIN="$2"; shift 2 ;;
         --addr) ADDR="$2"; shift 2 ;;
-        *) echo "用法：$0 -p <thread|bootloader> [--addr <hex>] [--bin <path>]" >&2; exit 1 ;;
+        *) echo "Usage: $0 -p <thread|bootloader> [--addr <hex>] [--bin <path>]" >&2; exit 1 ;;
     esac
 done
 
 if [[ -n "$TARGET" ]]; then
     if [[ "$TARGET" != "thread" && "$TARGET" != "bootloader" ]]; then
-        echo "錯誤：不支援的 target '$TARGET'，請使用 thread 或 bootloader" >&2
+        echo "Error: unsupported target '$TARGET', use thread or bootloader" >&2
         exit 1
     fi
     if [[ -z "$BIN" ]]; then
@@ -42,19 +42,19 @@ if [[ -n "$TARGET" ]]; then
         [[ "$TARGET" == "bootloader" ]] && ADDR="0x0" || ADDR="0x10000"
     fi
 elif [[ -z "$BIN" ]]; then
-    echo "錯誤：請指定 -p <thread|bootloader> 或 --bin <path>" >&2
+    echo "Error: specify -p <thread|bootloader> or --bin <path>" >&2
     exit 1
 fi
 
 [[ -z "$ADDR" ]] && ADDR="0x0"
 
-# ── 顏色 ──────────────────────────────────────────────────────────────────────
+# ── Colors ────────────────────────────────────────────────────────────────────
 step()  { echo -e "\n\033[36m==> $*\033[0m"; }
 ok()    { echo -e "    \033[32m[OK]\033[0m $*"; }
 err()   { echo -e "    \033[31m[!!]\033[0m $*" >&2; }
 
-# ── 尋找 openocd-rt58x ───────────────────────────────────────────────────────
-step "尋找 openocd-rt58x"
+# ── Locate openocd-rt58x ──────────────────────────────────────────────────────
+step "Locating openocd-rt58x"
 
 OCD_BIN=""
 OCD_SCRIPT_DIR=""
@@ -75,8 +75,8 @@ for entry in "${OCD_SEARCH[@]}"; do
     if [[ -x "$bin_path" ]]; then
         OCD_BIN="$bin_path"
         [[ -d "$tcl_path" ]] && OCD_SCRIPT_DIR="$tcl_path"
-        ok "openocd-rt58x：$OCD_BIN"
-        [[ -n "${OCD_SCRIPT_DIR:-}" ]] && ok "Scripts   ：$OCD_SCRIPT_DIR"
+        ok "openocd-rt58x: $OCD_BIN"
+        [[ -n "${OCD_SCRIPT_DIR:-}" ]] && ok "Scripts   : $OCD_SCRIPT_DIR"
         break
     fi
 done
@@ -86,19 +86,19 @@ if [[ -z "$OCD_BIN" ]]; then
     if [[ -n "$SYS_OCD" ]]; then
         OCD_BIN="$SYS_OCD"
         OCD_SCRIPT_DIR="$TOOLS_LINUX/tcl"
-        ok "使用系統 openocd：$OCD_BIN（搭配本專案 tcl scripts）"
+        ok "Using system openocd: $OCD_BIN (with project tcl scripts)"
     fi
 fi
 
 if [[ -z "$OCD_BIN" ]]; then
-    err "找不到 openocd"
+    err "openocd not found"
     echo ""
-    echo "    安裝方式（擇一）："
+    echo "    Install options:"
     echo ""
-    echo "    1) Homebrew："
+    echo "    1) Homebrew:"
     echo "       brew install openocd"
     echo ""
-    echo "    2) 從原始碼編譯 openocd-rt58x："
+    echo "    2) Build openocd-rt58x from source:"
     echo "       git clone <openocd-rt58x-repo> \$HOME/openocd-rt58x"
     echo "       cd \$HOME/openocd-rt58x"
     echo "       ./bootstrap && ./configure && make -j\$(sysctl -n hw.logicalcpu)"
@@ -111,34 +111,34 @@ if [[ -z "${OCD_SCRIPT_DIR:-}" ]]; then
 fi
 
 if [[ -z "${OCD_SCRIPT_DIR:-}" ]]; then
-    err "找不到 OpenOCD tcl scripts 目錄"
+    err "OpenOCD tcl scripts directory not found"
     exit 1
 fi
 
-# ── 確認 binary 存在 ──────────────────────────────────────────────────────────
-step "確認 binary"
+# ── Verify binary exists ──────────────────────────────────────────────────────
+step "Verifying binary"
 
 if [[ ! -f "$BIN" ]]; then
-    err "找不到 binary：$BIN"
-    [[ -n "$TARGET" ]] && echo "    請先執行：bash scripts/macos/build.sh -p $TARGET"
+    err "Binary not found: $BIN"
+    [[ -n "$TARGET" ]] && echo "    Build first: bash scripts/macos/build.sh -p $TARGET"
     exit 1
 fi
-ok "Binary：$BIN（$(du -h "$BIN" | awk '{print $1}')）"
+ok "Binary: $BIN ($(du -h "$BIN" | awk '{print $1}'))"
 
-# ── 確認 CMSIS-DAP 裝置可見 ──────────────────────────────────────────────────
-step "確認 CMSIS-DAP 裝置"
+# ── Verify CMSIS-DAP device is visible ───────────────────────────────────────
+step "Checking CMSIS-DAP device"
 
 USB_INFO="$(system_profiler SPUSBDataType 2>/dev/null || true)"
 if ! echo "$USB_INFO" | grep -qi "cmsis.dap\|daplink\|mbed\|0d28"; then
-    err "找不到 CMSIS-DAP 裝置"
+    err "CMSIS-DAP device not found"
     echo ""
-    echo "    請確認 CMSIS-DAP 調試器已透過 USB 連接至 Mac 並上電"
+    echo "    Ensure the CMSIS-DAP debugger is connected via USB and powered on"
     exit 1
 fi
-ok "CMSIS-DAP 已偵測到"
+ok "CMSIS-DAP detected"
 
-# ── 燒錄 ──────────────────────────────────────────────────────────────────────
-step "燒錄 → $ADDR"
+# ── Flash ─────────────────────────────────────────────────────────────────────
+step "Flashing → $ADDR"
 echo "    Binary : $BIN"
 echo "    Scripts: $OCD_SCRIPT_DIR"
 echo ""
@@ -150,4 +150,4 @@ echo ""
     -c "init; halt; flash write_image erase \"$BIN\" $ADDR; reset run; exit"
 
 echo ""
-echo -e "\n\033[32m[OK] 燒錄完成！請開啟序列終端機（115200 8N1）觀察輸出。\033[0m"
+echo -e "\n\033[32m[OK] Flash complete! Open a serial terminal (115200 8N1) to view output.\033[0m"

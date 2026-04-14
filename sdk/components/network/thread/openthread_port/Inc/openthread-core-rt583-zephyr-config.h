@@ -55,10 +55,11 @@
 #define OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_DIRECT   4
 
 /* Heap — internal pool for OT dynamic allocations.
- * 4 KB is sufficient for FTD idle state and initial BLE commissioning;
- * Thread network join and SRP client registration may consume up to ~6 KB.
- * Reduced from 8 KB so the freed 4 KB can go to CONFIG_CHIP_MALLOC_SYS_HEAP_SIZE. */
-#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (4 * 1024)
+ * 6 KB covers: FTD idle state + BLE commissioning + SRP client registration
+ * + SRP server service record storage (enabled for standalone Leader mode).
+ * Raised from 4 KB to accommodate the SRP server storing the Matter
+ * operational service record alongside the SRP client's working buffers. */
+#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (6 * 1024)
 
 /* CoAP API — needed for OTA subsystem */
 #define OPENTHREAD_CONFIG_COAP_API_ENABLE                1
@@ -74,8 +75,31 @@
 #define OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE 1
 
+/* SRP Server — required when the RT583 is a standalone Thread Leader.
+ * Without an OTBR, the device must run its own SRP server so the local
+ * SRP client can register services and the Matter DNS-SD init callback
+ * (OpenThreadDnssdInit) can fire.  AppTask enables/disables it via
+ * otSrpServerSetEnabled() based on the Thread role.
+ * Dependencies: TMF_NETDATA_SERVICE (explicit), NETDATA_PUBLISHER
+ * (auto-derives from SRP_SERVER_ENABLE), ECDSA (already set above). */
+#define OPENTHREAD_CONFIG_SRP_SERVER_ENABLE              1
+#define OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE     1
+
 /* DNS Client — required by Matter for service discovery (mDNS-over-Thread) */
 #define OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE 1
+
+/* Router Selection Jitter — reduce from default 120 s so a Child promotes to
+ * Router faster after joining the Thread partition.  15 s is well above the
+ * MLE REED advertisement period (5 s) so the network has time to stabilise
+ * before the promotion request is sent. */
+#define OPENTHREAD_CONFIG_MLE_ROUTER_SELECTION_JITTER    15
+
+/* Leader Weight — set to minimum so OTBR (default weight=64) always wins
+ * partition merge when both RT583 and OTBR form separate partitions.
+ * Without this, both have weight=64 and the winner is random (partition ID
+ * comparison), so RT583 might stay Leader and OTBR joins RT583 instead.
+ * Weight=1 ensures RT583 always yields and joins OTBR's partition. */
+#define OPENTHREAD_CONFIG_MLE_LEADER_WEIGHT              1
 
 #endif /* OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_ */

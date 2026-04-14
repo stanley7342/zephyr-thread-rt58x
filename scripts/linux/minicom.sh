@@ -1,64 +1,64 @@
 #!/usr/bin/env bash
-# RT583-EVB — 開啟 minicom 序列終端機
+# RT583-EVB — open minicom serial terminal
 #
-# 用法：
-#   bash scripts/linux/minicom.sh              # 自動偵測序列埠
-#   bash scripts/linux/minicom.sh /dev/ttyACM0 # 指定裝置
+# Usage:
+#   bash scripts/linux/minicom.sh              # auto-detect serial port
+#   bash scripts/linux/minicom.sh /dev/ttyACM0 # specify device
 
 set -euo pipefail
 
 PORT="${1:-}"
 BAUD=115200
 
-# ── 確認 minicom 已安裝 ───────────────────────────────────────────────────────
+# ── Verify minicom is installed ───────────────────────────────────────────────
 if ! command -v minicom &>/dev/null; then
-    echo "安裝 minicom..."
+    echo "Installing minicom..."
     sudo apt-get install -y minicom
 fi
 
-# ── 自動偵測序列埠 ────────────────────────────────────────────────────────────
+# ── Auto-detect serial port ───────────────────────────────────────────────────
 if [[ -z "$PORT" ]]; then
-    # 依優先順序：ttyACM（DAPLink CDC）> ttyUSB
+    # Priority order: ttyACM (DAPLink CDC) > ttyUSB
     CANDIDATES=( $(ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null) )
 
     if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
-        echo "找不到序列裝置（/dev/ttyACM* 或 /dev/ttyUSB*）" >&2
-        echo "請確認 CMSIS-DAP 已透過 usbipd 掛載至 WSL：" >&2
+        echo "No serial device found (/dev/ttyACM* or /dev/ttyUSB*)" >&2
+        echo "Ensure the CMSIS-DAP is attached to WSL via usbipd:" >&2
         echo "  .\\tools\\windows\\attach-usb.ps1" >&2
         exit 1
     elif [[ ${#CANDIDATES[@]} -eq 1 ]]; then
         PORT="${CANDIDATES[0]}"
     else
-        echo "找到多個序列裝置，請選擇："
+        echo "Multiple serial devices found, select one:"
         for i in "${!CANDIDATES[@]}"; do
             echo "  [$i] ${CANDIDATES[$i]}"
         done
-        read -r -p "輸入編號：" sel
+        read -r -p "Enter number: " sel
         PORT="${CANDIDATES[$sel]}"
     fi
 fi
 
-# ── 確認裝置存在 ──────────────────────────────────────────────────────────────
+# ── Verify device exists ──────────────────────────────────────────────────────
 if [[ ! -c "$PORT" ]]; then
-    echo "裝置不存在：$PORT" >&2
+    echo "Device not found: $PORT" >&2
     exit 1
 fi
 
-# ── dialout 群組權限 ──────────────────────────────────────────────────────────
+# ── dialout group permission ──────────────────────────────────────────────────
 if ! groups | grep -q dialout; then
-    echo "加入 dialout 群組（需重新登入 WSL 才能生效）..."
+    echo "Adding to dialout group (WSL restart required for this to take effect)..."
     sudo usermod -aG dialout "$USER"
-    echo "請執行：wsl --terminate Ubuntu  然後重新開啟 WSL"
-    echo "本次改用 sudo 開啟 minicom"
+    echo "Run: wsl --terminate Ubuntu  then reopen WSL"
+    echo "Using sudo for this session"
     SUDO=sudo
 else
     SUDO=""
 fi
 
-# ── 啟動 minicom ──────────────────────────────────────────────────────────────
+# ── Start minicom ─────────────────────────────────────────────────────────────
 echo ""
-echo "序列埠：$PORT  速率：$BAUD 8N1"
-echo "離開：Ctrl-A X"
+echo "Port: $PORT  Baud: $BAUD 8N1"
+echo "Exit: Ctrl-A X"
 echo ""
 
 $SUDO minicom -D "$PORT" -b "$BAUD" -8 --noinit

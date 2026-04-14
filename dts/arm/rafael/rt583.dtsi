@@ -101,7 +101,7 @@
                     reg = <0x001E0000 0x00010000>;
                 };
 
-                /* MP sector + factory data: 64 KB (flash 末段) */
+                /* MP sector + factory data: 64 KB (end of flash) */
                 factory_partition: partition@1f0000 {
                     label = "factory";
                     reg = <0x001f0000 0x00010000>;
@@ -140,11 +140,6 @@
          *   Base : PERIPH_BASE2 + 0x500000 = 0xA0500000
          *   IRQ  : Uart1_IRQn = 7
          */
-        bt_hci_rt583: bt-hci {
-            compatible = "rafael,rt583-bt-hci";
-            status = "disabled";
-        };
-
         uart1: uart@a0500000 {
             compatible = "rafael,rt583-uart";
             reg = <0xa0500000 0x1000>;
@@ -156,9 +151,17 @@
     };
 };
 
-/* RT583 hardware TRNG — no memory-mapped register; accessed via HOSAL. */
-/* RT583 IEEE 802.15.4 radio — accessed via lmac15p4 library, not MMIO. */
+/*
+ * Peripherals with no memory-mapped register base — placed at root level
+ * (not inside soc) to avoid the dtc simple_bus_reg warning which fires
+ * when a child of a simple-bus node lacks a reg property.
+ */
 / {
+    bt_hci_rt583: bt-hci {
+        compatible = "rafael,rt583-bt-hci";
+        status = "disabled";
+    };
+
     trng: trng {
         compatible = "rafael,rt583-trng";
         status = "okay";

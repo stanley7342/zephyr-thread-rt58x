@@ -49,6 +49,20 @@ file(GLOB OT_MBEDTLS_SOURCES
 )
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "net_sockets\\.c$")
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "entropy_poll\\.c$")
+# Exclude OT's mbedTLS 3.6.0 psa_crypto_mac.c — it uses a different
+# psa_hash_operation_s / mbedtls_psa_hmac_operation_t layout than
+# TF-PSA-Crypto 4.0 (which the Matter stack is built against).
+# Without this exclusion, --allow-multiple-definition causes OT's version to
+# win the link, placing hmac->opad 4 bytes early (into sha256.is224 = 0x00),
+# producing the wrong HKDF PRK and a wrong cB → PASE integrity check failure.
+list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "psa_crypto_mac\\.c$")
+# Exclude OT's sha256.c — it is compiled with MBEDTLS_SHA224_C (from
+# openthread-mbedtls-config.h), so mbedtls_sha256_starts writes ctx->is224=0
+# at ctx+104 bytes.  TF-PSA-Crypto 4.0's psa_crypto_mac.c is compiled without
+# SHA224_C, placing opad at hmac+116 — exactly where OT's sha256_starts clobbers
+# it.  Using TF-PSA-Crypto's sha256.c (no SHA224_C, no is224 write) removes the
+# corruption.
+list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "sha256\\.c$")
 
 target_sources(app PRIVATE
     # RT583 OT system overrides (must come before libopenthread_platform.a in
@@ -67,6 +81,16 @@ target_sources(app PRIVATE
     ${OT_PORT_SRC}/ot_crypto.c
     ${OT_PORT_SRC}/rt583_compat.c
     ${OT_PORT_SRC}/log_shim.c
+
+    # RT583 hardware crypto ALT backends (AES + ECC share one accelerator)
+    # rt583_crypto_mutex.c provides crypto_mutex_lock/unlock via Zephyr k_mutex.
+    # aes_alt.c / ecdsa_alt.c / ecdh_alt.c wire mbedTLS ALT hooks to hardware.
+    # CONFIG_SUPPORT_MULTITASKING (below) activates the mutex calls in rt_aes.c
+    # and rt_crypto.c so that concurrent AES and ECC requests serialise safely.
+    ${OT_PORT_SRC}/rt583_crypto_mutex.c
+    ${OT_PORT_SRC}/aes_alt.c
+    ${OT_PORT_SRC}/ecdsa_alt.c
+    ${OT_PORT_SRC}/ecdh_alt.c
 
     # LMAC + RF MCU
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
@@ -149,9 +173,15 @@ target_sources(app PRIVATE
 if(NOT DEFINED OT_INCLUDE_CLI OR OT_INCLUDE_CLI)
     target_sources(app PRIVATE ${OT_PORT_SRC}/ot_zephyr.c)
     target_sources(app PRIVATE ${OT_PORT_SRC}/ot_uart.c)
+    # Tell rt583_otsys.c NOT to compile the no-op ot_uartTask stub —
+    # ot_uart.c provides the real implementation for the CLI build.
+    target_compile_definitions(app PRIVATE OT_INCLUDE_CLI=1)
 else()
     target_sources(app PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/platform/ot_matter_sysq.c)
+    # Tell rt583_otsys.c to compile the no-op ot_uartTask stub —
+    # ot_uart.c is not compiled in the Matter build.
+    target_compile_definitions(app PRIVATE OT_INCLUDE_CLI=0)
 endif()
 
 target_include_directories(app PRIVATE
@@ -206,6 +236,12 @@ target_compile_definitions(app PRIVATE
     OPENTHREAD_RADIO=0
     CHIP_TYPE=3
     CONFIG_CRYPTO_SECP256R1_ENABLE=1
+    # Enable AES hardware acceleration in rt_aes.c (guards aes_key_init,
+    # aes_ecb_encrypt, etc. behind #if defined(CONFIG_CRYPTO_AES_ENABLE)).
+    CONFIG_CRYPTO_AES_ENABLE=1
+    # Enable mutex calls in rt_aes.c and rt_crypto.c so that concurrent AES
+    # and ECC operations serialise through crypto_mutex_lock/unlock.
+    CONFIG_SUPPORT_MULTITASKING=1
     # Matter needs its own state-change callback alongside Zephyr L2's.
     OPENTHREAD_CONFIG_MAX_STATECHANGE_HANDLERS=3
     "PACKAGE_NAME=\"OpenThread\""
@@ -220,6 +256,12 @@ target_compile_definitions(app PRIVATE
 target_compile_options(app PRIVATE
     -UCONFIG_RF_FW_INCLUDE_PCI
     -DCONFIG_RF_FW_INCLUDE_PCI=TRUE
+    # Multi-protocol (BLE + 15.4) firmware blob — required when
+    # hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL) is used (Matter build).
+    # Without this, firmware_program_multi[] = {0} (stub) and the RF MCU
+    # loads an invalid firmware → Thread RX completely non-functional.
+    -UCONFIG_RF_FW_INCLUDE_MULTI_2P4G
+    -DCONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
     -UMBEDTLS_CONFIG_FILE
     "-DMBEDTLS_CONFIG_FILE=\"openthread-mbedtls-config.h\""
 )

@@ -1,27 +1,27 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    將 CMSIS-DAP USB 裝置橋接至 WSL2，供 WSL 端 OpenOCD 燒錄使用。
+    Bridge the CMSIS-DAP USB device to WSL2 for OpenOCD flashing from WSL.
 
 .DESCRIPTION
-    透過 usbipd-win 將 CMSIS-DAP 裝置 attach 到 WSL2。
-    需先安裝 usbipd-win：
+    Uses usbipd-win to attach the CMSIS-DAP device to WSL2.
+    Requires usbipd-win:
         winget install usbipd
 
 .PARAMETER BusId
-    指定 busid（如 "2-3"）。省略時列出所有 USB 裝置供選擇。
+    Specify the busid (e.g. "2-3"). Lists all USB devices if omitted.
 
 .PARAMETER Detach
-    中斷目前已 attach 的 CMSIS-DAP 裝置。
+    Detach the currently attached CMSIS-DAP device.
 
 .EXAMPLE
-    # 互動選擇
+    # Interactive selection
     .\scripts\windows\attach-usb.ps1
 
-    # 直接指定 busid
+    # Specify busid directly
     .\scripts\windows\attach-usb.ps1 -BusId 2-3
 
-    # 中斷橋接
+    # Detach
     .\scripts\windows\attach-usb.ps1 -Detach
 #>
 
@@ -33,12 +33,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ── 確認 usbipd 已安裝 ────────────────────────────────────────────────────────
+# ── Verify usbipd is installed ────────────────────────────────────────────────
 $usbipd = Get-Command usbipd -ErrorAction SilentlyContinue |
           Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue
 
 if (-not $usbipd) {
-    # winget 安裝後 PATH 可能尚未更新，先搜尋已知路徑
+    # PATH may not be updated after winget install — check known locations first
     $candidates = @(
         "$env:ProgramFiles\usbipd-win\usbipd.exe",
         "$env:ProgramFiles\usbipd\usbipd.exe",
@@ -48,20 +48,20 @@ if (-not $usbipd) {
 }
 
 if (-not $usbipd) {
-    # 最後嘗試重新讀取系統 PATH
+    # Last attempt: re-read system PATH
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("PATH","User")
     $usbipd = (Get-Command usbipd -ErrorAction SilentlyContinue)?.Source
 }
 
 if (-not $usbipd) {
-    Write-Host "    未找到 usbipd，正在安裝..." -ForegroundColor Yellow
+    Write-Host "    usbipd not found, installing..." -ForegroundColor Yellow
     winget install --id dorssel.usbipd-win -e --silent --accept-source-agreements --accept-package-agreements
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "usbipd 安裝失敗，請手動執行：winget install usbipd" -ForegroundColor Red
+        Write-Host "usbipd installation failed — run manually: winget install usbipd" -ForegroundColor Red
         exit 1
     }
-    # 重新讀取 PATH
+    # Re-read PATH
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("PATH","User")
     $candidates = @(
@@ -74,20 +74,20 @@ if (-not $usbipd) {
         $usbipd = (Get-Command usbipd -ErrorAction SilentlyContinue)?.Source
     }
     if (-not $usbipd) {
-        Write-Host "usbipd 已安裝但找不到執行檔，請重新開啟 PowerShell 再執行本腳本。" -ForegroundColor Yellow
+        Write-Host "usbipd installed but executable not found — please reopen PowerShell and run this script again." -ForegroundColor Yellow
         exit 1
     }
-    Write-Host "    [OK] usbipd 安裝完成" -ForegroundColor Green
+    Write-Host "    [OK] usbipd installed" -ForegroundColor Green
 }
 
 Set-Alias -Name usbipd -Value $usbipd -Scope Script -Force
 
-# ── Detach 模式 ───────────────────────────────────────────────────────────────
+# ── Detach mode ───────────────────────────────────────────────────────────────
 if ($Detach) {
-    Write-Host "中斷 CMSIS-DAP 橋接..." -ForegroundColor Cyan
+    Write-Host "Detaching CMSIS-DAP bridge..." -ForegroundColor Cyan
     $attached = usbipd list 2>&1 | Select-String "Attached" | Select-String "cmsis|dap|arm|keil|segger|jlink|mbed"
     if (-not $attached) {
-        Write-Host "找不到已 attach 的 CMSIS-DAP 裝置。" -ForegroundColor DarkGray
+        Write-Host "No attached CMSIS-DAP device found." -ForegroundColor DarkGray
         exit 0
     }
     foreach ($line in $attached) {
@@ -95,81 +95,81 @@ if ($Detach) {
         Write-Host "  usbipd detach --busid $bid"
         usbipd detach --busid $bid
     }
-    Write-Host "[OK] 已中斷橋接。" -ForegroundColor Green
+    Write-Host "[OK] Bridge detached." -ForegroundColor Green
     exit 0
 }
 
-# ── 列出所有 USB 裝置 ─────────────────────────────────────────────────────────
+# ── List all USB devices ──────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "目前 USB 裝置：" -ForegroundColor Cyan
+Write-Host "Current USB devices:" -ForegroundColor Cyan
 Write-Host ""
 usbipd list
 Write-Host ""
 
-# ── 若未指定 BusId，讓使用者選擇 ─────────────────────────────────────────────
+# ── Select BusId if not specified ─────────────────────────────────────────────
 if (-not $BusId) {
-    # 嘗試自動偵測 CMSIS-DAP
+    # Try to auto-detect CMSIS-DAP
     $auto = usbipd list 2>&1 | Select-String "cmsis|dap|mbed" | Select-Object -First 1
     if ($auto) {
         $BusId = ($auto.Line -split "\s+")[0].Trim()
-        Write-Host "自動偵測到 CMSIS-DAP：BusId = $BusId" -ForegroundColor Green
+        Write-Host "Auto-detected CMSIS-DAP: BusId = $BusId" -ForegroundColor Green
         Write-Host "  $($auto.Line.Trim())"
         Write-Host ""
     } else {
-        $BusId = Read-Host "請輸入 BUSID（如 2-3）"
+        $BusId = Read-Host "Enter BUSID (e.g. 2-3)"
     }
 }
 
 if (-not $BusId) {
-    Write-Host "未指定 BUSID，結束。" -ForegroundColor DarkGray
+    Write-Host "No BUSID specified, exiting." -ForegroundColor DarkGray
     exit 1
 }
 
-# ── 確保 WSL2 已啟動 ─────────────────────────────────────────────────────────
-Write-Host "確認 WSL2 狀態..." -ForegroundColor Cyan
+# ── Ensure WSL2 is running ────────────────────────────────────────────────────
+Write-Host "Checking WSL2 status..." -ForegroundColor Cyan
 $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
 if (-not $wslRunning) {
-    Write-Host "    WSL2 未啟動，正在喚醒..." -ForegroundColor Yellow
-    # 在背景啟動 WSL2，sleep 60 確保 attach 期間持續存活
+    Write-Host "    WSL2 not running, waking up..." -ForegroundColor Yellow
+    # Start WSL2 in background; sleep 60 keeps it alive during attach
     Start-Job { wsl --exec sleep 60 } | Out-Null
-    # Polling：最多等 15 秒
+    # Poll: wait up to 15 seconds
     $ready = $false
     for ($i = 0; $i -lt 15; $i++) {
         Start-Sleep -Seconds 1
         $wslRunning = wsl --list --running 2>&1 | Select-String "\S"
         if ($wslRunning) { $ready = $true; break }
-        Write-Host "    等待 WSL2 就緒... ($($i+1)s)" -ForegroundColor DarkGray
+        Write-Host "    Waiting for WSL2... ($($i+1)s)" -ForegroundColor DarkGray
     }
     if (-not $ready) {
-        Write-Host "    WSL2 啟動逾時，請手動開啟 WSL 視窗後再試。" -ForegroundColor Red
+        Write-Host "    WSL2 startup timed out — open a WSL window manually and retry." -ForegroundColor Red
         exit 1
     }
-    Write-Host "    [OK] WSL2 已就緒" -ForegroundColor Green
+    Write-Host "    [OK] WSL2 ready" -ForegroundColor Green
 } else {
-    Write-Host "    [OK] WSL2 已在執行中" -ForegroundColor DarkGray
+    Write-Host "    [OK] WSL2 is running" -ForegroundColor DarkGray
 }
 
 # ── Attach ────────────────────────────────────────────────────────────────────
-Write-Host "橋接 BusId $BusId 至 WSL2..." -ForegroundColor Cyan
+Write-Host "Bridging BusId $BusId to WSL2..." -ForegroundColor Cyan
 
-# 先確認裝置是否已 attach
+# Check if already attached
 $alreadyAttached = usbipd list 2>&1 | Where-Object { $_ -match "^$BusId\s" -and $_ -match "Attached" }
 if ($alreadyAttached) {
-    Write-Host "[--] 裝置已在 WSL2 中，略過 attach。" -ForegroundColor DarkGray
+    Write-Host "[--] Device already in WSL2, skipping attach." -ForegroundColor DarkGray
 } else {
     usbipd bind --busid $BusId --force 2>$null
     usbipd attach --wsl --busid $BusId
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "attach 失敗（exit $LASTEXITCODE）。" -ForegroundColor Red
+        Write-Host "attach failed (exit $LASTEXITCODE)." -ForegroundColor Red
         exit 1
     }
 }
 
 Write-Host ""
-Write-Host "[OK] CMSIS-DAP 已橋接至 WSL2。" -ForegroundColor Green
+Write-Host "[OK] CMSIS-DAP bridged to WSL2." -ForegroundColor Green
 Write-Host ""
-Write-Host "接下來在 WSL 中執行：" -ForegroundColor Yellow
+Write-Host "Next, run in WSL:" -ForegroundColor Yellow
 Write-Host "  bash scripts/linux/flash.sh"
 Write-Host ""
-Write-Host "燒錄完成後中斷橋接：" -ForegroundColor Yellow
+Write-Host "Detach when done:" -ForegroundColor Yellow
 Write-Host "  .\scripts\windows\attach-usb.ps1 -Detach"

@@ -1,0 +1,11 @@
+/*
+ * MCUboot DTS overlay — bootloader runs from boot_partition (0x0),
+ * not slot0_partition.  Without this, FLASH_LOAD_OFFSET = 0x10000
+ * and the bootloader is linked at the wrong address.
+ */
+
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};

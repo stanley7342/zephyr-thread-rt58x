@@ -30,6 +30,7 @@
 #include <openthread/instance.h>
 
 #include "openthread_port.h"
+#include "hosal_rf.h"
 
 /* ── Globals declared extern in openthread_port.h ───────────────────────── */
 
@@ -48,6 +49,17 @@ K_SEM_DEFINE(ot_task_sem, 0, 1);
 /* Mutex used by OT_THREAD_SAFE wrappers — kept for completeness. */
 K_MUTEX_DEFINE(ot_ext_lock);
 
+/* ── Periodic RF diagnostic dump ────────────────────────────────────────── */
+
+static void rf_diag_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(rf_diag_work, rf_diag_work_fn);
+
+static void rf_diag_work_fn(struct k_work *work)
+{
+    hosal_rf_dump_diag();
+    k_work_reschedule(&rf_diag_work, K_SECONDS(10));
+}
+
 /* ── OT instance tracking ────────────────────────────────────────────────── */
 
 static otInstance *s_ot_instance;
@@ -55,10 +67,13 @@ static otInstance *s_ot_instance;
 /**
  * ot_set_instance — called by AppTask after openthread_init() so that
  * ot_alarmTask() can pass the instance to otPlatAlarmMilliFired().
+ * Also starts the periodic RF diagnostic dump.
  */
 void ot_set_instance(otInstance *inst)
 {
     s_ot_instance = inst;
+    /* First dump at 5 s, then every 10 s, to capture early-boot RUCI state. */
+    k_work_schedule(&rf_diag_work, K_SECONDS(5));
 }
 
 /**

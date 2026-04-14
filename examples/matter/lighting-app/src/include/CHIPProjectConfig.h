@@ -13,7 +13,9 @@
 #define CHIP_CONFIG_LOG_MODULE_InteractionModel_DETAIL        0
 #define CHIP_CONFIG_LOG_MODULE_DataManagement_PROGRESS        0
 #define CHIP_CONFIG_LOG_MODULE_FabricProvisioning_PROGRESS    0
-#define CHIP_CONFIG_LOG_MODULE_SecureChannel_PROGRESS         0
+/* SecureChannel PROGRESS+DETAIL enabled to diagnose PASE commissioning failure */
+#define CHIP_CONFIG_LOG_MODULE_SecureChannel_PROGRESS         1
+#define CHIP_CONFIG_LOG_MODULE_SecureChannel_DETAIL           1
 
 /* Reduce memory footprint for Cortex-M3 (144 KB RAM) */
 #define CHIP_CONFIG_MAX_FABRICS                     2
