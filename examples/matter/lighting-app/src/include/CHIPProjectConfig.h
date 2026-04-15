@@ -22,6 +22,17 @@
 #define CHIP_CONFIG_MAX_ACTIVE_CASE_CLIENTS         1
 #define CHIP_CONFIG_MAX_ACTIVE_DEVICES              2
 
+/* Limit exchange contexts — a lighting device handles few concurrent
+ * interactions.  Default is 16; 8 is sufficient for single-fabric
+ * operation (read/write/subscribe + CASE/PASE). */
+#define CHIP_CONFIG_MAX_EXCHANGE_CONTEXTS            8
+
+/* Limit IM engine resources — saves ~2 KB RAM per reduced entry */
+#define CHIP_IM_MAX_NUM_READ_HANDLER                 2
+#define CHIP_IM_MAX_NUM_WRITE_HANDLER                2
+#define CHIP_IM_MAX_NUM_COMMAND_HANDLER               2
+#define CHIP_IM_MAX_REPORTS_IN_FLIGHT                 2
+
 /* Dynamic packet buffer allocation (saves 24 KB BSS at the cost of heap).
  * With POOL_SIZE=0, buffers are malloc'd on demand instead of being
  * statically allocated. The 20 KB heap in prj.conf covers peak usage

@@ -67,7 +67,9 @@ static unsigned s_oom_cnt;
 static unsigned s_overflow_cnt;  /* canary tripped  */
 static unsigned s_bad_free_cnt;  /* magic wrong     */
 
+#ifdef CONFIG_RT583_HEAP_TRACE
 static bool s_trace_enabled;  /* enable per-alloc trace via chip_heap_enable_trace() */
+#endif
 
 /* ---------- Helpers ---------- */
 static inline AllocHeader * raw_to_hdr(void * raw)
@@ -115,10 +117,12 @@ static void * do_alloc(size_t size)
     *user_to_canary(user_ptr, size) = CANARY_VAL;
 
     s_alloc_cnt++;
+#ifdef CONFIG_RT583_HEAP_TRACE
     if (s_trace_enabled) {
         printk("[HEAP-ALLOC] #%u malloc(%u) → user=%p raw=%p\n",
                id, (unsigned)size, user_ptr, raw);
     }
+#endif
     return user_ptr;
 }
 
@@ -160,9 +164,11 @@ static void do_free(void * user_ptr)
     }
 
     hdr->magic = MAGIC_FREE;
+#ifdef CONFIG_RT583_HEAP_TRACE
     if (s_trace_enabled) {
         printk("[HEAP-FREE] #%u free(%p) size=%u\n", alloc_id, user_ptr, size);
     }
+#endif
     k_spinlock_key_t key = k_spin_lock(&s_lock);
     sys_heap_free(&s_heap, raw);
     k_spin_unlock(&s_lock, key);
@@ -224,7 +230,11 @@ void * __wrap__calloc_r(void * /*reent*/, size_t n, size_t size)
 void * __wrap__realloc_r(void * /*reent*/, void * ptr, size_t sz) { return do_realloc(ptr, sz); }
 
 /* Enable per-alloc/free trace output (very verbose — use only around suspect area). */
+#ifdef CONFIG_RT583_HEAP_TRACE
 void chip_heap_enable_trace(bool on) { s_trace_enabled = on; }
+#else
+void chip_heap_enable_trace(bool /* on */) { /* compiled out */ }
+#endif
 
 /* Snapshot of heap stats — call from AppTask for diagnostics. */
 void chip_heap_print_stats(void)

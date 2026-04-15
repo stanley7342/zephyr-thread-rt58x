@@ -200,7 +200,7 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
                 "Disabled", "Detached", "Child", "Router", "Leader"
             };
             const char *roleStr = (role < (int)ARRAY_SIZE(kRoleStr)) ? kRoleStr[role] : "Unknown";
-            printk("[OT] Role changed → %s\n", roleStr);
+            LOG_INF("[OT] Role changed: %s", roleStr);
 
             /* Print active dataset so it can be compared with OTBR
              * (sudo ot-ctl channel / panid / networkkey). */
@@ -211,17 +211,14 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
                 openthread_mutex_unlock();
                 if (dsErr == OT_ERROR_NONE) {
                     if (ds.mComponents.mIsChannelPresent) {
-                        printk("[OT] dataset channel=%u\n", ds.mChannel);
+                        LOG_DBG("[OT] dataset channel=%u", ds.mChannel);
                     }
                     if (ds.mComponents.mIsPanIdPresent) {
-                        printk("[OT] dataset panid=0x%04x\n", ds.mPanId);
+                        LOG_DBG("[OT] dataset panid=0x%04x", ds.mPanId);
                     }
                     if (ds.mComponents.mIsNetworkKeyPresent) {
-                        printk("[OT] dataset networkkey=");
-                        for (int i = 0; i < OT_NETWORK_KEY_SIZE; i++) {
-                            printk("%02x", ds.mNetworkKey.m8[i]);
-                        }
-                        printk("\n");
+                        LOG_HEXDUMP_DBG(ds.mNetworkKey.m8, OT_NETWORK_KEY_SIZE,
+                                        "[OT] dataset networkkey");
                     }
                 }
             }
@@ -255,13 +252,12 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
                     openthread_mutex_lock();
                     otThreadSetRouterEligible(inst, false);
                     openthread_mutex_unlock();
-                    printk("[OT] Commissioning active: router eligibility disabled"
-                           " — searching for OTBR\n");
+                    LOG_INF("[OT] Commissioning: router eligibility off");
                 } else if (role == OT_DEVICE_ROLE_CHILD || role == OT_DEVICE_ROLE_ROUTER) {
                     openthread_mutex_lock();
                     otThreadSetRouterEligible(inst, true);
                     openthread_mutex_unlock();
-                    printk("[OT] Joined network: router eligibility re-enabled\n");
+                    LOG_INF("[OT] Joined: router eligibility on");
                 }
             }
 
@@ -335,7 +331,7 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
 
 static void DoFactoryReset(intptr_t /* arg */)
 {
-    printk("[BTN] Executing factory reset\n");
+    LOG_INF("[BTN] Executing factory reset");
     chip::Server::GetInstance().ScheduleFactoryReset();
 }
 
@@ -351,7 +347,7 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
     if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
         task.mFunction            = FunctionEvent::NoneSelected;
         task.mFunctionTimerActive = false;
-        printk("[BTN] Factory reset triggered (6 s hold)\n");
+        LOG_INF("[BTN] Factory reset triggered (6 s hold)");
         (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
     }
 }
@@ -399,7 +395,7 @@ void AppTask::FunctionHandler(const AppEvent & event)
     if (event.ButtonEvent.ButtonIdx == kButtonFactoryReset) {
         if (event.ButtonEvent.Pressed) {
             if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
-                printk("[BTN] GPIO0 pressed — hold 6 s for factory reset\n");
+                LOG_INF("[BTN] GPIO0 pressed, hold 6s for reset");
                 task.mFunction = FunctionEvent::FactoryReset;
                 task.StartTimer(kFactoryResetTriggerTimeMs);
             }
@@ -407,7 +403,7 @@ void AppTask::FunctionHandler(const AppEvent & event)
             if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
                 task.CancelTimer();
                 task.mFunction = FunctionEvent::NoneSelected;
-                printk("[BTN] GPIO0 released — factory reset cancelled\n");
+                LOG_INF("[BTN] GPIO0 released, reset cancelled");
             }
         }
     } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
@@ -446,21 +442,26 @@ void AppTask::ButtonEventHandler(uint32_t pin, void * /* isr_param */)
 CHIP_ERROR AppTask::Init()
 {
     CHIP_ERROR err;
+    uint32_t t0, phase_ms;
 
     /* ── Firmware version marker ────────────────────────────────────────────
      * Confirms new firmware is running and AppTask::Init() is entered.
      * If this line is absent from the log the object file was not rebuilt. */
-    printk("[DIAG] AppTask::Init entered (build " __DATE__ " " __TIME__ ")\n");
+    printk("[BOOT] AppTask::Init (build " __DATE__ " " __TIME__ ")\n");
+    t0 = k_uptime_get_32();
 
     /* Hardware crypto self-test — must run before hosal_rf_init() so the
      * shared AES/ECC accelerator is idle and lmac15p4 has not started. */
     crypto_selftest();
+    phase_ms = k_uptime_get_32() - t0;
+    printk("[BOOT] crypto_selftest: %u ms\n", phase_ms);
 
     /* Initialize RF MCU in multi-protocol mode (BLE + 802.15.4/Thread).
      * Must be called once before InitChipStack() triggers either BLE or OT
      * radio init.  The BLE HCI driver (hci_rt58x_open) and OT radio layer
      * both require an initialized RF MCU; MULTI_PROTOCOL loads firmware that
      * supports both simultaneously. */
+    t0 = k_uptime_get_32();
     hosal_lpm_init();
     hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
     hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
@@ -471,22 +472,18 @@ CHIP_ERROR AppTask::Init()
      * corrupts RF MCU register state (RfMcu_SysRdySignalWait never exits). */
     k_sleep(K_MSEC(50));
     hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
+    phase_ms = k_uptime_get_32() - t0;
+    printk("[BOOT] RF init + settle: %u ms\n", phase_ms);
 
     /* Initialise lmac15p4 radio layer for OpenThread (sets up RUCI callbacks,
      * channel, and MAC address from OTP/flash).  Must be called after
      * hosal_rf_init() so the RF MCU RUCI interface is ready. */
+    t0 = k_uptime_get_32();
     ot_radioInit();
-
-    /* Initialise the hardware alarm timer (TIMER3) used for OT microsecond
-     * alarms.  Called here so TIMER3 is configured before openthread_init()
-     * starts the OT work queue and may schedule the first alarm. */
     ot_alarmInit();
-
-    /* Warm up the TRNG before otInstanceInitSingle() calls otPlatEntropyGet().
-     * hosal_trng_get_random_number() requires the TRNG clock to be running;
-     * this call exercises it once so any first-access latency is absorbed here
-     * rather than deep inside otInstanceInitSingle(). */
     ot_entropy_init();
+    phase_ms = k_uptime_get_32() - t0;
+    printk("[BOOT] OT radio+alarm+entropy: %u ms\n", phase_ms);
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
     /* Explicitly initialise the OT instance on this thread (8 KB stack).
@@ -494,6 +491,7 @@ CHIP_ERROR AppTask::Init()
      * stack — far more than the 2 KB main thread used during POST_KERNEL
      * device init.  After this call openthread_get_default_instance() returns
      * a valid pointer and InitThreadStack() no longer asserts. */
+    t0 = k_uptime_get_32();
     {
         int ot_err = openthread_init();
         if (ot_err != 0) {
@@ -503,6 +501,8 @@ CHIP_ERROR AppTask::Init()
     /* Sync our ot_instance accessor (used by ot_alarmTask / ot_radioTask)
      * with Zephyr's openthread_instance set by openthread_init(). */
     ot_set_instance(openthread_get_default_instance());
+    phase_ms = k_uptime_get_32() - t0;
+    printk("[BOOT] openthread_init: %u ms\n", phase_ms);
 #endif
 
     /* Initialise CHIP memory allocator */
@@ -511,7 +511,10 @@ CHIP_ERROR AppTask::Init()
                         LOG_ERR("MemoryInit failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
     /* Initialise CHIP device layer (BLE + OpenThread) */
+    t0 = k_uptime_get_32();
     err = PlatformMgr().InitChipStack();
+    phase_ms = k_uptime_get_32() - t0;
+    printk("[BOOT] InitChipStack: %u ms\n", phase_ms);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitChipStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
@@ -533,9 +536,7 @@ CHIP_ERROR AppTask::Init()
     err = sThreadNetworkDriver.Init();
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("ThreadNetworkDriver Init failed: %" CHIP_ERROR_FORMAT, err.Format()));
-#endif
 
-#ifdef CONFIG_NET_L2_OPENTHREAD
     /* Enable OT IPv6 so that OT UDP endpoints (mDNS, CASE) work.
      * With CONFIG_CHIP_USE_OT_ENDPOINT=y, Matter uses otUdp* directly —
      * no POSIX socket bind() needed, so the net_if_up() workaround is gone.
@@ -601,8 +602,8 @@ CHIP_ERROR AppTask::Init()
             hosal_gpio_debounce_enable(i);
             hosal_gpio_int_enable(i);
         }
-        printk("[BTN] GPIO%u=factory-reset GPIO%u=light-toggle configured\n",
-               kButtonFactoryReset, kButtonLightToggle);
+        LOG_INF("[BTN] GPIO%u=reset GPIO%u=toggle",
+                kButtonFactoryReset, kButtonLightToggle);
     }
 
     return CHIP_NO_ERROR;
@@ -642,7 +643,7 @@ static void ServerInitWork(intptr_t arg)
     /* One-shot factory reset: clears all Matter KVS data + OT NVM, then reboots.
      * Build with -DMATTER_FACTORY_RESET_ON_BOOT=1 (CMake, not Kconfig) to wipe
      * the device once; rebuild without it for normal operation. */
-    printk("[DIAG] MATTER_FACTORY_RESET_ON_BOOT set — initiating factory reset\n");
+    LOG_INF("MATTER_FACTORY_RESET_ON_BOOT — initiating factory reset");
     chip::Server::GetInstance().ScheduleFactoryReset();
     return;
 #endif

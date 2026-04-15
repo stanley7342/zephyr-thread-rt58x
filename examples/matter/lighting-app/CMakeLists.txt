@@ -205,6 +205,19 @@ set(CHIP_CFLAGS
     # Suppress add_entropy_source() in PlatformManagerImpl.cpp — the PSA
     # backend returns CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE for that call.
     "-DCONFIG_MBEDTLS_ENTROPY_POLL_ZEPHYR=1"
+    # ── ODR fix: ensure ALL GN targets see the same Server class layout ──
+    # Zephyr's autoconf.h (-imacros) is only applied to GN targets that use
+    # target_cflags_cc (e.g. Server.cpp).  Codegen cluster targets
+    # (zzz_generated/app-common/clusters/*) are compiled WITHOUT autoconf.h.
+    # CHIPPlatformConfig.h gates several layout-affecting defines on Kconfig
+    # symbols from autoconf.h (CONFIG_CHIP_CRYPTO_PSA → SHA256 context size,
+    # CONFIG_CHIP_LOG_SIZE_OPTIMIZATION → log module enables).
+    # Without these, the Server class has a different memory layout in codegen
+    # TUs → inline GetFabricTable() computes the wrong offset → ODR violation
+    # → mOperationalKeystore appears NULL → CSR fails with error 3.
+    # Propagate the critical Kconfig symbols via CHIP_CFLAGS so every GN TU
+    # sees the same class layout.
+    "-DCONFIG_CHIP_CRYPTO_PSA"
 )
 
 # ── Pre-set GN_EXECUTABLE ────────────────────────────────────────────────────
@@ -446,20 +459,21 @@ target_sources(app PRIVATE ${RT583_PROJECT_DIR}/drivers/net/dummy_net_if.c)
 # sub-includes below do not override with conflicting FALSE settings.
 target_compile_definitions(app PRIVATE
     # MULTI_2P4G: combined BLE+802.15.4 firmware — required for Matter over Thread.
-    # PCI and BLE are already defined (with proper -U/-D sequencing) by
-    # subsys/openthread/CMakeLists.txt and subsys/ble/CMakeLists.txt; defining
-    # them again here causes "redefined" warnings without changing behaviour.
     CONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
-    # CONFIG_RF_MCU_CONST_LOAD_SUPPORTED is required for the multi-protocol
-    # firmware to boot: without the const calibration data, the RF MCU never
-    # asserts SYS_RDY after firmware load.  The readback verification in
-    # RfMcu_ConstLoad was patched to skip the check (it spuriously fails on
-    # Zephyr even though the write succeeds via the same AHB DMA path used
-    # for firmware image load).
     CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
-    # Enable hardware AES functions in rt_aes.c (guarded by this define).
-    # Required for crypto_selftest() in CryptoSelfTest.cpp.
     CONFIG_CRYPTO_AES_ENABLE=1
+
+    # ── ODR fix: Server class layout consistency ─────────────────────────
+    # CodegenIntegration.cpp is compiled by CMake (app target), NOT by GN.
+    # GN-compiled Server.cpp sees CHIPProjectConfig.h (via SystemBuildConfig.h
+    # → CHIP_PROJECT_CONFIG_INCLUDE) which overrides CHIP_CONFIG_MAX_FABRICS
+    # and other layout-affecting macros.  CMake-compiled code does NOT see
+    # CHIPProjectConfig.h, so it uses CHIPPlatformConfig.h defaults.
+    # This mismatch causes Server class ODR violation → wrong mFabrics offset.
+    #
+    # Fix: pass CHIP_PROJECT_CONFIG_INCLUDE so CMake TUs include the same
+    # project config as GN TUs, giving identical Server layout.
+    "CHIP_PROJECT_CONFIG_INCLUDE=\"${CMAKE_CURRENT_SOURCE_DIR}/src/include/CHIPProjectConfig.h\""
 )
 
 # Suppress warnings in vendored SDK sources

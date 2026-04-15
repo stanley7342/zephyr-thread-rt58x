@@ -14,6 +14,9 @@
  * SHA-256 is implemented in RT583 ROM (function pointers at fixed ROM
  * addresses).  sha256_vector_init() wires those pointers; subsequent
  * calls to sha256_init/update/finish invoke the ROM code directly.
+ *
+ * Controlled by CONFIG_RT583_CRYPTO_SELFTEST (Kconfig).  When disabled,
+ * only sha256_vector_init() is called (required before any HMAC use).
  */
 
 #include <string.h>
@@ -23,6 +26,8 @@ extern "C" {
 #include "rt_aes.h"
 #include "rt_sha256.h"
 }
+
+#ifdef CONFIG_RT583_CRYPTO_SELFTEST
 
 /* ── AES-128-ECB — NIST FIPS-197 Appendix B ───────────────────────────────── */
 static const uint8_t kAesKey128[16] = {
@@ -56,12 +61,12 @@ static const uint8_t kAesCbcCipher[16] = {
  * total message < 64 bytes in one update call).  In that specific case the
  * ROM produces wrong output — SHA-256("abc") returns the wrong digest.
  *
- * For inputs ≥ 64 bytes, sha256_update compresses the first full block and
+ * For inputs >= 64 bytes, sha256_update compresses the first full block and
  * leaves a non-initial intermediate state; sha256_finish then produces the
  * correct result.
  *
  * Matter only uses SHA-256 through HMAC-SHA256 / HKDF / PBKDF2.  All of
- * these always hash a ≥ 64-byte ipad or opad key block through sha256_update
+ * these always hash a >= 64-byte ipad or opad key block through sha256_update
  * first, so they never hit the ROM bug.  The HMAC-SHA256 KAT below (RFC 4231
  * TC1) is the meaningful validator for Matter's code path.
  *
@@ -178,9 +183,6 @@ static bool test_aes128_cbc(void)
 
 static bool test_sha256(void)
 {
-    /* Wire sha256_init/update/finish ROM function pointers.
-     * Must be called before any hmac_sha256() / hkdf_sha256() call.
-     * Raw SHA-256 KAT is skipped — see ROM limitation note above. */
     sha256_vector_init();
     printk("[CRYPTO] SHA-256 ROM pointers wired (raw KAT skipped; validated via HMAC)\n");
     return true;
@@ -214,10 +216,13 @@ static bool test_hmac_sha256(void)
     return true;
 }
 
+#endif /* CONFIG_RT583_CRYPTO_SELFTEST */
+
 /* ── Public entry point ───────────────────────────────────────────────────── */
 
 void crypto_selftest(void)
 {
+#ifdef CONFIG_RT583_CRYPTO_SELFTEST
     printk("[CRYPTO] === RT583 hardware crypto self-test ===\n");
 
     bool aes_ecb_ok  = test_aes128_ecb();
@@ -231,4 +236,8 @@ void crypto_selftest(void)
            aes_cbc_ok ? "OK" : "FAIL",
            hmac_ok    ? "OK" : "FAIL",
            all_ok     ? "PASS" : "FAIL");
+#else
+    /* Self-test disabled — just wire SHA-256 ROM pointers (required for HMAC). */
+    sha256_vector_init();
+#endif
 }

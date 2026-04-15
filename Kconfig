@@ -89,6 +89,27 @@ config RT583_RF_FW_EXPECTED_CRC32
 
 endif # OPENTHREAD_RT583
 
+# Matter application options
+if CHIP
+
+config RT583_CRYPTO_SELFTEST
+    bool "Run hardware crypto self-test at boot"
+    default y
+    help
+      Runs AES-128-ECB, AES-128-CBC, and HMAC-SHA256 Known-Answer Tests
+      against the RT583 hardware crypto accelerator during AppTask::Init().
+      Disable for production to save ~2 KB flash and ~50 ms boot time.
+
+config RT583_HEAP_TRACE
+    bool "Enable per-alloc/free heap trace output"
+    default n
+    help
+      Compiles in chip_heap_enable_trace() and per-allocation printk trace
+      in MallocWrappers.cpp. When disabled, trace code is compiled out and
+      chip_heap_enable_trace() is a no-op stub.
+
+endif # CHIP
+
 # BLE
 config BLE_RT583
     bool "Bluetooth LE for Rafael RT583"
