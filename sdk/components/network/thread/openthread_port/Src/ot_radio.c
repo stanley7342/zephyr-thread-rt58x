@@ -372,10 +372,8 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
             channelChanged = true;
         }
         if (!sAuto_State_Set || channelChanged) {
-            printk("[OT-RADIO] Receive: enabling auto-state ch=%u\n", aChannel);
             lmac15p4_auto_state_set(true);
             sAuto_State_Set = true;
-            printk("[OT-RADIO] Receive: auto-state enabled\n");
         }
     }
     return error;
@@ -573,10 +571,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         sCurrentChannel = aFrame->mChannel;
         lmac15p4_channel_set(
             (lmac154_channel_t)(sCurrentChannel - kMinChannel));
-        printk("[OT-RADIO] TX ch=%u len=%u hdr=%02x%02x%02x%02x\n",
-               sCurrentChannel, aFrame->mLength,
-               aFrame->mPsdu[0], aFrame->mPsdu[1],
-               aFrame->mPsdu[2], aFrame->mPsdu[3]);
+        /* TX/RX debug logs disabled — enable for RF debugging */
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -722,11 +717,12 @@ static void _RxDoneEvent(uint16_t packet_length, uint8_t *rx_data,
     static uint8_t  rx_cnt = 0;
 
     if (crc_status != 0) {
-        printk("[OT-RADIO] RX CRC err ch=%u rssi=-%d\n", sCurrentChannel, (int)rssi);
+        /* RX CRC error — uncomment for RF debug */
+        /* printk("[OT-RADIO] RX CRC err ch=%u rssi=-%d\n", sCurrentChannel, (int)rssi); */
         OT_NOTIFY_ISR(OT_SYSTEM_EVENT_RADIO_RX_CRC_FIALED);
         return;
     }
-    printk("[OT-RADIO] RX ok ch=%u len=%u rssi=-%d\n", sCurrentChannel, (unsigned)(packet_length - 9), (int)rssi);
+    /* printk("[OT-RADIO] RX ok ch=%u len=%u rssi=-%d\n", sCurrentChannel, (unsigned)(packet_length - 9), (int)rssi); */
 
     otRadio_rxFrame_t *p = NULL;
     OT_ENTER_CRITICAL_ISR();

@@ -336,7 +336,26 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
 static void DoFactoryReset(intptr_t /* arg */)
 {
     LOG_INF("[BTN] Executing factory reset");
-    chip::Server::GetInstance().ScheduleFactoryReset();
+
+    auto & server     = chip::Server::GetInstance();
+    auto & fabricTable = server.GetFabricTable();
+    auto & sessionMgr  = server.GetSecureSessionManager();
+
+    /* Expire all CASE sessions, then delete all fabrics */
+    for (const auto & fabricInfo : fabricTable) {
+        sessionMgr.ExpireAllSessionsForFabric(fabricInfo.GetFabricIndex());
+    }
+    fabricTable.DeleteAllFabrics();
+
+#ifdef CONFIG_NET_L2_OPENTHREAD
+    /* Clear SRP host/services before leaving Thread network */
+    if (chip::DeviceLayer::ThreadStackMgr().IsThreadAttached()) {
+        chip::DeviceLayer::ThreadStackMgr().ClearAllSrpHostAndServices();
+    }
+    chip::DeviceLayer::ConnectivityMgr().ErasePersistentInfo();
+#endif
+
+    server.ScheduleFactoryReset();
 }
 
 /* Called by CHIP SystemLayer timer when GPIO0 has been held for 6 s.

@@ -29,6 +29,9 @@
 
 #include <openthread/instance.h>
 #include <openthread/thread.h>
+#include <openthread/ip6.h>
+#include <openthread/srp_client.h>
+#include <openthread/netdata.h>
 
 #include "openthread_port.h"
 #include "hosal_rf.h"
@@ -71,6 +74,19 @@ static const char *ot_role_str(otDeviceRole role)
     }
 }
 
+static void print_ipv6_addr(const otIp6Address *addr)
+{
+    printk("%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
+           (unsigned)((addr->mFields.m8[0] << 8) | addr->mFields.m8[1]),
+           (unsigned)((addr->mFields.m8[2] << 8) | addr->mFields.m8[3]),
+           (unsigned)((addr->mFields.m8[4] << 8) | addr->mFields.m8[5]),
+           (unsigned)((addr->mFields.m8[6] << 8) | addr->mFields.m8[7]),
+           (unsigned)((addr->mFields.m8[8] << 8) | addr->mFields.m8[9]),
+           (unsigned)((addr->mFields.m8[10] << 8) | addr->mFields.m8[11]),
+           (unsigned)((addr->mFields.m8[12] << 8) | addr->mFields.m8[13]),
+           (unsigned)((addr->mFields.m8[14] << 8) | addr->mFields.m8[15]));
+}
+
 static void rf_diag_work_fn(struct k_work *work)
 {
     hosal_rf_dump_diag();
@@ -80,6 +96,40 @@ static void rf_diag_work_fn(struct k_work *work)
                ot_role_str(role),
                otThreadGetRloc16(s_ot_instance),
                (unsigned)otThreadGetPartitionId(s_ot_instance));
+
+        /* Dump all IPv6 addresses — key for SRP/mDNS debugging */
+        if (role != OT_DEVICE_ROLE_DISABLED && role != OT_DEVICE_ROLE_DETACHED) {
+            const otNetifAddress *addr = otIp6GetUnicastAddresses(s_ot_instance);
+            for (; addr; addr = addr->mNext) {
+                printk("[OT]   addr=");
+                print_ipv6_addr(&addr->mAddress);
+                printk("/%d%s%s%s\n", addr->mPrefixLength,
+                       addr->mMeshLocal ? " mesh" : "",
+                       addr->mPreferred ? " pref" : "",
+                       addr->mValid ? " valid" : "");
+            }
+
+            /* SRP client host info */
+            const otSrpClientHostInfo *host = otSrpClientGetHostInfo(s_ot_instance);
+            if (host && host->mName) {
+                printk("[SRP] host=%s state=%d addrs=%u\n",
+                       host->mName, host->mState,
+                       (unsigned)host->mNumAddresses);
+                for (uint8_t i = 0; i < host->mNumAddresses; i++) {
+                    printk("[SRP]   addr=");
+                    print_ipv6_addr(&host->mAddresses[i]);
+                    printk("\n");
+                }
+            }
+
+            /* SRP client services */
+            const otSrpClientService *svc = otSrpClientGetServices(s_ot_instance);
+            for (; svc; svc = svc->mNext) {
+                printk("[SRP] svc=%s.%s port=%u state=%d\n",
+                       svc->mInstanceName, svc->mName,
+                       svc->mPort, svc->mState);
+            }
+        }
     }
     k_work_reschedule(&rf_diag_work, K_SECONDS(10));
 }

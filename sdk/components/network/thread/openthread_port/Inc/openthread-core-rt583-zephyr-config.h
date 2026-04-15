@@ -102,4 +102,17 @@
  * Weight=1 ensures RT583 always yields and joins OTBR's partition. */
 #define OPENTHREAD_CONFIG_MLE_LEADER_WEIGHT              1
 
+/* SLAAC: auto-configure IPv6 addresses from on-mesh prefixes in Network Data.
+ * Without this, the device only has mesh-local addresses.  OTBR publishes an
+ * OMR prefix (e.g. fd11:35::/64); SLAAC creates a routable address from it.
+ * The SRP client (otSrpClientEnableAutoHostAddress) then registers this address
+ * with the SRP server.  Without a routable address, SRP host has addrs=0 and
+ * the OTBR mDNS proxy cannot resolve the device → CASE over Thread fails. */
+#define OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE               1
+
+/* Multicast Listener Registration (Thread 1.2+): register multicast group
+ * memberships with the border router so that off-mesh multicast traffic
+ * reaches Thread devices. */
+#define OPENTHREAD_CONFIG_MLR_ENABLE                     1
+
 #endif /* OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_ */
