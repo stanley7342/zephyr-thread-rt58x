@@ -463,17 +463,10 @@ target_compile_definitions(app PRIVATE
     CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
     CONFIG_CRYPTO_AES_ENABLE=1
 
-    # ── ODR fix: Server class layout consistency ─────────────────────────
-    # CodegenIntegration.cpp is compiled by CMake (app target), NOT by GN.
-    # GN-compiled Server.cpp sees CHIPProjectConfig.h (via SystemBuildConfig.h
-    # → CHIP_PROJECT_CONFIG_INCLUDE) which overrides CHIP_CONFIG_MAX_FABRICS
-    # and other layout-affecting macros.  CMake-compiled code does NOT see
-    # CHIPProjectConfig.h, so it uses CHIPPlatformConfig.h defaults.
-    # This mismatch causes Server class ODR violation → wrong mFabrics offset.
-    #
-    # Fix: pass CHIP_PROJECT_CONFIG_INCLUDE so CMake TUs include the same
-    # project config as GN TUs, giving identical Server layout.
-    "CHIP_PROJECT_CONFIG_INCLUDE=\"${CMAKE_CURRENT_SOURCE_DIR}/src/include/CHIPProjectConfig.h\""
+    # NOTE: CHIP_PROJECT_CONFIG_INCLUDE is already provided by GN's
+    # SystemBuildConfig.h (included via CHIP_HAVE_CONFIG_H).  No need to
+    # duplicate it here.  The Server ODR fix is in connectedhomeip/
+    # Server.h (out-of-line getters).
 )
 
 # Suppress warnings in vendored SDK sources

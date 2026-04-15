@@ -30,6 +30,7 @@
 #include "mac_frame.h"
 
 #include "lmac15p4.h"
+#include "hosal_rf.h"
 #include "util_list.h"
 #include "flashctl.h"
 #include "hosal_trng.h"
@@ -363,12 +364,14 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
     if (sState != OT_RADIO_STATE_DISABLED) {
         error = OT_ERROR_NONE;
         sState = OT_RADIO_STATE_RECEIVE;
+        bool channelChanged = false;
         if (aChannel != sCurrentChannel) {
             sCurrentChannel = aChannel;
             lmac15p4_channel_set(
                 (lmac154_channel_t)(sCurrentChannel - kMinChannel));
+            channelChanged = true;
         }
-        if (!sAuto_State_Set) {
+        if (!sAuto_State_Set || channelChanged) {
             printk("[OT-RADIO] Receive: enabling auto-state ch=%u\n", aChannel);
             lmac15p4_auto_state_set(true);
             sAuto_State_Set = true;
@@ -555,6 +558,7 @@ exit:
 }
 
 /* ── Transmit ────────────────────────────────────────────────────────────── */
+
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
 {
     OT_UNUSED_VARIABLE(aInstance);
@@ -569,7 +573,10 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         sCurrentChannel = aFrame->mChannel;
         lmac15p4_channel_set(
             (lmac154_channel_t)(sCurrentChannel - kMinChannel));
-        printk("[OT-RADIO] TX ch=%u len=%u\n", sCurrentChannel, aFrame->mLength);
+        printk("[OT-RADIO] TX ch=%u len=%u hdr=%02x%02x%02x%02x\n",
+               sCurrentChannel, aFrame->mLength,
+               aFrame->mPsdu[0], aFrame->mPsdu[1],
+               aFrame->mPsdu[2], aFrame->mPsdu[3]);
     }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -603,12 +610,15 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
         tx_control ^= (1 << 1);
     }
 
-    if (lmac15p4_tx_data_send(0, temp,
+    {
+        int tx_ret = lmac15p4_tx_data_send(0, temp,
                               otRadio_var.pTxFrame->mLength + 2,
                               tx_control,
-                              otMacFrameGetSequence(aFrame)) != 0) {
-        printk("[ot_radio] TX failed!");
-        OT_NOTIFY(OT_SYSTEM_EVENT_RADIO_TX_NO_ACK);
+                              otMacFrameGetSequence(aFrame));
+        if (tx_ret != 0) {
+            printk("[OT-RADIO] TX FAIL ret=%d ctrl=0x%02x\n", tx_ret, tx_control);
+            OT_NOTIFY(OT_SYSTEM_EVENT_RADIO_TX_NO_ACK);
+        }
     }
 
     otPlatRadioTxStarted(aInstance, aFrame);
@@ -803,6 +813,9 @@ void ot_radioTask(ot_system_event_t trxEvent)
             otPlatRadioTxDone(otRadio_var.aInstance, txframe, NULL,
                               OT_ERROR_NONE);
         }
+        if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_ERROR) {
+            printk("[OT-RADIO] TX_ERROR\n");
+        }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_ACKED) {
             otPlatRadioTxDone(otRadio_var.aInstance, txframe,
                               otRadio_var.pAckFrame, OT_ERROR_NONE);
@@ -862,13 +875,10 @@ void ot_radioInit(void)
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
 
-    printk("[OT-RADIO] ot_radioInit: calling lmac15p4_init\n");
-    /* Must be called before any lmac15p4_tx_data_send — initialises the TX
-     * gate semaphore (lmac_tx_sem) and registers RUCI RX/TX callbacks with
-     * hosal_rf.  Without this, lmac_tx_sem.count == 0 (BSS zero-init) and
-     * the first k_sem_take in lmac15p4_tx_data_send blocks forever. */
-    lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
-    printk("[OT-RADIO] ot_radioInit: lmac15p4_init done\n");
+    /* lmac15p4_init() + PHY/MAC PIB are done in AppTask::Init() before
+     * this function is called — matching the Rafael official Matter SDK
+     * sequence where BLEManagerImpl does rf_init + lmac15p4_init + PIB. */
+    printk("[OT-RADIO] ot_radioInit: setting callbacks\n");
 
     if (sMacAddrReadMode == 1) {
         rafael_otp_mac_addr(sIEEE_EUI64Addr);

@@ -1281,6 +1281,13 @@ void hosal_rf_init(hosal_rf_mode_t mode)
     __rf_tx_data_queue_init();
 }
 
+/* Reload RF MCU firmware without recreating the processing thread.
+ * Used to switch from MULTI_PROTOCOL → RUCI_CMD after BLE commissioning. */
+bool hosal_rf_reload_fw(hosal_rf_mode_t mode)
+{
+    return rf_common_init_by_fw(mode, __rf_event_callback);
+}
+
 /* Force-reset the command semaphore to "available" state.
  * Used by test harnesses after a command timeout to unblock
  * subsequent hosal_rf_write_command() calls. */

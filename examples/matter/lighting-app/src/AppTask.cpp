@@ -48,6 +48,10 @@ extern "C" {
 /* RT583 SDK combined GPIO ISR (dispatches to per-pin callbacks) */
 extern void gpio_handler(void);
 extern bool hci_rt58x_rf_already_init;
+int lmac15p4_init(uint8_t modem, uint8_t band_type);
+void lmac15p4_phy_pib_set(uint16_t, uint8_t, uint8_t, uint16_t);
+void lmac15p4_mac_pib_set(uint32_t, uint32_t, uint8_t, uint8_t, uint32_t, uint8_t, uint8_t);
+int hosal_rf_write_command(uint8_t *, uint32_t);
 }
 
 /* Zephyr ISR wrapper for the RT583 GPIO interrupt (Gpio_IRQn = 0).
@@ -465,12 +469,29 @@ CHIP_ERROR AppTask::Init()
     hosal_lpm_init();
     hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
     hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
-    /* IRQ 20 (COMM_SUBSYSTEM) is enabled inside hosal_rf_init → RfMcu_DmaInit
-     * → NVIC_EnableIRQ AFTER SysRdySignalWait.  Do NOT enable it before
-     * hosal_rf_init: gRfMcuIsrCfg.commsubsystem_isr is NULL until
-     * rf_common_init_by_fw sets it, and a spurious IRQ with null isr_cb
-     * corrupts RF MCU register state (RfMcu_SysRdySignalWait never exits). */
     k_sleep(K_MSEC(50));
+
+    /* Match Rafael official Matter SDK init sequence (BLEManagerImpl.cpp):
+     * hosal_rf_init → lmac15p4_init → phy_pib_set → mac_pib_set → ble_init
+     * lmac15p4_init + PIB setup must happen HERE, before BLE and OT start.
+     * ot_radioInit() below will only set callbacks (lmac15p4_cb_set), NOT
+     * call lmac15p4_init again. */
+    lmac15p4_init(2 /*LMAC15P4_2P4G_OQPSK*/, 0);
+    lmac15p4_phy_pib_set(128, 1, 85, 128);
+    lmac15p4_mac_pib_set(320, 544, 8, 10, 16896, 4, 5);
+
+    /* Send RUCI_INITIATE_BLE right after lmac15p4_init — matching Rafael
+     * official SDK timing (BLEManagerImpl: rf_init → lmac15p4_init → PIB →
+     * ble_init which sends INITIATE_BLE internally).  This must happen here
+     * and NOT later in hci_rt58x_setup(), because late INITIATE_BLE causes
+     * the RF MCU scheduler to stop polling the 15.4 TX queue. */
+    {
+        uint8_t ruci_ble_init[] = { 0x10, 0x01, 0x00 }; /* INITIATE_BLE */
+        hosal_rf_write_command(ruci_ble_init, sizeof(ruci_ble_init));
+        k_sleep(K_MSEC(20));
+        printk("[BOOT] RUCI_INITIATE_BLE sent (early, matching Rafael SDK)\n");
+    }
+
     hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
     phase_ms = k_uptime_get_32() - t0;
     printk("[BOOT] RF init + settle: %u ms\n", phase_ms);

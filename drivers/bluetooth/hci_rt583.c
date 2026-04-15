@@ -363,26 +363,13 @@ static int hci_rt58x_setup(const struct device *dev,
 	 * Packet: [0x12=PCI_BLE_CMD_HEADER, 0x01=INITIATE_BLE code, 0x00=len]
 	 * Response: RUCI_PCI_EVENT confirmation → handle_event_status releases
 	 * g_rf_cmd_sem automatically even if g_pci_event_cb is NULL.          */
+	/* RUCI_INITIATE_BLE is now sent early in AppTask::Init() (right after
+	 * lmac15p4_init), matching Rafael official SDK's ble_init() timing.
+	 * Sending it here (much later, during bt_enable) causes the RF MCU
+	 * scheduler to de-prioritize the 15.4 TX queue → 15.4 frames never
+	 * appear OTA.  Skip it here; the early init already activated BLE. */
 	if (hci_rt58x_rf_already_init) {
-		uint8_t ruci_ble_init[RUCI_LEN_INITIATE_BLE];
-		SET_RUCI_PARA_INITIATE_BLE(ruci_ble_init);
-		RUCI_ENDIAN_CONVERT(ruci_ble_init, RUCI_INITIATE_BLE);
-
-		for (int i = 0; i < SEND_RETRY_MAX; i++) {
-			rc = hosal_rf_write_command(ruci_ble_init,
-						    sizeof(ruci_ble_init));
-			if (rc == 0) {
-				break;
-			}
-			k_sleep(SEND_RETRY_DELAY);
-		}
-		if (rc != 0) {
-			printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE FAILED rc=%d\n", rc);
-			/* Non-fatal — continue with HCI setup */
-		} else {
-			/* Wait for RUCI confirmation (releases g_rf_cmd_sem) */
-			k_sleep(K_MSEC(20));
-		}
+		printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE skipped (done in AppTask)\n");
 	}
 
 	uint8_t cmd[] = {

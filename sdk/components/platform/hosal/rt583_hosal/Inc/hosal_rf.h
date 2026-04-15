@@ -294,6 +294,10 @@ void hosal_rf_resume(void);
 /* Diagnostic: print ISR/event/wakeup counters and current RF MCU power state. */
 void hosal_rf_dump_diag(void);
 
+/* Reload RF MCU firmware (e.g. MULTI_PROTOCOL → RUCI_CMD) without
+ * recreating the processing thread.  Returns true on success. */
+bool hosal_rf_reload_fw(hosal_rf_mode_t mode);
+
 /*@}*/ /* end of RT58X_HOSAL HOSAL_RF */
 
 #ifdef __cplusplus

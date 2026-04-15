@@ -28,6 +28,7 @@
 #include <zephyr/sys/printk.h>
 
 #include <openthread/instance.h>
+#include <openthread/thread.h>
 
 #include "openthread_port.h"
 #include "hosal_rf.h"
@@ -49,20 +50,41 @@ K_SEM_DEFINE(ot_task_sem, 0, 1);
 /* Mutex used by OT_THREAD_SAFE wrappers — kept for completeness. */
 K_MUTEX_DEFINE(ot_ext_lock);
 
+/* ── OT instance tracking (forward declaration for diag) ────────────────── */
+
+static otInstance *s_ot_instance;
+
 /* ── Periodic RF diagnostic dump ────────────────────────────────────────── */
 
 static void rf_diag_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(rf_diag_work, rf_diag_work_fn);
 
+static const char *ot_role_str(otDeviceRole role)
+{
+    switch (role) {
+    case OT_DEVICE_ROLE_DISABLED: return "disabled";
+    case OT_DEVICE_ROLE_DETACHED: return "detached";
+    case OT_DEVICE_ROLE_CHILD:    return "child";
+    case OT_DEVICE_ROLE_ROUTER:   return "router";
+    case OT_DEVICE_ROLE_LEADER:   return "leader";
+    default:                      return "?";
+    }
+}
+
 static void rf_diag_work_fn(struct k_work *work)
 {
     hosal_rf_dump_diag();
+    if (s_ot_instance) {
+        otDeviceRole role = otThreadGetDeviceRole(s_ot_instance);
+        printk("[OT] role=%s rloc=0x%04x part=0x%08x\n",
+               ot_role_str(role),
+               otThreadGetRloc16(s_ot_instance),
+               (unsigned)otThreadGetPartitionId(s_ot_instance));
+    }
     k_work_reschedule(&rf_diag_work, K_SECONDS(10));
 }
 
-/* ── OT instance tracking ────────────────────────────────────────────────── */
-
-static otInstance *s_ot_instance;
+/* ── OT instance management ─────────────────────────────────────────────── */
 
 /**
  * ot_set_instance — called by AppTask after openthread_init() so that
