@@ -58,7 +58,13 @@
 
 /* ── Disable unused features (save flash) ──────────────────────────────── */
 
+/* CoAP: disabled for Matter (saves flash), enabled for Thread CLI (OTA).
+ * OT_INCLUDE_CLI is set to 0 for Matter, 1 for Thread CLI. */
+#if OT_INCLUDE_CLI
+#define OPENTHREAD_CONFIG_COAP_API_ENABLE                1
+#else
 #define OPENTHREAD_CONFIG_COAP_API_ENABLE                0
+#endif
 #define OPENTHREAD_CONFIG_JOINER_ENABLE                  0
 #define OPENTHREAD_CONFIG_COMMISSIONER_ENABLE            0
 #define OPENTHREAD_CONFIG_UDP_FORWARD_ENABLE             0
