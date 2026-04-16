@@ -2,117 +2,99 @@
  * openthread-core-rt583-zephyr-config.h
  *
  * OpenThread compile-time configuration for RT583 on Zephyr.
+ * Aligned with Rafael official Matter SDK (OpenThreadConfig.h).
  * Must be set as OPENTHREAD_CONFIG_FILE when building OT.
  */
 
 #ifndef OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_
 #define OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_
 
-#include <openthread/logging.h>
+/* ── Platform ──────────────────────────────────────────────────────────── */
 
-/* Use otPlatSettings* API (SDK libopenthread-ftd.a calls these directly) */
-/* OPENTHREAD_CONFIG_PLATFORM_FLASH_API_ENABLE is NOT set */
+#define OPENTHREAD_CONFIG_PLATFORM_INFO                  "RT58x"
+#define OPENTHREAD_CONFIG_PLATFORM_ASSERT_MANAGEMENT     1
+#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE     0
+#define OPENTHREAD_CONFIG_PLATFORM_FLASH_API_ENABLE      0
 
-/* Route OT_ASSERT through otPlatAssertFail() so failures print file+line
- * instead of silently spinning in while(1). */
-#define OPENTHREAD_CONFIG_PLATFORM_ASSERT_MANAGEMENT 1
+/* ── Logging ───────────────────────────────────────────────────────────── */
 
-/* Crypto backend: use OT's bundled mbedTLS (NOT Zephyr's PSA).
- *
- * Zephyr's crypto_psa.c (compiled from modules/openthread/platform/) checks
- * mContextSize >= sizeof(psa_mac_operation_t) from mbedTLS 4.0, but OT core
- * allocates sizeof(mbedtls_md_context_t) from the bundled mbedTLS 3.6.0.
- * These sizes differ (4.0 includes CMAC context in the union), so Zephyr's
- * checkContext() assertion fires.
- *
- * Fix: keep OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS (default).
- * OT's own crypto_platform.cpp (compiled from OT_CORE_SOURCES) provides all
- * otPlatCrypto* functions using OT's bundled mbedTLS — context sizes match.
- * With --allow-multiple-definition, crypto_platform.cpp (in libapp.a) takes
- * precedence over crypto_psa.c (in Zephyr's platform library).
- *
- * NOTE: OPENTHREAD_CONFIG_CRYPTO_LIB defaults to MBEDTLS(=0) so this line
- * is informational; the #ifndef guard in config/crypto.h handles the default. */
-/* #define OPENTHREAD_CONFIG_CRYPTO_LIB OPENTHREAD_CONFIG_CRYPTO_LIB_MBEDTLS */
+#define OPENTHREAD_CONFIG_LOG_OUTPUT                      OPENTHREAD_CONFIG_LOG_OUTPUT_APP
+#define OPENTHREAD_CONFIG_LOG_LEVEL                       OT_LOG_LEVEL_NONE
+#define OPENTHREAD_CONFIG_LOG_LEVEL_DYNAMIC_ENABLE       0
+#define OPENTHREAD_CONFIG_LOG_PLATFORM                   1
 
-/* Microsecond alarm — TIMER3 hardware on RT583 */
-#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE     1
+/* ── Heap ──────────────────────────────────────────────────────────────── */
 
-/* FTD (Full Thread Device) */
-#define OPENTHREAD_FTD                                   1
-#define OPENTHREAD_CONFIG_THREAD_VERSION                 OT_THREAD_VERSION_1_3
+#define OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE           1
+#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (2048 * sizeof(void *))
 
-/* CLI */
-#define OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH            256
-#define OPENTHREAD_CONFIG_CLI_UART_TX_BUFFER_SIZE        512
+/* ── Radio / MAC ───────────────────────────────────────────────────────── */
 
-/* Logging — set to NONE for production, DEBG for development */
-#define OPENTHREAD_CONFIG_LOG_OUTPUT    OPENTHREAD_CONFIG_LOG_OUTPUT_APP
-#define OPENTHREAD_CONFIG_LOG_LEVEL     OT_LOG_LEVEL_WARN
-
-/* MAC */
-#define OPENTHREAD_CONFIG_MAC_MAX_TX_ATTEMPTS_DIRECT             4
+#define OPENTHREAD_CONFIG_RADIO_2P4GHZ_OQPSK_SUPPORT    1
+#define OPENTHREAD_CONFIG_RADIO_915MHZ_OQPSK_SUPPORT    0
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_SECURITY_ENABLE 1
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_CSMA_BACKOFF_ENABLE 0
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_RETRANSMIT_ENABLE 0
+#define OPENTHREAD_CONFIG_MAC_SOFTWARE_TX_TIMING_ENABLE  1
+#define OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE        0
+#define OPENTHREAD_CONFIG_MAC_CSL_REQUEST_AHEAD_US       0
 #define OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_DIRECT   4
+#define OPENTHREAD_CONFIG_MAC_DEFAULT_MAX_FRAME_RETRIES_INDIRECT 8
+#define OPENTHREAD_CONFIG_NUM_MESSAGE_BUFFERS            80
 
-/* Heap — internal pool for OT dynamic allocations.
- * 6 KB covers: FTD idle state + BLE commissioning + SRP client registration
- * + SRP server service record storage (enabled for standalone Leader mode).
- * Raised from 4 KB to accommodate the SRP server storing the Matter
- * operational service record alongside the SRP client's working buffers. */
-#define OPENTHREAD_CONFIG_HEAP_INTERNAL_SIZE             (6 * 1024)
+/* ── MLE ───────────────────────────────────────────────────────────────── */
 
-/* CoAP API — needed for OTA subsystem */
-#define OPENTHREAD_CONFIG_COAP_API_ENABLE                1
-#define OPENTHREAD_CONFIG_JOINER_ENABLE                  0
+#define OPENTHREAD_CONFIG_MLE_MAX_CHILDREN               16
+#define OPENTHREAD_CONFIG_MLE_ROUTER_SELECTION_JITTER    15
+/* Leader Weight=1 so OTBR (weight=64) always wins partition merge */
+#define OPENTHREAD_CONFIG_MLE_LEADER_WEIGHT              1
 
-/* NCP disabled */
-#define OPENTHREAD_CONFIG_NCP_HDLC_ENABLE                0
+/* ── Crypto ────────────────────────────────────────────────────────────── */
 
-/* ECDSA — required by SRP client for signing */
 #define OPENTHREAD_CONFIG_ECDSA_ENABLE                   1
+#define OPENTHREAD_CONFIG_DETERMINISTIC_ECDSA_ENABLE     1
+#define OPENTHREAD_CONFIG_ENABLE_BUILTIN_MBEDTLS_MANAGEMENT 0
+#define OPENTHREAD_CONFIG_SECURE_TRANSPORT_ENABLE        0
 
-/* SRP Client — required by Matter for service advertisement via Thread */
+/* ── Disable unused features (save flash) ──────────────────────────────── */
+
+#define OPENTHREAD_CONFIG_COAP_API_ENABLE                0
+#define OPENTHREAD_CONFIG_JOINER_ENABLE                  0
+#define OPENTHREAD_CONFIG_COMMISSIONER_ENABLE            0
+#define OPENTHREAD_CONFIG_UDP_FORWARD_ENABLE             0
+#define OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE           0
+#define OPENTHREAD_CONFIG_DHCP6_CLIENT_ENABLE            0
+#define OPENTHREAD_CONFIG_DHCP6_SERVER_ENABLE            0
+#define OPENTHREAD_CONFIG_TCP_ENABLE                     0
+#define OPENTHREAD_CONFIG_PING_SENDER_ENABLE             0
+#define OPENTHREAD_CONFIG_NCP_HDLC_ENABLE                0
+#define OPENTHREAD_CONFIG_DUA_ENABLE                     0
+
+/* ── SRP Client (required by Matter for service advertisement) ─────────── */
+
 #define OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE 1
 
-/* SRP Server — required when the RT583 is a standalone Thread Leader.
- * Without an OTBR, the device must run its own SRP server so the local
- * SRP client can register services and the Matter DNS-SD init callback
- * (OpenThreadDnssdInit) can fire.  AppTask enables/disables it via
- * otSrpServerSetEnabled() based on the Thread role.
- * Dependencies: TMF_NETDATA_SERVICE (explicit), NETDATA_PUBLISHER
- * (auto-derives from SRP_SERVER_ENABLE), ECDSA (already set above). */
+/* ── SRP Server (standalone Leader mode — no OTBR) ─────────────────────── */
+
 #define OPENTHREAD_CONFIG_SRP_SERVER_ENABLE              1
 #define OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE     1
 
-/* DNS Client — required by Matter for service discovery (mDNS-over-Thread) */
+/* ── DNS Client (required for CASE over Thread via OTBR) ───────────────── */
+
 #define OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE 1
 
-/* Router Selection Jitter — reduce from default 120 s so a Child promotes to
- * Router faster after joining the Thread partition.  15 s is well above the
- * MLE REED advertisement period (5 s) so the network has time to stabilise
- * before the promotion request is sent. */
-#define OPENTHREAD_CONFIG_MLE_ROUTER_SELECTION_JITTER    15
+/* ── SLAAC (OMR address for SRP registration) ──────────────────────────── */
 
-/* Leader Weight — set to minimum so OTBR (default weight=64) always wins
- * partition merge when both RT583 and OTBR form separate partitions.
- * Without this, both have weight=64 and the winner is random (partition ID
- * comparison), so RT583 might stay Leader and OTBR joins RT583 instead.
- * Weight=1 ensures RT583 always yields and joins OTBR's partition. */
-#define OPENTHREAD_CONFIG_MLE_LEADER_WEIGHT              1
-
-/* SLAAC: auto-configure IPv6 addresses from on-mesh prefixes in Network Data.
- * Without this, the device only has mesh-local addresses.  OTBR publishes an
- * OMR prefix (e.g. fd11:35::/64); SLAAC creates a routable address from it.
- * The SRP client (otSrpClientEnableAutoHostAddress) then registers this address
- * with the SRP server.  Without a routable address, SRP host has addrs=0 and
- * the OTBR mDNS proxy cannot resolve the device → CASE over Thread fails. */
 #define OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE               1
 
-/* Multicast Listener Registration (Thread 1.2+): register multicast group
- * memberships with the border router so that off-mesh multicast traffic
- * reaches Thread devices. */
+/* ── MLR (Thread 1.2+ multicast) ───────────────────────────────────────── */
+
 #define OPENTHREAD_CONFIG_MLR_ENABLE                     1
+
+/* ── CLI ───────────────────────────────────────────────────────────────── */
+
+#define OPENTHREAD_CONFIG_CLI_UART_TX_BUFFER_SIZE        256
 
 #endif /* OPENTHREAD_CORE_RT583_ZEPHYR_CONFIG_H_ */

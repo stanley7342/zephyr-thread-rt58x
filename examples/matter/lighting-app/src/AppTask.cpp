@@ -350,7 +350,7 @@ static void DoFactoryReset(intptr_t /* arg */)
 #ifdef CONFIG_NET_L2_OPENTHREAD
     /* Clear SRP host/services before leaving Thread network */
     if (chip::DeviceLayer::ThreadStackMgr().IsThreadAttached()) {
-        chip::DeviceLayer::ThreadStackMgr().ClearAllSrpHostAndServices();
+        (void) chip::DeviceLayer::ThreadStackMgr().ClearAllSrpHostAndServices();
     }
     chip::DeviceLayer::ConnectivityMgr().ErasePersistentInfo();
 #endif
