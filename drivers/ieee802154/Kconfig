@@ -1,15 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config IEEE802154_RT583
-	bool "Rafael RT583 IEEE 802.15.4 radio stub driver"
+	bool "Rafael RT583 IEEE 802.15.4 radio driver"
 	default y
 	depends on DT_HAS_RAFAEL_RT583_IEEE802154_ENABLED
 	help
-	  Provides a DTS device node for the RT583 radio so that Zephyr's
-	  OpenThread platform (radio.c) can resolve DT_CHOSEN(zephyr_ieee802154).
-	  The actual radio operation is handled by ot_radio.c / lmac15p4.
+	  IEEE 802.15.4 radio driver for the RT583 SoC.  By default a
+	  compile-time stub (see IEEE802154_RT583_FULL for the real driver).
+	  The stub provides a DTS device node so that Zephyr's OpenThread
+	  platform (radio.c) can resolve DT_CHOSEN(zephyr_ieee802154); real
+	  radio operation is then handled directly by ot_radio.c / lmac15p4.
 
 config IEEE802154_RT583_INIT_PRIORITY
-	int "RT583 IEEE 802.15.4 stub init priority"
+	int "RT583 IEEE 802.15.4 driver init priority"
 	default 80
 	depends on IEEE802154_RT583
+
+config IEEE802154_RT583_FULL
+	bool "Full RT583 IEEE 802.15.4 driver (replaces ot_radio.c otPlat* path)"
+	default n
+	depends on IEEE802154_RT583
+	select NET_L2_IEEE802154
+	help
+	  Implements the full Zephyr ieee802154_radio_api on top of lmac15p4
+	  so that Zephyr's modules/openthread/platform/radio.c drives the RT583
+	  radio via the standard driver API (net_pkt based TX/RX, proper L2
+	  integration).  When disabled (default), the legacy path in
+	  ot_radio.c provides otPlatRadio* directly via lmac15p4 and this
+	  driver remains a compile-time stub.
+
+	  Enable this only when refactoring away from the legacy path —
+	  requires simultaneously removing the otPlatRadio* overrides in
+	  ot_radio.c and unstripping radio.c / memory.c in
+	  cmake/zephyr_module/CMakeLists.txt.

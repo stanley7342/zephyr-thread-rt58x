@@ -147,6 +147,15 @@ static void ReverseExtAddress(otExtAddress *dst, const otExtAddress *src)
     }
 }
 
+/* ── otPlatRadio* overrides (legacy path) ──────────────────────────────────
+ *
+ * When CONFIG_IEEE802154_RT583_FULL=y, Zephyr's modules/openthread/platform/
+ * radio.c provides otPlatRadio* via our new ieee802154 driver (lmac15p4
+ * wrapped in the standard ieee802154_radio_api), so these direct overrides
+ * are compiled out to avoid link conflicts.
+ */
+#if !defined(CONFIG_IEEE802154_RT583_FULL)
+
 /* ── Radio config getters ────────────────────────────────────────────────── */
 uint32_t otPlatRadioGetBusSpeed(otInstance *aInstance)
 {
@@ -862,6 +871,8 @@ void ot_radioTask(ot_system_event_t trxEvent)
     }
 }
 
+#endif  /* !CONFIG_IEEE802154_RT583_FULL */
+
 /* ── ot_radioInit ────────────────────────────────────────────────────────── */
 static void rafael_otp_mac_addr(uint8_t *addr)
 {
@@ -872,6 +883,13 @@ static void rafael_otp_mac_addr(uint8_t *addr)
 
 void ot_radioInit(void)
 {
+#if defined(CONFIG_IEEE802154_RT583_FULL)
+    /* All radio setup (callbacks, channel, auto-ack, src-match, EUI-64
+     * derivation) is done by ieee802154_rt583.c at POST_KERNEL device
+     * init.  Nothing left to do here. */
+    printk("[OT-RADIO] ot_radioInit: no-op (ieee802154 driver handles init)\n");
+    return;
+#else
     lmac15p4_callback_t mac_cb;
     uint8_t ff[OT_EXT_ADDRESS_SIZE];
     memset(ff, 0xFF, sizeof(ff));
@@ -932,6 +950,7 @@ void ot_radioInit(void)
     lmac15p4_auto_state_set(sAuto_State_Set);
     lmac15p4_src_match_ctrl(0, true);
     lmac15p4_src_match_short_entry(CLEAR_ALL, NULL);
+#endif  /* CONFIG_IEEE802154_RT583_FULL */
 }
 
 /* ── Address control helpers (public) ────────────────────────────────────── */
