@@ -15,7 +15,10 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
 #include <openthread/instance.h>
+#include <openthread/error.h>
+#include <openthread/platform/crypto.h>
 #include <zephyr/net/net_pkt.h>
 
 /**
@@ -32,42 +35,65 @@ void otSysInit(int argc, char *argv[])
 {
     (void)argc;
     (void)argv;
+#if defined(CONFIG_IEEE802154_RT583_FULL)
+    /* Zephyr's modules/openthread/platform/radio.c owns the IEEE 802.15.4
+     * driver handle (radio_dev / radio_api) and caches them in
+     * platformRadioInit().  Since we strip platform.c from the build, we
+     * must call platformRadioInit() ourselves here so radio_api gets set
+     * before any radio_api-using code runs; otherwise the first call to
+     * any otPlatRadio* NULL-derefs radio_api and reboots. */
+    extern void platformRadioInit(void);
+    platformRadioInit();
+#endif
 }
 
+#if defined(CONFIG_IEEE802154_RT583_FULL)
 /**
- * platformRadioInit — no-op.
+ * otPlatCryptoExportKey — stub for CONFIG_IEEE802154_RT583_FULL path.
  *
- * Real radio initialisation is performed by ot_radioInit() in ot_radio.c,
- * which is called from AppTask::Init() after hosal_rf_init() has prepared the
- * RF MCU.  Zephyr's radio.c version would panic because the RT583 IEEE 802.15.4
- * stub driver intentionally does not implement the full driver API.
+ * Zephyr's modules/openthread/platform/radio.c calls this from
+ * otPlatRadioSetMacKey() when MAC keys are passed by reference.  The real
+ * implementation lives in Zephyr's crypto_psa.c which we strip (duplicates
+ * with ot_crypto.c otPlat* overrides).  Our OT config uses literal keys
+ * (not key refs), so this path is never hit at runtime; provide a no-op
+ * stub to satisfy the linker.
+ */
+otError otPlatCryptoExportKey(otCryptoKeyRef aKeyRef, uint8_t *aBuffer,
+                              size_t aBufferLen, size_t *aKeyLen)
+{
+    (void)aKeyRef;
+    (void)aBuffer;
+    (void)aBufferLen;
+    if (aKeyLen) {
+        *aKeyLen = 0;
+    }
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+#else
+/**
+ * platformRadioInit / platformRadioProcess / notify_new_{rx,tx}_frame — no-op
+ * stubs used only when CONFIG_IEEE802154_RT583_FULL=n.
+ *
+ * In the legacy path the real radio work is done by ot_radio.c directly via
+ * lmac15p4 (bypassing Zephyr's ieee802154 driver / L2 net_pkt plumbing), so
+ * Zephyr's modules/openthread/platform/radio.c is stripped out via
+ * cmake/zephyr_module/CMakeLists.txt and these stubs satisfy remaining
+ * link references from subsys/net/l2/openthread/openthread.c.
+ *
+ * When CONFIG_IEEE802154_RT583_FULL=y, radio.c is un-stripped and provides
+ * the real implementations — these stubs must NOT be present to avoid
+ * duplicate-definition errors.
  */
 void platformRadioInit(void)
 {
 }
 
-/**
- * platformRadioProcess — no-op.
- *
- * RT583 radio events (RX done, TX done) are delivered via lmac15p4 callbacks
- * registered in ot_radioInit().  Zephyr's radio.c version processes events via
- * the ieee802154 driver API which the RT583 stub does not implement.
- */
 void platformRadioProcess(otInstance *aInstance)
 {
     (void)aInstance;
 }
 
-/**
- * notify_new_rx_frame / notify_new_tx_frame — no-op stubs.
- *
- * Zephyr's subsys/net/l2/openthread/openthread.c calls these when a net_pkt
- * traverses the L2 send / receive path.  In the default Zephyr build they live
- * in modules/openthread/platform/radio.c and push the packet into a FIFO for
- * the ieee802154 driver.  We strip radio.c (our ot_radio.c drives the RT583
- * lmac15p4 directly without net_pkt), so provide link-time stubs that return
- * failure — the L2 net_pkt path is unused in our radio architecture.
- */
 int notify_new_rx_frame(struct net_pkt *pkt)
 {
     (void)pkt;
@@ -79,6 +105,7 @@ int notify_new_tx_frame(struct net_pkt *pkt)
     (void)pkt;
     return -1;
 }
+#endif /* !CONFIG_IEEE802154_RT583_FULL */
 
 /**
  * ot_uartTask — no-op stub for the Matter build only.

@@ -79,6 +79,11 @@ if(CONFIG_IEEE802154_RT583 AND TARGET drivers__ieee802154)
     )
     target_include_directories(drivers__ieee802154 PRIVATE
         ${_RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
+        # Real driver (CONFIG_IEEE802154_RT583_FULL) needs lmac15p4 + hosal_rf + hosal_trng
+        ${_RT583_MODULE_ROOT}/sdk/components/network/lmac15p4/Inc
+        ${_RT583_PLATFORM}/hosal/rt583_hosal/Inc
+        # Also needs rf_mcu_types (included transitively by hosal_rf.h)
+        ${_RT583_MODULE_ROOT}/sdk/components/network/rt569-rf/rt583/Inc
     )
 endif()
 
@@ -124,11 +129,20 @@ if(CONFIG_OPENTHREAD_RT583)
         #   logging      → ot_logging.c         (tprintk backend)
         #   crypto_psa   → ot_crypto.c (subset) + OT's OT_TOOL_WEAK defaults in
         #                  crypto_platform.cpp supply Ecdsa*/Pbkdf2GenerateKey
-        # radio:  our ot_radio.c drives the RT583 lmac15p4 directly.
         # memory: our ot_memory.c wraps otPlatCAlloc / otPlatFree to k_malloc.
-        set(_strip_regex
-            "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|radio|memory)\\.c$"
-        )
+        # radio is kept (un-stripped) when CONFIG_IEEE802154_RT583_FULL=y so
+        # that Zephyr's modules/openthread/platform/radio.c handles otPlatRadio*
+        # via our ieee802154 driver API; stripped otherwise so ot_radio.c's
+        # otPlatRadio* overrides win the link.
+        if(CONFIG_IEEE802154_RT583_FULL)
+            set(_strip_regex
+                "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|memory)\\.c$"
+            )
+        else()
+            set(_strip_regex
+                "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|radio|memory)\\.c$"
+            )
+        endif()
         set(_did_platform 0)
         set(_did_utils 0)
         if(TARGET openthread_platform)

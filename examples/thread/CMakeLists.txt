@@ -61,13 +61,10 @@ if(CONFIG_OTA)
     include(${RT583_PROJECT_DIR}/subsys/ota/CMakeLists.txt)
 endif()
 
-# --allow-multiple-definition is no longer required. Duplicates were eliminated in:
-#   - subsys/openthread/CMakeLists.txt (excludes conflicting OT-bundled mbedTLS
-#     files: cipher.c, constant_time.c, psa_util.c, sha256.c, psa_crypto_mac.c)
-#   - cmake/zephyr_module/CMakeLists.txt (defer-strips Zephyr's
-#     openthread_platform stubs we fully replace: alarm_*, entropy, misc,
-#     platform, settings, logging, crypto_psa, radio, memory; and
-#     openthread_utils openthread.c when CONFIG_NET_L2_OPENTHREAD=n)
-#   - sdk/.../rt_crypto.c (crypto_mutex_lock/unlock now __weak)
-#   - sdk/.../crypto_platform.cpp (HKDF init/deinit now OT_TOOL_WEAK)
-#   - sdk/.../ot_radio.c (otPlatRadioGetIeeeEui64 now __weak — Zephyr L2 wins)
+# OT's bundled mbedTLS 3.6 overlaps with Zephyr's TF-PSA-Crypto 4.0 for
+# platform.c / cipher.c / constant_time.c / psa_util.c — these MUST use OT's
+# 3.6 copies because OT code is compiled against 3.6 headers (struct layouts
+# differ between 3.6 and 4.0; mixing causes mbedtls_cipher_free to deref
+# ctx_free_func at the wrong offset).  libapp.a precedes libtfpsacrypto.a in
+# link order, so OT's 3.6 .o files win when this flag is set.
+zephyr_ld_options(-Wl,--allow-multiple-definition)

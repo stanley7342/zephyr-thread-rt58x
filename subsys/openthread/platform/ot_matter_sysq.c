@@ -197,5 +197,10 @@ void otSysProcessDrivers(otInstance *aInstance)
 
     ot_alarmTask(sevent);       /* alarm-milli / alarm-micro event dispatch */
     ot_uartTask(sevent);        /* no-op stub in rt583_otsys.c              */
+#if !defined(CONFIG_IEEE802154_RT583_FULL)
     ot_radioTask(sevent);       /* TX-done / RX-done event dispatch          */
+    /* In CONFIG_IEEE802154_RT583_FULL mode, Zephyr's modules/openthread/
+     * platform/radio.c processes radio events via its own work queue; the
+     * SDK ot_radioTask() is gated out in ot_radio.c. */
+#endif
 }
