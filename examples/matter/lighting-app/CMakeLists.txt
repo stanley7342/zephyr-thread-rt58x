@@ -472,12 +472,11 @@ target_compile_definitions(app PRIVATE
 # Suppress warnings in vendored SDK sources
 target_compile_options(app PRIVATE -Wno-error=maybe-uninitialized)
 
-# Multiple definition suppressions for Matter + OT coexistence:
-#  1. otPlatRadioGetIeeeEui64: defined in both ot_radio.c (ours, HW-backed) and
-#     Zephyr's subsys/net/l2/openthread/openthread.c (needed when
-#     CONFIG_NET_L2_OPENTHREAD=y). Our version wins (first in link order).
-#  2. mbedtls ssl_*/x509_*/pk_* symbols: OT bundles its own mbedTLS 2.x/3.x
-#     (compiled from source) while Zephyr also links its system mbedTLS 4.0.
-#     OT uses its own ssl_* internally (DTLS); Matter uses PSA, not ssl_* directly.
-#     --allow-multiple-definition keeps the first definition (ours, from libapp.a).
+# OT's bundled mbedTLS 3.6 vs Zephyr's TF-PSA-Crypto 4.0: cipher_context_t
+# struct layout differs.  OT code is compiled against 3.6 headers, so the
+# compiled .c bodies (cipher.c / constant_time.c / psa_util.c) MUST come from
+# OT's 3.6 set — otherwise mbedtls_cipher_free dereferences the wrong struct
+# offset for ctx_free_func and jumps to a garbage function pointer.
+# -Wl,--allow-multiple-definition + libapp.a ordered before libtfpsacrypto.a
+# makes OT's 3.6 versions win the link.
 zephyr_ld_options(-Wl,--allow-multiple-definition)

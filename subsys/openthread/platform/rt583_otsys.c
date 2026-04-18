@@ -16,6 +16,23 @@
 
 #include <stdint.h>
 #include <openthread/instance.h>
+#include <zephyr/net/net_pkt.h>
+
+/**
+ * otSysInit — no-op.
+ *
+ * Zephyr's openthread.c (openthread_init) calls otSysInit() early in the OT L2
+ * startup path.  The default implementation in modules/openthread/platform/
+ * platform.c chains platformRadioInit / platformAlarm*Init — none of which
+ * apply to RT583 (our radio is driven by ot_radioInit via lmac15p4 and our
+ * alarm tick by ot_alarm.c).  We strip platform.c from the build and provide
+ * this empty stub so the symbol still resolves at link time.
+ */
+void otSysInit(int argc, char *argv[])
+{
+    (void)argc;
+    (void)argv;
+}
 
 /**
  * platformRadioInit — no-op.
@@ -39,6 +56,28 @@ void platformRadioInit(void)
 void platformRadioProcess(otInstance *aInstance)
 {
     (void)aInstance;
+}
+
+/**
+ * notify_new_rx_frame / notify_new_tx_frame — no-op stubs.
+ *
+ * Zephyr's subsys/net/l2/openthread/openthread.c calls these when a net_pkt
+ * traverses the L2 send / receive path.  In the default Zephyr build they live
+ * in modules/openthread/platform/radio.c and push the packet into a FIFO for
+ * the ieee802154 driver.  We strip radio.c (our ot_radio.c drives the RT583
+ * lmac15p4 directly without net_pkt), so provide link-time stubs that return
+ * failure — the L2 net_pkt path is unused in our radio architecture.
+ */
+int notify_new_rx_frame(struct net_pkt *pkt)
+{
+    (void)pkt;
+    return -1;
+}
+
+int notify_new_tx_frame(struct net_pkt *pkt)
+{
+    (void)pkt;
+    return -1;
 }
 
 /**

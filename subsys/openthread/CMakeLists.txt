@@ -34,6 +34,11 @@ if(NOT DEFINED OT_INCLUDE_CLI OR OT_INCLUDE_CLI)
 endif()
 # extension_example.cpp requires optional OT Extension API — exclude.
 list(FILTER OT_CORE_SOURCES EXCLUDE REGEX "extension_example\\.cpp$")
+# Keep crypto_platform.cpp: the Thread CLI build (no CONFIG_OPENTHREAD_CRYPTO_PSA)
+# relies on its default otPlatCryptoEcdsa* / otPlatCryptoPbkdf2GenerateKey
+# implementations.  Conflicts with our ot_crypto.c are absorbed by
+# -Wl,--allow-multiple-definition (ot_crypto.c wins because libapp.a is ahead
+# in link order) — see examples/thread/CMakeLists.txt for the rationale.
 
 # ── Collect tcplp sources ─────────────────────────────────────────────────────
 file(GLOB_RECURSE OT_TCPLP_SOURCES
@@ -63,6 +68,14 @@ list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "psa_crypto_mac\\.c$")
 # it.  Using TF-PSA-Crypto's sha256.c (no SHA224_C, no is224 write) removes the
 # corruption.
 list(FILTER OT_MBEDTLS_SOURCES EXCLUDE REGEX "sha256\\.c$")
+# cipher.c / constant_time.c / psa_util.c are kept even though they also exist
+# in Zephyr's TF-PSA-Crypto 4.0: struct layouts (e.g. mbedtls_cipher_context_t)
+# differ between OT's bundled 3.6 and TF-PSA 4.0, so OT code compiled against
+# 3.6 headers MUST call the 3.6 .c body at runtime — otherwise mbedtls_cipher_free
+# dereferences ctx_free_func at the wrong struct offset and jumps to garbage.
+# Duplicate-definition link errors between libapp.a and libtfpsacrypto.a are
+# absorbed by -Wl,--allow-multiple-definition in examples/matter/lighting-app/
+# CMakeLists.txt (libapp.a comes first → OT 3.6 wins).
 
 target_sources(app PRIVATE
     # RT583 OT system overrides (must come before libopenthread_platform.a in
@@ -93,9 +106,11 @@ target_sources(app PRIVATE
     ${OT_PORT_SRC}/ecdh_alt.c
 
     # LMAC + RF MCU
+    # NOTE: hosal_trng.c is compiled once by drivers/entropy (drivers__entropy
+    # library) via cmake/zephyr_module/CMakeLists.txt — do NOT add it here or
+    # hosal_trng_get_random_number duplicates across two archives.
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_trng.c
     ${RT569_RF_DIR}/Src/rf_mcu.c
     ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
     ${RT569_RF_DIR}/Src/rf_common_init.c

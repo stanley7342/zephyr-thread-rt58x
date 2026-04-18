@@ -67,22 +67,16 @@ void crypto_start(uint8_t op_num, uint8_t sb_num)
 #if defined(CONFIG_SUPPORT_MULTITASKING)
 /*If system support multi-tasking, we should protect hardware for only one context.*/
 
-void crypto_mutex_lock(void)
+/* Weak fallbacks: platform supplies the real Zephyr k_mutex implementations
+ * in rt583_crypto_mutex.c (OS-dependent). When neither is linked, these
+ * no-op stubs keep single-threaded builds working. */
+__attribute__((weak)) void crypto_mutex_lock(void)
 {
-    /* TODO:  This is OS-depended code
-     * if device is busy, the task should wait here to get resource.
-     */
-
     return ;
 }
 
-void crypto_mutex_unlock(void)
+__attribute__((weak)) void crypto_mutex_unlock(void)
 {
-    /* TODO: This is OS-depended code
-     * If there is another device wait resource, it could be wakeup the
-     * task depends on priority.
-     */
-
     return ;
 }
 

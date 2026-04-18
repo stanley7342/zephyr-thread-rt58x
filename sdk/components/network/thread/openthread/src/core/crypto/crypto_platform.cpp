@@ -232,7 +232,7 @@ exit:
     return error;
 }
 
-otError otPlatCryptoHkdfInit(otCryptoContext *aContext)
+OT_TOOL_WEAK otError otPlatCryptoHkdfInit(otCryptoContext *aContext)
 {
     Error error = kErrorNone;
 
@@ -331,7 +331,7 @@ exit:
     return error;
 }
 
-otError otPlatCryptoHkdfDeinit(otCryptoContext *aContext)
+OT_TOOL_WEAK otError otPlatCryptoHkdfDeinit(otCryptoContext *aContext)
 {
     Error             error = kErrorNone;
     HmacSha256::Hash *prk;

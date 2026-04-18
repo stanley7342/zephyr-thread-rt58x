@@ -36,10 +36,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$projectDir  = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+# Locate the project root robustly regardless of how this script is invoked.
+# git rev-parse --show-toplevel finds the repo root from any directory inside
+# the repo (including the repo root itself), so this is immune to $PSScriptRoot
+# being empty or set to the repo root by an unusual invocation path (e.g. hooks).
+$_anchor     = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
+$_gitTop     = (git -C $_anchor rev-parse --show-toplevel 2>$null) -replace '/', '\'
+$projectDir  = if ($_gitTop) { $_gitTop } else { Split-Path (Split-Path $PSScriptRoot -Parent) -Parent }
 $projectName = Split-Path $projectDir -Leaf
 $Workspace   = Split-Path $projectDir -Parent
-$envPs1      = Join-Path $projectDir "env.ps1"
+$envPs1      = Join-Path $Workspace "env.ps1"
 
 if (-not (Test-Path $envPs1)) {
     throw "$envPs1 not found. Run install first:`n  .\scripts\windows\install.ps1"

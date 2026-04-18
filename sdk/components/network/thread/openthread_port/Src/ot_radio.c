@@ -185,6 +185,11 @@ otError otPlatRadioGetFemLnaGain(otInstance *aInstance, int8_t *aGain)
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
+/* Weak: Zephyr L2's openthread.c provides a strong implementation via hwinfo
+ * when CONFIG_NET_L2_OPENTHREAD=y (Matter build) and that version wins.
+ * For builds without Zephyr L2 (Thread CLI), our RT583 factory-provisioned
+ * EUI64 copied into sIEEE_EUI64Addr is used. */
+__attribute__((weak))
 void otPlatRadioGetIeeeEui64(otInstance *aInstance, uint8_t *aIeeeEui64)
 {
     OT_UNUSED_VARIABLE(aInstance);
