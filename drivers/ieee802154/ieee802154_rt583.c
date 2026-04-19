@@ -291,52 +291,75 @@ static int rt583_tx(const struct device *dev,
 		    struct net_buf *frag)
 {
 	struct rt583_radio_data *data = dev->data;
-	uint32_t csma_ca_flag;
 	int rc;
 
 	ARG_UNUSED(pkt);
 
-	switch (mode) {
-	case IEEE802154_TX_MODE_DIRECT:
-		csma_ca_flag = 0;
-		break;
-	case IEEE802154_TX_MODE_CSMA_CA:
-		csma_ca_flag = 1;
-		break;
-	default:
-		LOG_WRN("TX mode %d not supported, falling back to CSMA-CA", mode);
-		csma_ca_flag = 1;
-		break;
+	/* Parse IEEE 802.15.4 Frame Control bits used by lmac15p4:
+	 *   FC byte 0: bit 3 = security enabled, bit 5 = ACK request */
+	uint8_t fc0 = (frag->len >= 1) ? frag->data[0] : 0;
+	uint8_t ack_req = (fc0 & 0x20) ? 1 : 0;
+	uint8_t sec_enabled = (fc0 & 0x08) ? 1 : 0;
+	/* MAC sequence number is byte 2 of the PSDU (after 2-byte FC). */
+	uint8_t mac_dsn = (frag->len >= 3) ? frag->data[2] : 0;
+
+	/* lmac15p4 mac_control bitfield (matches legacy ot_radio.c TX path):
+	 *   bit 0: ACK request (1 = wait for ACK)
+	 *   bit 1: always 1 (encoded data-frame type to lmac)
+	 *   bit 2: CSMA-CA (1 = enable random backoff)
+	 * CSMA is always on unless caller explicitly asks direct TX. */
+	uint32_t csma = (mode == IEEE802154_TX_MODE_DIRECT) ? 0 : 1;
+	uint8_t mac_control = (ack_req ? 0x01u : 0x00u) | 0x02u
+			      | (csma ? 0x04u : 0x00u);
+
+	/* For MAC-secured frames lmac15p4 expects a 4-byte MAC frame counter
+	 * prepended BEFORE the PSDU, and the length argument to count from
+	 * those 4 bytes.  Without this, lmac cannot compute the correct CCM*
+	 * nonce, OTBR's MAC security check fails, and the frame is silently
+	 * dropped at OTBR (no MAC ACK, no upper-layer logs).
+	 *
+	 * We allocate a scratch buffer big enough for the whole PSDU + 4-byte
+	 * counter prefix.  For unsecured frames (most MLE), lmac15p4 still
+	 * accepts the prefix but simply doesn't use the counter value. */
+	static uint32_t s_mac_frame_counter;
+	uint32_t hw_fc = lmac15p4_frame_counter_get();
+	if (s_mac_frame_counter < hw_fc) {
+		s_mac_frame_counter = hw_fc + 1;
 	}
 
-	/* Parse ACK-request bit (bit 5) from IEEE 802.15.4 Frame Control byte 0.
-	 * Without this the radio never waits for (or retries on) an ACK, so
-	 * OTBR may silently drop our Child ID Request etc., leaving us stuck
-	 * in DETACHED even though RX of the Parent Response works. */
-	uint8_t ack_req = 0;
-	if (frag->len >= 2 && (frag->data[0] & 0x20)) {
-		ack_req = 1;
+	/* 127 = aMaxPHYPacketSize per IEEE 802.15.4-2006; +4 for the frame
+	 * counter prefix lmac15p4 requires in front of the PSDU. */
+	uint8_t tx_buf[127 + 4];
+	if (frag->len > sizeof(tx_buf) - 4) {
+		return -EMSGSIZE;
 	}
+	tx_buf[0] = (s_mac_frame_counter >>  0) & 0xFF;
+	tx_buf[1] = (s_mac_frame_counter >>  8) & 0xFF;
+	tx_buf[2] = (s_mac_frame_counter >> 16) & 0xFF;
+	tx_buf[3] = (s_mac_frame_counter >> 24) & 0xFF;
+	memcpy(tx_buf + 4, frag->data, frag->len);
 
-	/* lmac15p4 expects: pan_idx, address, length, csma_enable.  "length"
-	 * includes the 2-byte FCS which the hardware appends; frag->len is the
-	 * full PSDU (payload + FCS space). */
 	k_sem_reset(&data->tx_done_sem);
 	data->tx_done_status = LMAC154_TX_FAIL;
 
 	static uint32_t tx_count = 0;
 	tx_count++;
 	if (tx_count <= 10 || (tx_count & 0xF) == 0) {
-		printk("[15.4-TX] #%u len=%u ack=%u csma=%u fc0=0x%02x\n",
-		       tx_count, frag->len, (unsigned)ack_req,
-		       (unsigned)csma_ca_flag, (unsigned)frag->data[0]);
+		printk("[15.4-TX] #%u len=%u ctl=0x%02x dsn=%u fc0=0x%02x sec=%u\n",
+		       tx_count, frag->len, (unsigned)mac_control,
+		       (unsigned)mac_dsn, (unsigned)fc0, (unsigned)sec_enabled);
 	}
 
+	/* Length passed to lmac15p4: legacy ot_radio.c used `mLength + 2`
+	 * where OT's mLength INCLUDES the 2-byte FCS placeholder.  Zephyr's
+	 * OT glue strips FCS on TX (`tx_payload->len = mLength - FCS_SIZE`),
+	 * so frag->len is 2 bytes shorter than OT's mLength.  Therefore the
+	 * equivalent here is `frag->len + 4` (which equals `mLength + 2`). */
 	rc = lmac15p4_tx_data_send(/* pan_idx */ 0,
-				   frag->data,
-				   frag->len,
-				   ack_req,
-				   csma_ca_flag);
+				   tx_buf,
+				   /* packet_length */ frag->len + 4,
+				   mac_control,
+				   mac_dsn);
 	if (rc != 0) {
 		return -EIO;
 	}
