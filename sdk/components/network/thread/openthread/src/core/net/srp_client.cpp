@@ -28,6 +28,7 @@
 
 #include "srp_client.hpp"
 
+
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
 
 #include "instance/instance.hpp"
@@ -977,6 +978,7 @@ void Client::InvokeCallback(Error aError, const HostInfo &aHostInfo, const Servi
 
 void Client::SendUpdate(void)
 {
+
     static const ItemState kNewStateOnMessageTx[]{
         /* (0) kToAdd      -> */ kAdding,
         /* (1) kAdding     -> */ kAdding,
@@ -996,7 +998,10 @@ void Client::SendUpdate(void)
     info.mMessage.Reset(mSocket.NewMessage());
     VerifyOrExit(info.mMessage != nullptr, error = kErrorNoBufs);
 
-    SuccessOrExit(error = PrepareUpdateMessage(info));
+    {
+        Error err2 = PrepareUpdateMessage(info);
+        SuccessOrExit(error = err2);
+    }
 
     length = info.mMessage->GetLength() + sizeof(Ip6::Udp::Header) + sizeof(Ip6::Header);
 
@@ -1113,7 +1118,8 @@ Error Client::PrepareUpdateMessage(MsgInfo &aInfo)
     aInfo.mKeyInfo.SetKeyRef(Get<Crypto::Storage::KeyRefManager>().KeyRefFor(Crypto::Storage::KeyRefManager::kEcdsa));
 #endif
 
-    SuccessOrExit(error = ReadOrGenerateKey(aInfo.mKeyInfo));
+    { Error e = ReadOrGenerateKey(aInfo.mKeyInfo);
+      SuccessOrExit(error = e); }
 
     header.SetMessageId(mNextMessageId);
 
@@ -1139,16 +1145,20 @@ Error Client::PrepareUpdateMessage(MsgInfo &aInfo)
 
     // Prepare Update section
 
-    SuccessOrExit(error = AppendServiceInstructions(aInfo));
-    SuccessOrExit(error = AppendHostDescriptionInstruction(aInfo));
+    { Error e = AppendServiceInstructions(aInfo);
+      SuccessOrExit(error = e); }
+    { Error e = AppendHostDescriptionInstruction(aInfo);
+      SuccessOrExit(error = e); }
 
     header.SetUpdateRecordCount(aInfo.mRecordCount);
     aInfo.mMessage->Write(kHeaderOffset, header);
 
     // Prepare Additional Data section
 
-    SuccessOrExit(error = AppendUpdateLeaseOptRecord(aInfo));
-    SuccessOrExit(error = AppendSignature(aInfo));
+    { Error e = AppendUpdateLeaseOptRecord(aInfo);
+      SuccessOrExit(error = e); }
+    { Error e = AppendSignature(aInfo);
+      SuccessOrExit(error = e); }
 
     header.SetAdditionalRecordCount(2); // Lease OPT and SIG RRs
     aInfo.mMessage->Write(kHeaderOffset, header);
@@ -1491,13 +1501,16 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
 {
     Error error = kErrorNone;
 
+
     //----------------------------------
     // Host Description Instruction
 
     // "Delete all RRsets from a name" for Host Name.
 
-    SuccessOrExit(error = AppendHostName(aInfo));
-    SuccessOrExit(error = AppendDeleteAllRrsets(aInfo));
+    { Error e = AppendHostName(aInfo);
+      SuccessOrExit(error = e); }
+    { Error e = AppendDeleteAllRrsets(aInfo);
+      SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
     // AAAA RRs
@@ -1512,9 +1525,11 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
 
         for (Ip6::Netif::UnicastAddress &unicastAddress : Get<ThreadNetif>().GetUnicastAddresses())
         {
-            if (ShouldHostAutoAddressRegister(unicastAddress))
+            bool should = ShouldHostAutoAddressRegister(unicastAddress);
+            if (should)
             {
-                SuccessOrExit(error = AppendAaaaRecord(unicastAddress.GetAddress(), aInfo));
+                Error e = AppendAaaaRecord(unicastAddress.GetAddress(), aInfo);
+                SuccessOrExit(error = e);
                 unicastAddress.mSrpRegistered = true;
                 mAutoHostAddressCount++;
             }
@@ -1527,8 +1542,8 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
         if (mAutoHostAddressCount == 0)
         {
             Ip6::Netif::UnicastAddress &mlEid = Get<Mle::Mle>().GetMeshLocalEidUnicastAddress();
-
-            SuccessOrExit(error = AppendAaaaRecord(mlEid.GetAddress(), aInfo));
+            Error e = AppendAaaaRecord(mlEid.GetAddress(), aInfo);
+            SuccessOrExit(error = e);
             mlEid.mSrpRegistered = true;
             mAutoHostAddressCount++;
         }
@@ -1539,12 +1554,25 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
         {
             SuccessOrExit(error = AppendAaaaRecord(mHostInfo.GetAddress(index), aInfo));
         }
+
+        /* RT583 fix: if no addresses set (can happen when Matter calls
+         * Remove before the initial register completes, leaving host in
+         * kToRemove state with 0 addrs and auto-addr disabled), fall back
+         * to mesh-local EID so the Remove update message can still be
+         * built and sent.  Otherwise state is stuck forever. */
+        if (mHostInfo.GetNumAddresses() == 0)
+        {
+            Ip6::Netif::UnicastAddress &mlEid = Get<Mle::Mle>().GetMeshLocalEidUnicastAddress();
+            SuccessOrExit(error = AppendAaaaRecord(mlEid.GetAddress(), aInfo));
+        }
     }
 
     // KEY RR
 
-    SuccessOrExit(error = AppendHostName(aInfo));
-    SuccessOrExit(error = AppendKeyRecord(aInfo));
+    { Error e = AppendHostName(aInfo);
+      SuccessOrExit(error = e); }
+    { Error e = AppendKeyRecord(aInfo);
+      SuccessOrExit(error = e); }
 
 exit:
     return error;
@@ -1559,9 +1587,12 @@ Error Client::AppendAaaaRecord(const Ip6::Address &aAddress, MsgInfo &aInfo) con
     rr.SetTtl(DetermineTtl());
     rr.SetLength(sizeof(Ip6::Address));
 
-    SuccessOrExit(error = AppendHostName(aInfo));
-    SuccessOrExit(error = aInfo.mMessage->Append(rr));
-    SuccessOrExit(error = aInfo.mMessage->Append(aAddress));
+    { Error e = AppendHostName(aInfo);
+      SuccessOrExit(error = e); }
+    { Error e = aInfo.mMessage->Append(rr);
+      SuccessOrExit(error = e); }
+    { Error e = aInfo.mMessage->Append(aAddress);
+      SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
 exit:
@@ -1581,9 +1612,12 @@ Error Client::AppendKeyRecord(MsgInfo &aInfo) const
     key.SetProtocol(Dns::KeyRecord::kProtocolDnsSec);
     key.SetAlgorithm(Dns::KeyRecord::kAlgorithmEcdsaP256Sha256);
     key.SetLength(sizeof(Dns::KeyRecord) - sizeof(Dns::ResourceRecord) + sizeof(Crypto::Ecdsa::P256::PublicKey));
-    SuccessOrExit(error = aInfo.mMessage->Append(key));
-    SuccessOrExit(error = aInfo.mKeyInfo.GetPublicKey(publicKey));
-    SuccessOrExit(error = aInfo.mMessage->Append(publicKey));
+    { Error e = aInfo.mMessage->Append(key);
+      SuccessOrExit(error = e); }
+    { Error e = aInfo.mKeyInfo.GetPublicKey(publicKey);
+      SuccessOrExit(error = e); }
+    { Error e = aInfo.mMessage->Append(publicKey);
+      SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
 exit:
@@ -1742,7 +1776,6 @@ exit:
 void Client::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
 {
     OT_UNUSED_VARIABLE(aMessageInfo);
-
     ProcessResponse(aMessage);
 }
 

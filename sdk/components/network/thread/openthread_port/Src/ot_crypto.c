@@ -310,71 +310,17 @@ otError otPlatCryptoSha256Finish(otCryptoContext *aContext, uint8_t *aHash, uint
     return (ret == 0) ? OT_ERROR_NONE : OT_ERROR_FAILED;
 }
 
-/* ── ECDSA public key extraction (PSA-compatible) ───────────────────────── */
-/*
- * Strong override for the OT_TOOL_WEAK otPlatCryptoEcdsaGetPublicKey in
- * crypto_platform.cpp.
+/* ── ECDSA public key extraction ─────────────────────────────────────────
+ * Our previous strong override here assumed `crypto_psa.c` owned the
+ * generate path (storing the key as raw 32-byte scalar) and imported the
+ * keypair via `psa_import_key`.  But `crypto_psa.c` is stripped from the
+ * build (see cmake/zephyr_module/CMakeLists.txt) so OT's weak default in
+ * `crypto_platform.cpp` does the generate via `mbedtls_pk_write_key_der`,
+ * producing a 121-byte DER-encoded ECPrivateKey.  `psa_import_key` then
+ * fails with PSA_ERROR_INVALID_ARGUMENT (-135) because it expects a raw
+ * 32-byte scalar.
  *
- * Root cause:
- *   CONFIG_CHIP_CRYPTO_PSA=y causes Zephyr's crypto_psa.c to provide a
- *   strong otPlatCryptoEcdsaGenerateKey that stores the key via
- *   psa_export_key, which outputs a raw 32-byte P-256 private scalar (not
- *   mbedTLS DER/SEC1).  The weak crypto_platform.cpp GetPublicKey calls
- *   mbedtls_pk_parse_key, which expects DER — parsing the 32-byte raw
- *   scalar fails with MBEDTLS_ERR_PK_KEY_INVALID_FORMAT → kErrorParse.
- *   The SRP client propagates kErrorParse from AppendKeyRecord, Matter logs
- *   "SRP update error: parsing operation failed", and the DNS-SD init
- *   callback never fires → operational advertising stays broken.
- *
- * Fix:
- *   Provide a strong implementation here using PSA APIs so that the format
- *   used by generate (psa_export_key = 32-byte raw scalar) is also the
- *   format used by GetPublicKey (psa_import_key accepts raw scalar).
- *   psa_export_public_key returns the 65-byte uncompressed EC point
- *   (0x04 prefix + 32-byte X + 32-byte Y); we strip the prefix and write
- *   the 64-byte X||Y into aPublicKey->m8 as OT expects.
- *
- * Include: PSA headers are available via -isystem from the Zephyr build.
+ * Fix: delete the override entirely and let the mbedTLS-based weak default
+ * in `crypto_platform.cpp` handle both generate and get-public-key with
+ * matching DER format.
  */
-#include <psa/crypto.h>
-
-otError otPlatCryptoEcdsaGetPublicKey(const otPlatCryptoEcdsaKeyPair *aKeyPair,
-                                      otPlatCryptoEcdsaPublicKey      *aPublicKey)
-{
-    psa_key_attributes_t attr    = PSA_KEY_ATTRIBUTES_INIT;
-    psa_key_id_t         key_id  = 0;
-    psa_status_t         status;
-    otError              error   = OT_ERROR_NONE;
-    /* 65 bytes: 0x04 (uncompressed) + 32-byte X + 32-byte Y */
-    uint8_t              pub[1 + OT_CRYPTO_ECDSA_PUBLIC_KEY_SIZE];
-    size_t               pub_len = 0;
-
-    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_EXPORT);
-    psa_set_key_algorithm(&attr, PSA_ALG_DETERMINISTIC_ECDSA(PSA_ALG_SHA_256));
-    psa_set_key_type(&attr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
-    psa_set_key_bits(&attr, 256);
-
-    /* Import the raw 32-byte private scalar stored by PSA generate */
-    status = psa_import_key(&attr, aKeyPair->mDerBytes, aKeyPair->mDerLength, &key_id);
-    if (status != PSA_SUCCESS) {
-        error = OT_ERROR_PARSE;
-        goto exit;
-    }
-
-    /* Export the uncompressed EC public point (0x04 || X || Y, 65 bytes) */
-    status = psa_export_public_key(key_id, pub, sizeof(pub), &pub_len);
-    if (status != PSA_SUCCESS || pub_len != sizeof(pub)) {
-        error = OT_ERROR_PARSE;
-        goto exit;
-    }
-
-    /* OT stores the public key as raw 64-byte X||Y — skip the 0x04 prefix */
-    memcpy(aPublicKey->m8, pub + 1, OT_CRYPTO_ECDSA_PUBLIC_KEY_SIZE);
-
-exit:
-    psa_reset_key_attributes(&attr);
-    if (key_id != 0) {
-        psa_destroy_key(key_id);
-    }
-    return error;
-}

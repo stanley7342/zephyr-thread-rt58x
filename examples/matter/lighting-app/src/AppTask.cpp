@@ -13,6 +13,7 @@
 #include <app/clusters/identify-server/identify-server.h>
 #include <app/clusters/on-off-server/on-off-server.h>
 #include <app/server/Server.h>
+#include <credentials/FabricTable.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
 #include <platform/Zephyr/DeviceInstanceInfoProviderImpl.h>
@@ -28,10 +29,25 @@
 #include <platform/OpenThread/GenericNetworkCommissioningThreadDriver.h>
 #include <app/clusters/network-commissioning/network-commissioning.h>
 #include <app/clusters/network-commissioning/CodegenInstance.h>
+#include <app/FailSafeContext.h>
+/* RT583 ODR workaround: canonical FailSafeContext pointer from Server.cpp
+ * (GN-compiled).  AppTask.cpp is CMake-compiled so Server::GetFailSafeContext()
+ * inline accessor computes the wrong offset here.
+ *
+ * Weak fallback so CI builds against upstream connectedhomeip (without the
+ * fork's trampoline patch) still link.  Strong definition from the fork
+ * overrides at link time when present. */
+extern "C" __attribute__((weak)) chip::app::FailSafeContext * rt583_get_failsafe_context(void) { return nullptr; }
 #endif
+
+/* Canonical FabricTable pointer — same ODR workaround as FailSafeContext. */
+extern "C" __attribute__((weak)) chip::FabricTable * rt583_get_fabric_table(void) { return nullptr; }
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/sys/reboot.h>
 
 extern "C" {
 #include "hosal_rf.h"
@@ -249,8 +265,11 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
              * (standalone SRP server mode).
              */
             if (inst) {
-                bool failSafeArmed =
-                    chip::Server::GetInstance().GetFailSafeContext().IsFailSafeArmed();
+                /* RT583 ODR workaround: via canonical trampoline — CMake-compiled
+                 * AppTask.cpp sees wrong Server offsets.  nullptr when running
+                 * the CI/vanilla CHIP build (weak stub) — treat as not-armed. */
+                auto * fsCtx       = rt583_get_failsafe_context();
+                bool failSafeArmed = fsCtx && fsCtx->IsFailSafeArmed();
 
                 if (role == OT_DEVICE_ROLE_DETACHED && failSafeArmed) {
                     openthread_mutex_lock();
@@ -290,6 +309,54 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
     case DeviceEventType::kCommissioningComplete:
         LOG_INF("Commissioning complete");
         break;
+#ifdef CONFIG_NET_L2_OPENTHREAD
+    case DeviceEventType::kCHIPoBLEConnectionClosed:
+    case DeviceEventType::kCHIPoBLEConnectionError: {
+        /* Non-concurrent commissioner workaround:
+         *
+         * Some commissioners (Apple Home, some Google Home) send
+         * AddOrUpdateThreadNetwork then disconnect BLE without sending
+         * ConnectNetwork, relying on the device to auto-activate the pending
+         * Thread dataset and reconnect over CASE.  If the fail-safe is armed
+         * at BLE disconnect, drive ConnectNetwork(staged-net) ourselves. */
+        auto * fsCtx       = rt583_get_failsafe_context();
+        bool failSafeArmed = fsCtx && fsCtx->IsFailSafeArmed();
+        if (!failSafeArmed) {
+            break;
+        }
+        /* Skip if Thread is already provisioned/attached — we only want to
+         * auto-attach for the first BLE disconnect that follows
+         * AddOrUpdateThreadNetwork.  Subsequent BLE disconnects (e.g. the
+         * commissioner's timeout-close after Thread is already running) must
+         * not re-attach, which would force Thread back to DETACHED. */
+        if (chip::DeviceLayer::ThreadStackMgrImpl().IsThreadProvisioned()) {
+            LOG_INF("[RT583] BLE closed but Thread already provisioned; skip auto-attach");
+            break;
+        }
+        auto & driver = sThreadNetworkDriver.GetDriver();
+        auto * iter   = driver.GetNetworks();
+        if (iter == nullptr) {
+            break;
+        }
+        chip::DeviceLayer::NetworkCommissioning::Network net = {};
+        if (iter->Next(net) && net.networkIDLen > 0) {
+            struct AutoAttachCb : public chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback
+            {
+                void OnResult(chip::DeviceLayer::NetworkCommissioning::Status status,
+                              chip::CharSpan, int32_t connectStatus) override
+                {
+                    LOG_INF("[RT583] Auto-attach ConnectNetwork OnResult status=%d connectStatus=%d",
+                            (int) status, (int) connectStatus);
+                }
+            };
+            static AutoAttachCb sCb;
+            LOG_INF("[RT583] BLE closed + fail-safe armed: auto-calling ConnectNetwork");
+            driver.ConnectNetwork(chip::ByteSpan(net.networkID, net.networkIDLen), &sCb);
+        }
+        iter->Release();
+        break;
+    }
+#endif /* CONFIG_NET_L2_OPENTHREAD */
     default:
         break;
     }
@@ -331,31 +398,47 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
     }
 }
 
-/* ── Button factory reset ───────────────────────────────────────────────────── */
+/* ── Factory reset (button + RemoveFabric) ──────────────────────────────────── */
+
+static void DoFactoryReset(intptr_t /* arg */);
+
+/* FabricTable delegate — trigger factory reset when the last fabric is removed
+ * (e.g. chip-tool `operationalcredentials remove-fabric <idx>`). */
+class FactoryResetOnFabricRemoved : public chip::FabricTable::Delegate
+{
+public:
+    void OnFabricRemoved(const chip::FabricTable & table, chip::FabricIndex /*idx*/) override
+    {
+        if (table.FabricCount() == 0) {
+            printk("[FAB] Last fabric removed — scheduling factory reset\n");
+            (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
+        } else {
+            printk("[FAB] Fabric removed, %u remaining\n", (unsigned) table.FabricCount());
+        }
+    }
+};
+
+static FactoryResetOnFabricRemoved sFabricDelegate;
 
 static void DoFactoryReset(intptr_t /* arg */)
 {
-    LOG_INF("[BTN] Executing factory reset");
+    printk("[BTN] Executing factory reset — physical flash erase + reboot\n");
 
-    auto & server     = chip::Server::GetInstance();
-    auto & fabricTable = server.GetFabricTable();
-    auto & sessionMgr  = server.GetSecureSessionManager();
+    /* Direct flash_erase on the storage partition (NVS backing store,
+     * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
+     * `flash erase_address 0x001E0000 0x10000`, but from the device.
+     * Uses Zephyr 4.x's PARTITION_* accessors — FIXED_PARTITION_* are
+     * deprecated. */
+    const struct device * flash_dev = PARTITION_DEVICE(storage_partition);
+    off_t  offset = PARTITION_OFFSET(storage_partition);
+    size_t size   = PARTITION_SIZE(storage_partition);
+    int rc = flash_erase(flash_dev, offset, size);
+    printk("[BTN] flash_erase storage @0x%08lx (%u bytes) -> %d\n",
+           (unsigned long) offset, (unsigned) size, rc);
 
-    /* Expire all CASE sessions, then delete all fabrics */
-    for (const auto & fabricInfo : fabricTable) {
-        sessionMgr.ExpireAllSessionsForFabric(fabricInfo.GetFabricIndex());
-    }
-    fabricTable.DeleteAllFabrics();
-
-#ifdef CONFIG_NET_L2_OPENTHREAD
-    /* Clear SRP host/services before leaving Thread network */
-    if (chip::DeviceLayer::ThreadStackMgr().IsThreadAttached()) {
-        (void) chip::DeviceLayer::ThreadStackMgr().ClearAllSrpHostAndServices();
-    }
-    chip::DeviceLayer::ConnectivityMgr().ErasePersistentInfo();
-#endif
-
-    server.ScheduleFactoryReset();
+    /* Reboot so the device comes up in a clean factory state. */
+    k_msleep(100); /* let the printk drain before reset */
+    sys_reboot(SYS_REBOOT_COLD);
 }
 
 /* Called by CHIP SystemLayer timer when GPIO0 has been held for 6 s.
@@ -370,7 +453,7 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
     if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
         task.mFunction            = FunctionEvent::NoneSelected;
         task.mFunctionTimerActive = false;
-        LOG_INF("[BTN] Factory reset triggered (6 s hold)");
+        printk("[BTN] Factory reset triggered (6s hold reached)\n");
         (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
     }
 }
@@ -416,9 +499,10 @@ void AppTask::FunctionHandler(const AppEvent & event)
     AppTask & task = AppTask::Instance();
 
     if (event.ButtonEvent.ButtonIdx == kButtonFactoryReset) {
+        printk("[BTN] GPIO0 event pressed=%d\n", (int) event.ButtonEvent.Pressed);
         if (event.ButtonEvent.Pressed) {
             if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
-                LOG_INF("[BTN] GPIO0 pressed, hold 6s for reset");
+                printk("[BTN] GPIO0 pressed, hold 6s for factory reset\n");
                 task.mFunction = FunctionEvent::FactoryReset;
                 task.StartTimer(kFactoryResetTriggerTimeMs);
             }
@@ -426,7 +510,7 @@ void AppTask::FunctionHandler(const AppEvent & event)
             if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
                 task.CancelTimer();
                 task.mFunction = FunctionEvent::NoneSelected;
-                LOG_INF("[BTN] GPIO0 released, reset cancelled");
+                printk("[BTN] GPIO0 released before 6s, factory reset cancelled\n");
             }
         }
     } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
@@ -677,6 +761,13 @@ static void ServerInitWork(intptr_t arg)
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format());
         return;
+    }
+
+    /* Register fabric-removed hook so RemoveFabric triggers factory reset
+     * when the last fabric goes away. */
+    if (auto * fabricTable = rt583_get_fabric_table()) {
+        (void) fabricTable->AddFabricDelegate(&sFabricDelegate);
+        printk("[APP] FabricTable delegate registered\n");
     }
 
 #if defined(MATTER_FACTORY_RESET_ON_BOOT)

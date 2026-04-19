@@ -197,10 +197,16 @@ void otSysProcessDrivers(otInstance *aInstance)
 
     ot_alarmTask(sevent);       /* alarm-milli / alarm-micro event dispatch */
     ot_uartTask(sevent);        /* no-op stub in rt583_otsys.c              */
-#if !defined(CONFIG_IEEE802154_RT583_FULL)
-    ot_radioTask(sevent);       /* TX-done / RX-done event dispatch          */
-    /* In CONFIG_IEEE802154_RT583_FULL mode, Zephyr's modules/openthread/
-     * platform/radio.c processes radio events via its own work queue; the
-     * SDK ot_radioTask() is gated out in ot_radio.c. */
+#if defined(CONFIG_IEEE802154_RT583_FULL)
+    /* CONFIG_IEEE802154_RT583_FULL path: frames flow through Zephyr's
+     * ieee802154 / OPENTHREAD_L2 stack → notify_new_rx_frame() → rx_pkt_fifo.
+     * Zephyr's platformRadioProcess() is the ONLY drain for that fifo; it
+     * calls openthread_handle_received_frame() which in turn calls
+     * otPlatRadioReceiveDone().  Without this call every RX frame sits in
+     * the fifo and MLE never sees Parent Response → role stays DETACHED. */
+    extern void platformRadioProcess(otInstance *);
+    platformRadioProcess(aInstance);
+#else
+    ot_radioTask(sevent);       /* TX-done / RX-done event dispatch (legacy) */
 #endif
 }

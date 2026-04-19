@@ -19,7 +19,7 @@
 /* ── Logging ───────────────────────────────────────────────────────────── */
 
 #define OPENTHREAD_CONFIG_LOG_OUTPUT                      OPENTHREAD_CONFIG_LOG_OUTPUT_APP
-#define OPENTHREAD_CONFIG_LOG_LEVEL                       OT_LOG_LEVEL_NONE
+#define OPENTHREAD_CONFIG_LOG_LEVEL                       OT_LOG_LEVEL_INFO
 #define OPENTHREAD_CONFIG_LOG_LEVEL_DYNAMIC_ENABLE       0
 #define OPENTHREAD_CONFIG_LOG_PLATFORM                   1
 
@@ -80,6 +80,11 @@
 
 #define OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE              1
 #define OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE 1
+/* Default 1800 ms is too short: OTBR reply can land after the RT583 has
+ * just transitioned CHILD → ROUTER (rloc16 changes), plus OTBR SRP
+ * server ECDSA SIG(0) verification + 6LoWPAN fragmentation take time.
+ * Bump to 10 seconds so we wait long enough for the response. */
+#define OPENTHREAD_CONFIG_SRP_CLIENT_MIN_RETRY_WAIT_INTERVAL 10000
 
 /* ── SRP Server (standalone Leader mode — no OTBR) ─────────────────────── */
 
