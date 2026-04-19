@@ -34,6 +34,9 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/net_if.h>
+#if defined(CONFIG_NET_L2_OPENTHREAD)
+#include <zephyr/net/openthread.h>
+#endif
 #include <zephyr/random/random.h>
 #include <string.h>
 
@@ -60,6 +63,15 @@ struct rt583_radio_data {
 	uint8_t  mac_addr[8];       /* little-endian, as stored by lmac         */
 	uint16_t short_addr;
 	uint16_t pan_id;
+
+	/* Last values pushed to HW via lmac15p4_address_filter_set().  Cached
+	 * so we can skip redundant pushes — the lmac call resets the RX
+	 * pipeline and drops in-flight frames. */
+	uint8_t  hw_mac_addr[8];
+	uint16_t hw_short_addr;
+	uint16_t hw_pan_id;
+	bool     hw_promiscuous;
+	bool     hw_coordinator;
 
 	bool     lmac_ready;        /* set on first start() after hosal_rf_init */
 	bool     started;
@@ -114,10 +126,25 @@ static int rt583_set_channel(const struct device *dev, uint16_t channel)
 	if (channel < RT583_MIN_CHANNEL || channel > RT583_MAX_CHANNEL) {
 		return -EINVAL;
 	}
+	if ((uint8_t)channel == data->channel && data->lmac_ready) {
+		return 0;  /* already on this channel — don't disturb RX */
+	}
 	data->channel = (uint8_t)channel;
 	/* Defer real HW set to start() when lmac/RF MCU is ready */
 	if (data->lmac_ready) {
+		printk("[15.4] set_channel %u (idx=%u) + auto_state\n", channel,
+		       (unsigned)(channel - RT583_MIN_CHANNEL));
 		lmac15p4_channel_set((lmac154_channel_t)(channel - RT583_MIN_CHANNEL));
+		/* lmac15p4_channel_set clears auto_state internally.  If RX was
+		 * running (started=true), re-enable it so auto-ACK keeps working.
+		 * Without this, unicast Parent Response from OTBR gets received
+		 * but the device never sends the 15.4 ACK back, so OTBR retries
+		 * then drops us. */
+		if (data->started) {
+			lmac15p4_auto_state_set(true);
+		}
+	} else {
+		printk("[15.4] set_channel cache %u (lmac not ready)\n", channel);
 	}
 	return 0;
 }
@@ -155,6 +182,23 @@ static int rt583_filter(const struct device *dev, bool set,
 		uint32_t ext_lo, ext_hi;
 		memcpy(&ext_lo, &data->mac_addr[0], 4);
 		memcpy(&ext_hi, &data->mac_addr[4], 4);
+
+		/* Skip redundant push: lmac15p4_address_filter_set() resets the
+		 * RX pipeline internally, which drops in-flight frames.  OT
+		 * refreshes the short addr on every Parent Request cycle
+		 * (~2.5s) while DETACHED, which would otherwise blackhole the
+		 * MLE Parent Response that arrives right after. */
+		if (data->hw_pan_id == data->pan_id &&
+		    data->hw_short_addr == data->short_addr &&
+		    data->hw_promiscuous == data->promiscuous &&
+		    data->hw_coordinator == data->coordinator &&
+		    memcmp(data->hw_mac_addr, data->mac_addr,
+			   sizeof(data->mac_addr)) == 0) {
+			return 0;
+		}
+
+		printk("[15.4] filter push type=%d pan=0x%04x short=0x%04x ext=%08x%08x\n",
+		       (int)type, data->pan_id, data->short_addr, ext_hi, ext_lo);
 		lmac15p4_address_filter_set(/* pan_idx */ 0,
 					    data->promiscuous ? 1 : 0,
 					    data->short_addr,
@@ -162,6 +206,13 @@ static int rt583_filter(const struct device *dev, bool set,
 					    ext_hi,
 					    data->pan_id,
 					    data->coordinator);
+		data->hw_pan_id       = data->pan_id;
+		data->hw_short_addr   = data->short_addr;
+		data->hw_promiscuous  = data->promiscuous;
+		data->hw_coordinator  = data->coordinator;
+		memcpy(data->hw_mac_addr, data->mac_addr, sizeof(data->mac_addr));
+	} else {
+		printk("[15.4] filter cache type=%d (lmac not ready)\n", (int)type);
 	}
 	return 0;
 }
@@ -196,9 +247,33 @@ static int rt583_start(const struct device *dev)
 		lmac15p4_src_match_ctrl(/* pan_idx */ 0, true);
 		lmac15p4_src_match_short_entry(/* CLEAR_ALL */ 2, NULL);
 		data->lmac_ready = true;
+
+		/* Push any address-filter values that Zephyr L2 cached before
+		 * lmac was ready.  Without this the MAC stays at its default
+		 * (pan_id=0xFFFF, short=0xFFFF) and drops every unicast frame
+		 * addressed to us — e.g. MLE Parent Response from the leader. */
+		uint32_t ext_lo, ext_hi;
+		memcpy(&ext_lo, &data->mac_addr[0], 4);
+		memcpy(&ext_hi, &data->mac_addr[4], 4);
+		printk("[15.4] start: flush filter pan=0x%04x short=0x%04x ext=%08x%08x ch=%d\n",
+		       data->pan_id, data->short_addr, ext_hi, ext_lo, (int)data->channel);
+		lmac15p4_address_filter_set(/* pan_idx */ 0,
+					    data->promiscuous ? 1 : 0,
+					    data->short_addr,
+					    ext_lo,
+					    ext_hi,
+					    data->pan_id,
+					    data->coordinator);
 	}
-	lmac15p4_auto_state_set(true);
-	data->started = true;
+	/* Skip redundant auto_state toggles.  OT may call start() several
+	 * times in quick succession (e.g. AttachToThreadNetwork), and each
+	 * auto_state_set(true) resets the lmac RX pipeline, dropping any
+	 * in-flight MLE Parent Response. */
+	if (!data->started) {
+		printk("[15.4] start() -> auto_state=on\n");
+		lmac15p4_auto_state_set(true);
+		data->started = true;
+	}
 	return 0;
 }
 
@@ -234,16 +309,33 @@ static int rt583_tx(const struct device *dev,
 		break;
 	}
 
+	/* Parse ACK-request bit (bit 5) from IEEE 802.15.4 Frame Control byte 0.
+	 * Without this the radio never waits for (or retries on) an ACK, so
+	 * OTBR may silently drop our Child ID Request etc., leaving us stuck
+	 * in DETACHED even though RX of the Parent Response works. */
+	uint8_t ack_req = 0;
+	if (frag->len >= 2 && (frag->data[0] & 0x20)) {
+		ack_req = 1;
+	}
+
 	/* lmac15p4 expects: pan_idx, address, length, csma_enable.  "length"
 	 * includes the 2-byte FCS which the hardware appends; frag->len is the
 	 * full PSDU (payload + FCS space). */
 	k_sem_reset(&data->tx_done_sem);
 	data->tx_done_status = LMAC154_TX_FAIL;
 
+	static uint32_t tx_count = 0;
+	tx_count++;
+	if (tx_count <= 10 || (tx_count & 0xF) == 0) {
+		printk("[15.4-TX] #%u len=%u ack=%u csma=%u fc0=0x%02x\n",
+		       tx_count, frag->len, (unsigned)ack_req,
+		       (unsigned)csma_ca_flag, (unsigned)frag->data[0]);
+	}
+
 	rc = lmac15p4_tx_data_send(/* pan_idx */ 0,
 				   frag->data,
 				   frag->len,
-				   /* ack_required */ 0,
+				   ack_req,
 				   csma_ca_flag);
 	if (rc != 0) {
 		return -EIO;
@@ -330,24 +422,82 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 {
 	struct rt583_radio_data *data = &rt583_radio_data_0;
 	struct net_pkt *pkt;
+	static uint32_t rx_count = 0;
+	static uint32_t rx_bad_crc = 0;
+	if (crc_status != 0) {
+		rx_bad_crc++;
+		if ((rx_bad_crc & 0xF) == 1) {
+			printk("[15.4-RX] bad CRC count=%u rssi=%d len=%u\n",
+			       rx_bad_crc, -(int)rssi, packet_length);
+		}
+	} else {
+		rx_count++;
+		/* Dump every RX for the first 5 frames — lets us reverse-engineer
+		 * the exact lmac buffer layout against an OTBR-side sniffer. */
+		if (rx_count <= 5) {
+			printk("[15.4-RX] #%u rssi=%d lmac_len=%u bytes:\n",
+			       rx_count, -(int)rssi, packet_length);
+			uint16_t dump = packet_length > 64 ? 64 : packet_length;
+			for (uint16_t i = 0; i < dump; i++) {
+				printk("%02x ", pdata[i]);
+				if ((i & 15) == 15) printk("\n");
+			}
+			if ((dump & 15) != 0) printk("\n");
+		} else if ((rx_count & 0xF) == 0) {
+			printk("[15.4-RX] count=%u rssi=%d len=%u\n",
+			       rx_count, -(int)rssi, packet_length);
+		}
+	}
 
-	if (crc_status != 0 || packet_length < 5) {
+	if (crc_status != 0 || packet_length < 10) {
 		return;
 	}
-	/* packet_length includes the 2-byte FCS which we include in the pkt */
-	pkt = net_pkt_rx_alloc_with_buffer(data->iface, packet_length,
+	/* lmac15p4 layout (mirroring ot_radio.c _RxDoneEvent):
+	 *   [0..7]    = 8-byte lmac meta header (timestamp + control)
+	 *   [8..N-3]  = IEEE 802.15.4 MAC header + payload
+	 *   [N-2..N-1]= 2-byte FCS (verified by hw; keep — OT glue at
+	 *               modules/openthread/platform/radio.c:511 reads
+	 *               net_buf_frags_len() as mLength and explicitly
+	 *               comments "Length inc. CRC", and CONFIG_IEEE802154_
+	 *               L2_PKT_INCL_FCS defaults to y under NET_L2_OPENTHREAD)
+	 *   [N]       = 1-byte trailer
+	 * Strip 9 bytes total: 8 meta header + 1 trailer.  FCS stays. */
+	if (packet_length < 10) {
+		return;
+	}
+	uint16_t psdu_len   = packet_length - 9;
+	uint8_t * psdu_data = pdata + 8;
+
+	pkt = net_pkt_rx_alloc_with_buffer(data->iface, psdu_len,
 					   AF_UNSPEC, 0, K_NO_WAIT);
 	if (!pkt) {
+		printk("[15.4-RX] alloc_with_buffer FAILED (ISR mem pressure?)\n");
 		return;
 	}
-	if (net_pkt_write(pkt, pdata, packet_length) < 0) {
+	if (net_pkt_write(pkt, psdu_data, psdu_len) < 0) {
+		printk("[15.4-RX] net_pkt_write FAILED\n");
 		net_pkt_unref(pkt);
 		return;
 	}
 	net_pkt_set_ieee802154_rssi_dbm(pkt, -(int8_t)rssi);
-	net_pkt_set_ieee802154_lqi(pkt, snr);
+	/* Diagnostic: lmac `snr` is not directly a Thread LQI; force max (255)
+	 * to see if MLE was rejecting the parent on link-quality grounds. */
+	net_pkt_set_ieee802154_lqi(pkt, 255);
+	/* Timestamp in nanoseconds; required by OT's MLE security layer for
+	 * Thread 1.2+ frames (Enhanced ACK / CSL).  Without a non-zero
+	 * timestamp, some MLE validations silently reject the frame. */
+	net_pkt_set_timestamp_ns(pkt, k_uptime_ticks() *
+				 (1000000000ULL / CONFIG_SYS_CLOCK_TICKS_PER_SEC));
+	net_pkt_set_ieee802154_ack_fpb(pkt, false);
 
-	if (net_recv_data(data->iface, pkt) < 0) {
+	int rc = net_recv_data(data->iface, pkt);
+	if (rc < 0) {
+		static uint32_t nrd_fail = 0;
+		nrd_fail++;
+		if ((nrd_fail & 3) == 1) {
+			printk("[15.4-RX] net_recv_data FAILED rc=%d cnt=%u\n",
+			       rc, nrd_fail);
+		}
 		net_pkt_unref(pkt);
 	}
 }
@@ -408,6 +558,11 @@ static int rt583_radio_init(const struct device *dev)
 	data->pan_id      = 0xFFFF;
 	data->lmac_ready  = false;
 	memset(data->mac_addr, 0, sizeof(data->mac_addr));
+
+	/* HW-cache starts inverted so first push always goes through. */
+	data->hw_short_addr = 0;
+	data->hw_pan_id     = 0;
+	memset(data->hw_mac_addr, 0xFF, sizeof(data->hw_mac_addr));
 	k_sem_init(&data->tx_done_sem, 0, 1);
 
 	return 0;
@@ -426,17 +581,36 @@ static struct ieee802154_radio_api rt583_radio_api = {
 	.configure        = rt583_configure,
 };
 
-/* Register as a real network device so L2 openthread gets a net_if. */
-#define IEEE802154_RT583_MTU 125
+/* Register as a real network device.  L2 selection mirrors upstream nrf5:
+ * with CONFIG_NET_L2_OPENTHREAD=y (Matter/Thread) we MUST bind to
+ * OPENTHREAD_L2 so the OT L2 handler marks the iface NET_IF_UP.  Binding
+ * to IEEE802154_L2 instead leaves the iface DOWN and every RX gets
+ * silently dropped by net_recv_data() with -ENETDOWN (-115). */
+#if defined(CONFIG_NET_L2_OPENTHREAD)
+#define RT583_L2        OPENTHREAD_L2
+#define RT583_L2_CTX    NET_L2_GET_CTX_TYPE(OPENTHREAD_L2)
+#define RT583_MTU       1280
+#elif defined(CONFIG_NET_L2_IEEE802154)
+#define RT583_L2        IEEE802154_L2
+#define RT583_L2_CTX    NET_L2_GET_CTX_TYPE(IEEE802154_L2)
+#define RT583_MTU       125
+#elif defined(CONFIG_NET_L2_CUSTOM_IEEE802154)
+#define RT583_L2        CUSTOM_IEEE802154_L2
+#define RT583_L2_CTX    NET_L2_GET_CTX_TYPE(CUSTOM_IEEE802154_L2)
+#define RT583_MTU       CONFIG_NET_L2_CUSTOM_IEEE802154_MTU
+#else
+#error "No Zephyr L2 selected for the RT583 ieee802154 driver"
+#endif
+
 #define IEEE802154_RT583_INIT(n) \
 	NET_DEVICE_DT_INST_DEFINE(n, \
 				  rt583_radio_init, NULL, \
 				  &rt583_radio_data_0, NULL, \
 				  CONFIG_IEEE802154_RT583_INIT_PRIORITY, \
 				  &rt583_radio_api, \
-				  IEEE802154_L2, \
-				  NET_L2_GET_CTX_TYPE(IEEE802154_L2), \
-				  IEEE802154_RT583_MTU);
+				  RT583_L2, \
+				  RT583_L2_CTX, \
+				  RT583_MTU);
 
 #else  /* !CONFIG_IEEE802154_RT583_FULL — stub mode */
 

@@ -84,6 +84,12 @@ typedef struct _otRadio_t {
 } otRadio_t;
 
 /* ── Static state ────────────────────────────────────────────────────────── */
+/* All of these are only referenced by the legacy otPlatRadio* overrides and
+ * the legacy ot_radioInit() path, both guarded by !CONFIG_IEEE802154_RT583_FULL.
+ * When FULL=y the Zephyr ieee802154 driver owns the radio, so hide them here
+ * to avoid -Wunused warnings. */
+#if !defined(CONFIG_IEEE802154_RT583_FULL)
+
 static otRadio_t otRadio_var;
 
 static bool     sIsSrcMatchEnabled = false;
@@ -146,6 +152,8 @@ static void ReverseExtAddress(otExtAddress *dst, const otExtAddress *src)
         dst->m8[i] = src->m8[sizeof(*src) - 1 - i];
     }
 }
+
+#endif  /* !CONFIG_IEEE802154_RT583_FULL (static state + helpers) */
 
 /* ── otPlatRadio* overrides (legacy path) ──────────────────────────────────
  *
@@ -874,12 +882,14 @@ void ot_radioTask(ot_system_event_t trxEvent)
 #endif  /* !CONFIG_IEEE802154_RT583_FULL */
 
 /* ── ot_radioInit ────────────────────────────────────────────────────────── */
+#if !defined(CONFIG_IEEE802154_RT583_FULL)
 static void rafael_otp_mac_addr(uint8_t *addr)
 {
     uint8_t tmp[256];
     flash_read_sec_register((uint32_t)(uintptr_t)tmp, 0x1100);
     memcpy(addr, tmp + OT_EXT_ADDRESS_SIZE, OT_EXT_ADDRESS_SIZE);
 }
+#endif
 
 void ot_radioInit(void)
 {

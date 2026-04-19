@@ -28,6 +28,11 @@
 #include <platform/OpenThread/GenericNetworkCommissioningThreadDriver.h>
 #include <app/clusters/network-commissioning/network-commissioning.h>
 #include <app/clusters/network-commissioning/CodegenInstance.h>
+#include <app/FailSafeContext.h>
+/* RT583 ODR workaround: canonical FailSafeContext pointer from Server.cpp
+ * (GN-compiled).  AppTask.cpp is CMake-compiled so Server::GetFailSafeContext()
+ * inline accessor computes the wrong offset here. */
+extern "C" chip::app::FailSafeContext * rt583_get_failsafe_context(void);
 #endif
 
 #include <zephyr/kernel.h>
@@ -249,8 +254,9 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
              * (standalone SRP server mode).
              */
             if (inst) {
-                bool failSafeArmed =
-                    chip::Server::GetInstance().GetFailSafeContext().IsFailSafeArmed();
+                /* RT583 ODR workaround: via canonical trampoline — CMake-compiled
+                 * AppTask.cpp sees wrong Server offsets. */
+                bool failSafeArmed = rt583_get_failsafe_context()->IsFailSafeArmed();
 
                 if (role == OT_DEVICE_ROLE_DETACHED && failSafeArmed) {
                     openthread_mutex_lock();
@@ -290,6 +296,53 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
     case DeviceEventType::kCommissioningComplete:
         LOG_INF("Commissioning complete");
         break;
+#ifdef CONFIG_NET_L2_OPENTHREAD
+    case DeviceEventType::kCHIPoBLEConnectionClosed:
+    case DeviceEventType::kCHIPoBLEConnectionError: {
+        /* Non-concurrent commissioner workaround:
+         *
+         * Some commissioners (Apple Home, some Google Home) send
+         * AddOrUpdateThreadNetwork then disconnect BLE without sending
+         * ConnectNetwork, relying on the device to auto-activate the pending
+         * Thread dataset and reconnect over CASE.  If the fail-safe is armed
+         * at BLE disconnect, drive ConnectNetwork(staged-net) ourselves. */
+        bool failSafeArmed = rt583_get_failsafe_context()->IsFailSafeArmed();
+        if (!failSafeArmed) {
+            break;
+        }
+        /* Skip if Thread is already provisioned/attached — we only want to
+         * auto-attach for the first BLE disconnect that follows
+         * AddOrUpdateThreadNetwork.  Subsequent BLE disconnects (e.g. the
+         * commissioner's timeout-close after Thread is already running) must
+         * not re-attach, which would force Thread back to DETACHED. */
+        if (chip::DeviceLayer::ThreadStackMgrImpl().IsThreadProvisioned()) {
+            LOG_INF("[RT583] BLE closed but Thread already provisioned; skip auto-attach");
+            break;
+        }
+        auto & driver = sThreadNetworkDriver.GetDriver();
+        auto * iter   = driver.GetNetworks();
+        if (iter == nullptr) {
+            break;
+        }
+        chip::DeviceLayer::NetworkCommissioning::Network net = {};
+        if (iter->Next(net) && net.networkIDLen > 0) {
+            struct AutoAttachCb : public chip::DeviceLayer::NetworkCommissioning::Internal::WirelessDriver::ConnectCallback
+            {
+                void OnResult(chip::DeviceLayer::NetworkCommissioning::Status status,
+                              chip::CharSpan, int32_t connectStatus) override
+                {
+                    LOG_INF("[RT583] Auto-attach ConnectNetwork OnResult status=%d connectStatus=%d",
+                            (int) status, (int) connectStatus);
+                }
+            };
+            static AutoAttachCb sCb;
+            LOG_INF("[RT583] BLE closed + fail-safe armed: auto-calling ConnectNetwork");
+            driver.ConnectNetwork(chip::ByteSpan(net.networkID, net.networkIDLen), &sCb);
+        }
+        iter->Release();
+        break;
+    }
+#endif /* CONFIG_NET_L2_OPENTHREAD */
     default:
         break;
     }
