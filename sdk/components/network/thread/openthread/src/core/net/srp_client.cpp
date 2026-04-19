@@ -28,8 +28,6 @@
 
 #include "srp_client.hpp"
 
-/* RT583 SRP diagnostic: printk() has C linkage in Zephyr. */
-extern "C" void printk(const char *, ...);
 
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
 
@@ -613,8 +611,6 @@ Error Client::EnableAutoHostAddress(void)
 {
     Error error = kErrorNone;
 
-    printk("[SRP-AUTO] EnableAutoHostAddress called, wasEnabled=%d\n",
-           (int)mHostInfo.IsAutoAddressEnabled());
     VerifyOrExit(!mHostInfo.IsAutoAddressEnabled());
     SuccessOrExit(error = UpdateHostInfoStateOnAddressChange());
 
@@ -982,7 +978,6 @@ void Client::InvokeCallback(Error aError, const HostInfo &aHostInfo, const Servi
 
 void Client::SendUpdate(void)
 {
-    printk("[OT-SRP-TX] SendUpdate enter state=%d\n", (int)GetState());
 
     static const ItemState kNewStateOnMessageTx[]{
         /* (0) kToAdd      -> */ kAdding,
@@ -1001,12 +996,10 @@ void Client::SendUpdate(void)
     bool     anyChanged;
 
     info.mMessage.Reset(mSocket.NewMessage());
-    printk("[OT-SRP-TX]  NewMessage ptr=%p\n", (void*)info.mMessage.Get());
     VerifyOrExit(info.mMessage != nullptr, error = kErrorNoBufs);
 
     {
         Error err2 = PrepareUpdateMessage(info);
-        printk("[OT-SRP-TX]  PrepareUpdateMessage err=%d\n", (int)err2);
         SuccessOrExit(error = err2);
     }
 
@@ -1081,7 +1074,6 @@ exit:
         // continue to retry using the `mRetryWaitInterval` (which keeps
         // growing on each failure).
 
-        printk("[OT-SRP-TX] FAIL err=%d\n", (int)error);
         LogInfo("Failed to send update: %s", ErrorToString(error));
 
         mSingleServiceMode = false;
@@ -1127,7 +1119,6 @@ Error Client::PrepareUpdateMessage(MsgInfo &aInfo)
 #endif
 
     { Error e = ReadOrGenerateKey(aInfo.mKeyInfo);
-      printk("[SRP-PREP] ReadOrGenerateKey=%d\n", (int)e);
       SuccessOrExit(error = e); }
 
     header.SetMessageId(mNextMessageId);
@@ -1155,10 +1146,8 @@ Error Client::PrepareUpdateMessage(MsgInfo &aInfo)
     // Prepare Update section
 
     { Error e = AppendServiceInstructions(aInfo);
-      printk("[SRP-PREP] AppendServiceInstructions=%d\n", (int)e);
       SuccessOrExit(error = e); }
     { Error e = AppendHostDescriptionInstruction(aInfo);
-      printk("[SRP-PREP] AppendHostDescriptionInstruction=%d\n", (int)e);
       SuccessOrExit(error = e); }
 
     header.SetUpdateRecordCount(aInfo.mRecordCount);
@@ -1167,10 +1156,8 @@ Error Client::PrepareUpdateMessage(MsgInfo &aInfo)
     // Prepare Additional Data section
 
     { Error e = AppendUpdateLeaseOptRecord(aInfo);
-      printk("[SRP-PREP] AppendUpdateLeaseOptRecord=%d\n", (int)e);
       SuccessOrExit(error = e); }
     { Error e = AppendSignature(aInfo);
-      printk("[SRP-PREP] AppendSignature=%d\n", (int)e);
       SuccessOrExit(error = e); }
 
     header.SetAdditionalRecordCount(2); // Lease OPT and SIG RRs
@@ -1514,9 +1501,6 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
 {
     Error error = kErrorNone;
 
-    printk("[HOSTDESC] enter msg_len=%u autoAddr=%d\n",
-           (unsigned)aInfo.mMessage->GetLength(),
-           (int)mHostInfo.IsAutoAddressEnabled());
 
     //----------------------------------
     // Host Description Instruction
@@ -1524,12 +1508,8 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
     // "Delete all RRsets from a name" for Host Name.
 
     { Error e = AppendHostName(aInfo);
-      printk("[HOSTDESC] AppendHostName=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     { Error e = AppendDeleteAllRrsets(aInfo);
-      printk("[HOSTDESC] AppendDeleteAllRrsets=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
@@ -1546,15 +1526,9 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
         for (Ip6::Netif::UnicastAddress &unicastAddress : Get<ThreadNetif>().GetUnicastAddresses())
         {
             bool should = ShouldHostAutoAddressRegister(unicastAddress);
-            printk("[HOSTDESC] addr preferred=%d scope=%d should=%d\n",
-                   (int)unicastAddress.mPreferred,
-                   (int)unicastAddress.GetScope(),
-                   (int)should);
             if (should)
             {
                 Error e = AppendAaaaRecord(unicastAddress.GetAddress(), aInfo);
-                printk("[HOSTDESC]   AppendAaaaRecord=%d msg_len=%u\n",
-                       (int)e, (unsigned)aInfo.mMessage->GetLength());
                 SuccessOrExit(error = e);
                 unicastAddress.mSrpRegistered = true;
                 mAutoHostAddressCount++;
@@ -1569,7 +1543,6 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
         {
             Ip6::Netif::UnicastAddress &mlEid = Get<Mle::Mle>().GetMeshLocalEidUnicastAddress();
             Error e = AppendAaaaRecord(mlEid.GetAddress(), aInfo);
-            printk("[HOSTDESC] fallback mlEid AppendAaaaRecord=%d\n", (int)e);
             SuccessOrExit(error = e);
             mlEid.mSrpRegistered = true;
             mAutoHostAddressCount++;
@@ -1590,7 +1563,6 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
         if (mHostInfo.GetNumAddresses() == 0)
         {
             Ip6::Netif::UnicastAddress &mlEid = Get<Mle::Mle>().GetMeshLocalEidUnicastAddress();
-            printk("[HOSTDESC] fallback (manual,empty) mlEid AppendAaaaRecord\n");
             SuccessOrExit(error = AppendAaaaRecord(mlEid.GetAddress(), aInfo));
         }
     }
@@ -1598,12 +1570,8 @@ Error Client::AppendHostDescriptionInstruction(MsgInfo &aInfo)
     // KEY RR
 
     { Error e = AppendHostName(aInfo);
-      printk("[HOSTDESC] KEY: AppendHostName=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     { Error e = AppendKeyRecord(aInfo);
-      printk("[HOSTDESC] KEY: AppendKeyRecord=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
 
 exit:
@@ -1619,18 +1587,11 @@ Error Client::AppendAaaaRecord(const Ip6::Address &aAddress, MsgInfo &aInfo) con
     rr.SetTtl(DetermineTtl());
     rr.SetLength(sizeof(Ip6::Address));
 
-    printk("[AAAA] enter msg_len=%u\n", (unsigned)aInfo.mMessage->GetLength());
     { Error e = AppendHostName(aInfo);
-      printk("[AAAA]  AppendHostName=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     { Error e = aInfo.mMessage->Append(rr);
-      printk("[AAAA]  Append(rr)=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     { Error e = aInfo.mMessage->Append(aAddress);
-      printk("[AAAA]  Append(addr)=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
@@ -1652,15 +1613,10 @@ Error Client::AppendKeyRecord(MsgInfo &aInfo) const
     key.SetAlgorithm(Dns::KeyRecord::kAlgorithmEcdsaP256Sha256);
     key.SetLength(sizeof(Dns::KeyRecord) - sizeof(Dns::ResourceRecord) + sizeof(Crypto::Ecdsa::P256::PublicKey));
     { Error e = aInfo.mMessage->Append(key);
-      printk("[KEY]  Append(key hdr)=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     { Error e = aInfo.mKeyInfo.GetPublicKey(publicKey);
-      printk("[KEY]  GetPublicKey=%d\n", (int)e);
       SuccessOrExit(error = e); }
     { Error e = aInfo.mMessage->Append(publicKey);
-      printk("[KEY]  Append(publicKey)=%d msg_len=%u\n",
-             (int)e, (unsigned)aInfo.mMessage->GetLength());
       SuccessOrExit(error = e); }
     aInfo.mRecordCount++;
 
@@ -1820,8 +1776,6 @@ exit:
 void Client::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageInfo)
 {
     OT_UNUSED_VARIABLE(aMessageInfo);
-    printk("[OT-SRP-UDP] rx len=%u state=%d\n",
-           (unsigned)aMessage.GetLength(), (int)GetState());
     ProcessResponse(aMessage);
 }
 

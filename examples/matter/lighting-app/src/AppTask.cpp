@@ -32,12 +32,16 @@
 #include <app/FailSafeContext.h>
 /* RT583 ODR workaround: canonical FailSafeContext pointer from Server.cpp
  * (GN-compiled).  AppTask.cpp is CMake-compiled so Server::GetFailSafeContext()
- * inline accessor computes the wrong offset here. */
-extern "C" chip::app::FailSafeContext * rt583_get_failsafe_context(void);
+ * inline accessor computes the wrong offset here.
+ *
+ * Weak fallback so CI builds against upstream connectedhomeip (without the
+ * fork's trampoline patch) still link.  Strong definition from the fork
+ * overrides at link time when present. */
+extern "C" __attribute__((weak)) chip::app::FailSafeContext * rt583_get_failsafe_context(void) { return nullptr; }
 #endif
 
 /* Canonical FabricTable pointer — same ODR workaround as FailSafeContext. */
-extern "C" chip::FabricTable * rt583_get_fabric_table(void);
+extern "C" __attribute__((weak)) chip::FabricTable * rt583_get_fabric_table(void) { return nullptr; }
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -262,8 +266,10 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
              */
             if (inst) {
                 /* RT583 ODR workaround: via canonical trampoline — CMake-compiled
-                 * AppTask.cpp sees wrong Server offsets. */
-                bool failSafeArmed = rt583_get_failsafe_context()->IsFailSafeArmed();
+                 * AppTask.cpp sees wrong Server offsets.  nullptr when running
+                 * the CI/vanilla CHIP build (weak stub) — treat as not-armed. */
+                auto * fsCtx       = rt583_get_failsafe_context();
+                bool failSafeArmed = fsCtx && fsCtx->IsFailSafeArmed();
 
                 if (role == OT_DEVICE_ROLE_DETACHED && failSafeArmed) {
                     openthread_mutex_lock();
@@ -313,7 +319,8 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
          * ConnectNetwork, relying on the device to auto-activate the pending
          * Thread dataset and reconnect over CASE.  If the fail-safe is armed
          * at BLE disconnect, drive ConnectNetwork(staged-net) ourselves. */
-        bool failSafeArmed = rt583_get_failsafe_context()->IsFailSafeArmed();
+        auto * fsCtx       = rt583_get_failsafe_context();
+        bool failSafeArmed = fsCtx && fsCtx->IsFailSafeArmed();
         if (!failSafeArmed) {
             break;
         }
@@ -420,11 +427,11 @@ static void DoFactoryReset(intptr_t /* arg */)
     /* Direct flash_erase on the storage partition (NVS backing store,
      * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
      * `flash erase_address 0x001E0000 0x10000`, but from the device.
-     * Uses the node-based FIXED_PARTITION_* accessors (the old
-     * FIXED_PARTITION_ID(label) form is deprecated in Zephyr 4.x). */
-    const struct device * flash_dev = FIXED_PARTITION_DEVICE(storage_partition);
-    off_t  offset = FIXED_PARTITION_OFFSET(storage_partition);
-    size_t size   = FIXED_PARTITION_SIZE(storage_partition);
+     * Uses Zephyr 4.x's PARTITION_* accessors — FIXED_PARTITION_* are
+     * deprecated. */
+    const struct device * flash_dev = PARTITION_DEVICE(storage_partition);
+    off_t  offset = PARTITION_OFFSET(storage_partition);
+    size_t size   = PARTITION_SIZE(storage_partition);
     int rc = flash_erase(flash_dev, offset, size);
     printk("[BTN] flash_erase storage @0x%08lx (%u bytes) -> %d\n",
            (unsigned long) offset, (unsigned) size, rc);

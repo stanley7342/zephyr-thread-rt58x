@@ -40,8 +40,6 @@
 #include "net/srp_client.hpp"
 #endif
 
-extern "C" void printk(const char *, ...);
-
 namespace ot {
 namespace Ip6 {
 
@@ -482,7 +480,6 @@ Error Udp::HandleMessage(Message &aMessage, MessageInfo &aMessageInfo)
                 retryInfo.SetPeerAddr(candidate);
                 if (Checksum::VerifyMessageChecksum(aMessage, retryInfo, kProtoUdp) == kErrorNone)
                 {
-                    printk("[CHK-FIX] chksum OK with ctx %u prefix swap\n", (unsigned)cid);
                     aMessageInfo.SetPeerAddr(candidate);
                     chkErr = kErrorNone;
                 }
@@ -500,7 +497,6 @@ Error Udp::HandleMessage(Message &aMessage, MessageInfo &aMessageInfo)
                     retryInfo.SetPeerAddr(srpSrv);
                     if (Checksum::VerifyMessageChecksum(aMessage, retryInfo, kProtoUdp) == kErrorNone)
                     {
-                        printk("[CHK-FIX] chksum OK with SRP server addr swap\n");
                         aMessageInfo.SetPeerAddr(srpSrv);
                         chkErr = kErrorNone;
                     }
