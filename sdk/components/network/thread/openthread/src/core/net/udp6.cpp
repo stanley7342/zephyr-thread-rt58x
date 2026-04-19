@@ -34,6 +34,13 @@
 #include "udp6.hpp"
 
 #include "instance/instance.hpp"
+#include "thread/lowpan.hpp"
+#include "thread/network_data_leader.hpp"
+#if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
+#include "net/srp_client.hpp"
+#endif
+
+extern "C" void printk(const char *, ...);
 
 namespace ot {
 namespace Ip6 {
@@ -452,7 +459,57 @@ Error Udp::HandleMessage(Message &aMessage, MessageInfo &aMessageInfo)
     SuccessOrExit(error = aMessage.Read(aMessage.GetOffset(), udpHeader));
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    SuccessOrExit(error = Checksum::VerifyMessageChecksum(aMessage, aMessageInfo, kProtoUdp));
+    {
+        Error chkErr = Checksum::VerifyMessageChecksum(aMessage, aMessageInfo, kProtoUdp);
+        if (chkErr != kErrorNone)
+        {
+            // Workaround for OTBR bug: OTBR computes UDP checksum using its OMR
+            // src address but 6LoWPAN-compresses the packet with srcCID=0
+            // (mesh-local context), so our decompressed src lives in the
+            // mesh-local prefix and the checksum mismatches.  Iterate through
+            // every 6LoWPAN context prefix advertised in Network Data and retry
+            // the checksum with the peer prefix swapped to each.  Keep the
+            // same IID.  Accept the packet if any candidate prefix validates.
+            Address originalPeer = aMessageInfo.GetPeerAddr();
+            for (uint8_t cid = 1; cid < 16 && chkErr != kErrorNone; cid++)
+            {
+                Lowpan::Context ctx;
+                if (Get<NetworkData::Leader>().GetContext(cid, ctx) != kErrorNone) continue;
+                if (!ctx.mIsValid) continue;
+                Address candidate = originalPeer;
+                candidate.SetPrefix(ctx.mPrefix);
+                MessageInfo retryInfo = aMessageInfo;
+                retryInfo.SetPeerAddr(candidate);
+                if (Checksum::VerifyMessageChecksum(aMessage, retryInfo, kProtoUdp) == kErrorNone)
+                {
+                    printk("[CHK-FIX] chksum OK with ctx %u prefix swap\n", (unsigned)cid);
+                    aMessageInfo.SetPeerAddr(candidate);
+                    chkErr = kErrorNone;
+                }
+            }
+#if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
+            if (chkErr != kErrorNone)
+            {
+                // Last resort: try the SRP client's configured server address.
+                // OTBR advertises its SRP server under a prefix that has no
+                // 6LoWPAN context entry, so the context loop above misses it.
+                const Address &srpSrv = Get<Srp::Client>().GetServerAddress().GetAddress();
+                if (!srpSrv.IsUnspecified())
+                {
+                    MessageInfo retryInfo = aMessageInfo;
+                    retryInfo.SetPeerAddr(srpSrv);
+                    if (Checksum::VerifyMessageChecksum(aMessage, retryInfo, kProtoUdp) == kErrorNone)
+                    {
+                        printk("[CHK-FIX] chksum OK with SRP server addr swap\n");
+                        aMessageInfo.SetPeerAddr(srpSrv);
+                        chkErr = kErrorNone;
+                    }
+                }
+            }
+#endif
+        }
+        SuccessOrExit(error = chkErr);
+    }
 #endif
 
     aMessage.MoveOffset(sizeof(udpHeader));

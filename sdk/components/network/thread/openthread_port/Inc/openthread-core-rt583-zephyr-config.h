@@ -19,7 +19,7 @@
 /* ── Logging ───────────────────────────────────────────────────────────── */
 
 #define OPENTHREAD_CONFIG_LOG_OUTPUT                      OPENTHREAD_CONFIG_LOG_OUTPUT_APP
-#define OPENTHREAD_CONFIG_LOG_LEVEL                       OT_LOG_LEVEL_NONE
+#define OPENTHREAD_CONFIG_LOG_LEVEL                       OT_LOG_LEVEL_INFO
 #define OPENTHREAD_CONFIG_LOG_LEVEL_DYNAMIC_ENABLE       0
 #define OPENTHREAD_CONFIG_LOG_PLATFORM                   1
 

@@ -35,6 +35,8 @@
 
 #include "instance/instance.hpp"
 
+extern "C" void printk(const char *fmt, ...);
+
 namespace ot {
 namespace Lowpan {
 
@@ -618,6 +620,19 @@ Error Lowpan::DecompressBaseHeader(Ip6::Header          &aIp6Header,
 
     FindContextForId(srcContextId, srcContext);
     FindContextForId(dstContextId, dstContext);
+
+    {
+        const uint8_t *sp = srcContext.mPrefix.GetBytes();
+        const uint8_t *dp = dstContext.mPrefix.GetBytes();
+        printk("[LOWPAN-DECOMP] hcCtl=0x%04x srcCID=%u valid=%d plen=%u pfx=%02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+               (unsigned)hcCtl, (unsigned)srcContextId, (int)srcContext.mIsValid,
+               (unsigned)srcContext.mPrefix.GetLength(),
+               sp[0],sp[1],sp[2],sp[3],sp[4],sp[5],sp[6],sp[7]);
+        printk("[LOWPAN-DECOMP]                dstCID=%u valid=%d plen=%u pfx=%02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+               (unsigned)dstContextId, (int)dstContext.mIsValid,
+               (unsigned)dstContext.mPrefix.GetLength(),
+               dp[0],dp[1],dp[2],dp[3],dp[4],dp[5],dp[6],dp[7]);
+    }
 
     aIp6Header.Clear();
     aIp6Header.InitVersionTrafficClassFlow();

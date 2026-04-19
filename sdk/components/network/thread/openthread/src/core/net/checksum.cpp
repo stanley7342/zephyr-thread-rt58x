@@ -42,6 +42,8 @@
 #include "net/tcp6.hpp"
 #include "net/udp6.hpp"
 
+extern "C" void printk(const char *fmt, ...);
+
 namespace ot {
 
 RegisterLogModule("Ip6");
@@ -159,6 +161,27 @@ Error Checksum::VerifyMessageChecksum(const Message &aMessage, const Ip6::Messag
     if (checksum.GetValue() != kValidRxChecksum)
     {
         LogNote("Bad %s checksum", Ip6::Ip6::IpProtoToString(aIpProto));
+        {
+            const uint8_t *s = aMessageInfo.GetPeerAddr().GetBytes();
+            const uint8_t *d = aMessageInfo.GetSockAddr().GetBytes();
+            uint16_t       msgLen = aMessage.GetLength();
+            uint16_t       msgOff = aMessage.GetOffset();
+            uint16_t       plLen  = msgLen - msgOff;
+            printk("[CHK-FAIL] proto=%u computed=0x%04x want=0x%04x msgLen=%u offset=%u plLen=%u\n",
+                   (unsigned)aIpProto, (unsigned)checksum.GetValue(),
+                   (unsigned)kValidRxChecksum, (unsigned)msgLen,
+                   (unsigned)msgOff, (unsigned)plLen);
+            printk("[CHK-FAIL]  src=%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+                   s[0],s[1],s[2],s[3],s[4],s[5],s[6],s[7],s[8],s[9],s[10],s[11],s[12],s[13],s[14],s[15]);
+            printk("[CHK-FAIL]  dst=%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x\n",
+                   d[0],d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15]);
+            uint8_t buf[64];
+            uint16_t toRead = plLen < sizeof(buf) ? plLen : sizeof(buf);
+            aMessage.ReadBytes(msgOff, buf, toRead);
+            printk("[CHK-FAIL]  payload[0..%u]:", (unsigned)toRead);
+            for (uint16_t i = 0; i < toRead; i++) printk(" %02x", buf[i]);
+            printk("\n");
+        }
         error = kErrorDrop;
     }
 
