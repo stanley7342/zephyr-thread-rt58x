@@ -13,6 +13,7 @@
 #include <app/clusters/identify-server/identify-server.h>
 #include <app/clusters/on-off-server/on-off-server.h>
 #include <app/server/Server.h>
+#include <credentials/FabricTable.h>
 #include <credentials/DeviceAttestationCredsProvider.h>
 #include <credentials/examples/DeviceAttestationCredsExample.h>
 #include <platform/Zephyr/DeviceInstanceInfoProviderImpl.h>
@@ -35,8 +36,14 @@
 extern "C" chip::app::FailSafeContext * rt583_get_failsafe_context(void);
 #endif
 
+/* Canonical FabricTable pointer — same ODR workaround as FailSafeContext. */
+extern "C" chip::FabricTable * rt583_get_fabric_table(void);
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/sys/reboot.h>
 
 extern "C" {
 #include "hosal_rf.h"
@@ -384,31 +391,47 @@ void AppTask::LightingActionEventHandler(const AppEvent & event)
     }
 }
 
-/* ── Button factory reset ───────────────────────────────────────────────────── */
+/* ── Factory reset (button + RemoveFabric) ──────────────────────────────────── */
+
+static void DoFactoryReset(intptr_t /* arg */);
+
+/* FabricTable delegate — trigger factory reset when the last fabric is removed
+ * (e.g. chip-tool `operationalcredentials remove-fabric <idx>`). */
+class FactoryResetOnFabricRemoved : public chip::FabricTable::Delegate
+{
+public:
+    void OnFabricRemoved(const chip::FabricTable & table, chip::FabricIndex /*idx*/) override
+    {
+        if (table.FabricCount() == 0) {
+            printk("[FAB] Last fabric removed — scheduling factory reset\n");
+            (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
+        } else {
+            printk("[FAB] Fabric removed, %u remaining\n", (unsigned) table.FabricCount());
+        }
+    }
+};
+
+static FactoryResetOnFabricRemoved sFabricDelegate;
 
 static void DoFactoryReset(intptr_t /* arg */)
 {
-    LOG_INF("[BTN] Executing factory reset");
+    printk("[BTN] Executing factory reset — physical flash erase + reboot\n");
 
-    auto & server     = chip::Server::GetInstance();
-    auto & fabricTable = server.GetFabricTable();
-    auto & sessionMgr  = server.GetSecureSessionManager();
+    /* Direct flash_erase on the storage partition (NVS backing store,
+     * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
+     * `flash erase_address 0x001E0000 0x10000`, but from the device.
+     * Uses the node-based FIXED_PARTITION_* accessors (the old
+     * FIXED_PARTITION_ID(label) form is deprecated in Zephyr 4.x). */
+    const struct device * flash_dev = FIXED_PARTITION_DEVICE(storage_partition);
+    off_t  offset = FIXED_PARTITION_OFFSET(storage_partition);
+    size_t size   = FIXED_PARTITION_SIZE(storage_partition);
+    int rc = flash_erase(flash_dev, offset, size);
+    printk("[BTN] flash_erase storage @0x%08lx (%u bytes) -> %d\n",
+           (unsigned long) offset, (unsigned) size, rc);
 
-    /* Expire all CASE sessions, then delete all fabrics */
-    for (const auto & fabricInfo : fabricTable) {
-        sessionMgr.ExpireAllSessionsForFabric(fabricInfo.GetFabricIndex());
-    }
-    fabricTable.DeleteAllFabrics();
-
-#ifdef CONFIG_NET_L2_OPENTHREAD
-    /* Clear SRP host/services before leaving Thread network */
-    if (chip::DeviceLayer::ThreadStackMgr().IsThreadAttached()) {
-        (void) chip::DeviceLayer::ThreadStackMgr().ClearAllSrpHostAndServices();
-    }
-    chip::DeviceLayer::ConnectivityMgr().ErasePersistentInfo();
-#endif
-
-    server.ScheduleFactoryReset();
+    /* Reboot so the device comes up in a clean factory state. */
+    k_msleep(100); /* let the printk drain before reset */
+    sys_reboot(SYS_REBOOT_COLD);
 }
 
 /* Called by CHIP SystemLayer timer when GPIO0 has been held for 6 s.
@@ -423,7 +446,7 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
     if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
         task.mFunction            = FunctionEvent::NoneSelected;
         task.mFunctionTimerActive = false;
-        LOG_INF("[BTN] Factory reset triggered (6 s hold)");
+        printk("[BTN] Factory reset triggered (6s hold reached)\n");
         (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
     }
 }
@@ -469,9 +492,10 @@ void AppTask::FunctionHandler(const AppEvent & event)
     AppTask & task = AppTask::Instance();
 
     if (event.ButtonEvent.ButtonIdx == kButtonFactoryReset) {
+        printk("[BTN] GPIO0 event pressed=%d\n", (int) event.ButtonEvent.Pressed);
         if (event.ButtonEvent.Pressed) {
             if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
-                LOG_INF("[BTN] GPIO0 pressed, hold 6s for reset");
+                printk("[BTN] GPIO0 pressed, hold 6s for factory reset\n");
                 task.mFunction = FunctionEvent::FactoryReset;
                 task.StartTimer(kFactoryResetTriggerTimeMs);
             }
@@ -479,7 +503,7 @@ void AppTask::FunctionHandler(const AppEvent & event)
             if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
                 task.CancelTimer();
                 task.mFunction = FunctionEvent::NoneSelected;
-                LOG_INF("[BTN] GPIO0 released, reset cancelled");
+                printk("[BTN] GPIO0 released before 6s, factory reset cancelled\n");
             }
         }
     } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
@@ -730,6 +754,13 @@ static void ServerInitWork(intptr_t arg)
     if (err != CHIP_NO_ERROR) {
         LOG_ERR("Server::Init failed: %" CHIP_ERROR_FORMAT, err.Format());
         return;
+    }
+
+    /* Register fabric-removed hook so RemoveFabric triggers factory reset
+     * when the last fabric goes away. */
+    if (auto * fabricTable = rt583_get_fabric_table()) {
+        (void) fabricTable->AddFabricDelegate(&sFabricDelegate);
+        printk("[APP] FabricTable delegate registered\n");
     }
 
 #if defined(MATTER_FACTORY_RESET_ON_BOOT)
