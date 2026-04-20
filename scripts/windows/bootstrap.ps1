@@ -48,28 +48,3 @@ if (Test-Path $cloneDir) {
 # ── Install ───────────────────────────────────────────────────────────────────
 Write-Host "==> Running install.ps1" -ForegroundColor Cyan
 & $installPs
-
-# ── Next steps ────────────────────────────────────────────────────────────────
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "  Setup complete — Next steps" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "  cd zephyr-thread-rt58x" -ForegroundColor White
-Write-Host ""
-Write-Host "  # Load environment (once per session)" -ForegroundColor DarkGray
-Write-Host "  . ..\env.ps1" -ForegroundColor White
-Write-Host "  `$env:ZEPHYR_NO_ENV = '1'" -ForegroundColor White
-Write-Host ""
-Write-Host "  # Build (first time — bootloader then app)" -ForegroundColor DarkGray
-Write-Host "  west build -p always -b rt583_evb ``" -ForegroundColor White
-Write-Host "      ../bootloader/mcuboot/boot/zephyr --build-dir build/bootloader ``" -ForegroundColor White
-Write-Host "      -- `"-DOVERLAY_CONFIG=`$PWD/examples/bootloader/mcuboot.conf`"" -ForegroundColor White
-Write-Host "  west build -p always -b rt583_evb examples/thread --build-dir build/thread" -ForegroundColor White
-Write-Host ""
-Write-Host "  # Flash" -ForegroundColor DarkGray
-Write-Host "  west flash --build-dir build/bootloader   # flash bootloader to 0x0 (once)" -ForegroundColor White
-Write-Host "  west flash --build-dir build/thread       # flash app to slot0 (0x10000)" -ForegroundColor White
-Write-Host ""
-Write-Host "  See docs\build-guide.md for all projects (matter, BLE, etc.)" -ForegroundColor DarkGray
-Write-Host ""

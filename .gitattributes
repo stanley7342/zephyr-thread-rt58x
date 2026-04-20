@@ -1,1 +1,2 @@
 sdk/lib/*.a filter=lfs diff=lfs merge=lfs -text
+tools/windows/openocd.exe filter=lfs diff=lfs merge=lfs -text

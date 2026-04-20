@@ -401,8 +401,13 @@ if (Test-Path $sdkSetup) {
     New-Item -ItemType Directory -Path $sdkParent -Force | Out-Null
     Write-Host "    Extracting SDK ..."
     & 7z x $tmp -o"$sdkParent" -y -bb1 2>&1 | ForEach-Object {
-        Write-Host ("    " + $_.ToString())
+        $line = $_.ToString().Trim()
+        if ($line) {
+            $pad = [Math]::Max(0, 100 - $line.Length)
+            [Console]::Write("`r    " + $line + (' ' * $pad))
+        }
     }
+    [Console]::WriteLine()
     if ($LASTEXITCODE -ne 0) {
         throw "7z extract failed (exit $LASTEXITCODE).  Delete the cached archive and retry:`n  Remove-Item '$tmp' -Force"
     }
@@ -701,6 +706,8 @@ Write-Ok "env.ps1 generated"
 Write-Host "    To load (run from inside the project directory): . .\env.ps1" -ForegroundColor Yellow
 
 # ── Step 6: Set up tools\windows\openocd ─────────────────────────────────────
+# openocd.exe and tcl/ are tracked in the repo (openocd.exe via Git LFS), so
+# they're present after git clone. This step only handles the runtime DLLs.
 
 Write-Step "Setting up tools\windows\openocd"
 
@@ -711,29 +718,31 @@ $srcOcd    = "$env:USERPROFILE\openocd-rt58x"
 
 New-Item -ItemType Directory -Path $toolsWin -Force | Out-Null
 
-# Copy openocd.exe
-if (Test-Path $toolsOcd) {
-    Write-Skip "openocd.exe ($toolsOcd)"
-} elseif (Test-Path "$srcOcd\openocd.exe") {
-    Copy-Item "$srcOcd\openocd.exe" $toolsOcd
-    Write-Ok  "openocd.exe copied from $srcOcd"
-} else {
-    Write-Warning "openocd.exe not found at $srcOcd\openocd.exe — please copy the openocd-rt58x Windows binary manually"
-}
+if (Test-Path $toolsOcd) { Write-Skip "openocd.exe (tracked in repo)" }
+else { Write-Warning "openocd.exe missing at $toolsOcd — run 'git lfs pull' to fetch it" }
 
-# Copy tcl/
-if (Test-Path $toolsTcl) {
-    Write-Skip "tcl/ ($toolsTcl)"
-} elseif (Test-Path "$srcOcd\tcl") {
-    Copy-Item "$srcOcd\tcl" $toolsTcl -Recurse
-    Write-Ok  "tcl/ copied from $srcOcd\tcl"
-} else {
-    Write-Warning "$srcOcd\tcl not found — please copy the tcl scripts manually"
-}
+if (Test-Path $toolsTcl) { Write-Skip "tcl/ (tracked in repo)" }
+else { Write-Warning "tcl/ missing at $toolsTcl — check your git clone" }
 
-# Download xPack OpenOCD 0.11.x to obtain required DLLs (libhidapi-0.dll, libftdi1.dll)
+# Required runtime DLLs. Prefer existing openocd-rt58x\dist-win\bin\, then xPack, then MSYS2.
 $requiredDlls = @("libusb-1.0.dll", "libhidapi-0.dll", "libftdi1.dll")
 $missingDlls  = @($requiredDlls | Where-Object { -not (Test-Path "$toolsWin\$_") })
+
+# First pass: copy from $srcOcd\dist-win\bin\ if available
+$srcDistBin = Join-Path $srcOcd "dist-win\bin"
+if ($missingDlls.Count -gt 0 -and (Test-Path $srcDistBin)) {
+    $stillMissing = @()
+    foreach ($dll in $missingDlls) {
+        $src = Join-Path $srcDistBin $dll
+        if (Test-Path $src) {
+            Copy-Item $src $toolsWin -Force
+            Write-Ok "$dll copied from $srcDistBin"
+        } else {
+            $stillMissing += $dll
+        }
+    }
+    $missingDlls = $stillMissing
+}
 
 if ($missingDlls.Count -eq 0) {
     Write-Skip "DLL (libusb-1.0.dll, libhidapi-0.dll, libftdi1.dll)"
@@ -849,4 +858,12 @@ Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Build:"
 Write-Host "  cd $projectDir" -ForegroundColor Yellow
-Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app" -ForegroundColor Yellow
+Write-Host "  west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr ``" -ForegroundColor Yellow
+Write-Host "      -d build/bootloader ``" -ForegroundColor Yellow
+Write-Host "      -- -DOVERLAY_CONFIG=`"examples/bootloader/mcuboot.conf`" ``" -ForegroundColor Yellow
+Write-Host "         -DDTC_OVERLAY_FILE=`"examples/bootloader/mcuboot.overlay`"" -ForegroundColor Yellow
+Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Flash:"
+Write-Host "  west flash -d build/bootloader" -ForegroundColor Yellow
+Write-Host "  west flash -d build/lighting-app" -ForegroundColor Yellow
