@@ -19,7 +19,6 @@
 void otPlatReset(otInstance *aInstance)
 {
     (void)aInstance;
-    printk("[OT] otPlatReset");
 
     wdt_config_mode_t wdt_mode = {
         .int_enable    = 0,
@@ -51,7 +50,6 @@ void otPlatWakeHost(void) {}
 
 void otPlatAssertFail(const char *aFilename, int aLineNumber)
 {
-    printk("[OT] ASSERT FAILED: %s @ %d\n", aFilename, aLineNumber);
     /* Flush UART and halt — we want the location visible before spin */
     k_busy_wait(10000);
     while (1) {}

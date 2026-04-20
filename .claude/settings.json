@@ -130,7 +130,12 @@
       "Bash(mv rt582_crypto rt583_crypto)",
       "Bash(mv rt582_driver rt583_driver)",
       "Bash(mv rt582_system rt583_system)",
-      "Bash(xxd \"C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/rt583_evb_defconfig\")"
+      "Bash(xxd \"C:/Users/Stanley/zephyr-thread-rt58x/boards/arm/rt583_evb/rt583_evb_defconfig\")",
+      "PowerShell(git -C c:/Users/Stanley/zephyr-thread-rt58x status --short)",
+      "PowerShell(git -C c:/Users/Stanley/zephyr-thread-rt58x diff --stat)",
+      "PowerShell(git -C c:/Users/Stanley/zephyr-thread-rt58x log --oneline -1 -- sdk/components/network/thread/openthread/src/core/net/udp6.cpp sdk/components/network/thread/openthread/src/core/net/checksum.cpp sdk/components/network/thread/openthread/src/core/thread/lowpan.cpp)",
+      "PowerShell(cmake --version > $null 2>&1)",
+      "PowerShell(Select-String -Path 'c:\\\\Users\\\\Stanley\\\\zephyr-thread-rt58x\\\\sdk\\\\components\\\\network\\\\thread\\\\openthread\\\\src\\\\core\\\\net\\\\srp_client.cpp' -Pattern 'SendUpdate|EnableAutoHostAddress|PrepareUpdateMessage' -Context 1,1 | Select-Object -First 30 | ForEach-Object { $_.Line })"
     ],
     "additionalDirectories": [
       "c:\\Users\\Stanley\\stbuild\\src",

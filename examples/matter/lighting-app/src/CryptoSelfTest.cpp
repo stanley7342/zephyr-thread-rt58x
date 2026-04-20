@@ -119,7 +119,6 @@ static bool test_aes128_ecb(void)
     uint32_t enc_ms = k_uptime_get_32() - t0;
 
     if (memcmp(cipher, kAesEcbCipher, 16) != 0) {
-        printk("[CRYPTO] AES-128-ECB encrypt FAIL\n");
         print_hex("got ", cipher, 16);
         print_hex("want", kAesEcbCipher, 16);
         ok = false;
@@ -127,12 +126,10 @@ static bool test_aes128_ecb(void)
 
     aes_ecb_decrypt(&ctx, cipher, recovered);
     if (memcmp(recovered, kAesPlain, 16) != 0) {
-        printk("[CRYPTO] AES-128-ECB decrypt FAIL\n");
         ok = false;
     }
 
     if (ok) {
-        printk("[CRYPTO] AES-128-ECB PASS (encrypt %u ms)\n", enc_ms);
     }
     return ok;
 }
@@ -156,7 +153,6 @@ static bool test_aes128_cbc(void)
     uint32_t enc_ms = k_uptime_get_32() - t0;
 
     if (memcmp(cipher, kAesCbcCipher, 16) != 0) {
-        printk("[CRYPTO] AES-128-CBC encrypt FAIL\n");
         print_hex("got ", cipher, 16);
         print_hex("want", kAesCbcCipher, 16);
         ok = false;
@@ -169,12 +165,10 @@ static bool test_aes128_cbc(void)
     aes_cbc_buffer_decrypt(&ctx, cipher, recovered, 16);
 
     if (memcmp(recovered, kAesPlain, 16) != 0) {
-        printk("[CRYPTO] AES-128-CBC decrypt FAIL\n");
         ok = false;
     }
 
     if (ok) {
-        printk("[CRYPTO] AES-128-CBC PASS (encrypt %u ms)\n", enc_ms);
     }
     return ok;
 }
@@ -184,7 +178,6 @@ static bool test_aes128_cbc(void)
 static bool test_sha256(void)
 {
     sha256_vector_init();
-    printk("[CRYPTO] SHA-256 ROM pointers wired (raw KAT skipped; validated via HMAC)\n");
     return true;
 }
 
@@ -201,18 +194,15 @@ static bool test_hmac_sha256(void)
     uint32_t hmac_ms = k_uptime_get_32() - t0;
 
     if (ret != 0) {
-        printk("[CRYPTO] HMAC-SHA256 error: %u\n", (unsigned)ret);
         return false;
     }
 
     if (memcmp(mac, kHmacExpected, SHA256_DIGEST_SIZE) != 0) {
-        printk("[CRYPTO] HMAC-SHA256 FAIL\n");
         print_hex("got ", mac, SHA256_DIGEST_SIZE);
         print_hex("want", kHmacExpected, SHA256_DIGEST_SIZE);
         return false;
     }
 
-    printk("[CRYPTO] HMAC-SHA256 PASS (hmac %u ms)\n", hmac_ms);
     return true;
 }
 
@@ -223,7 +213,6 @@ static bool test_hmac_sha256(void)
 void crypto_selftest(void)
 {
 #ifdef CONFIG_RT583_CRYPTO_SELFTEST
-    printk("[CRYPTO] === RT583 hardware crypto self-test ===\n");
 
     bool aes_ecb_ok  = test_aes128_ecb();
     bool aes_cbc_ok  = test_aes128_cbc();
@@ -231,11 +220,6 @@ void crypto_selftest(void)
     bool hmac_ok     = test_hmac_sha256();
 
     bool all_ok = aes_ecb_ok && aes_cbc_ok && hmac_ok;
-    printk("[CRYPTO] Result: AES-ECB=%s AES-CBC=%s HMAC-SHA256=%s — %s\n",
-           aes_ecb_ok ? "OK" : "FAIL",
-           aes_cbc_ok ? "OK" : "FAIL",
-           hmac_ok    ? "OK" : "FAIL",
-           all_ok     ? "PASS" : "FAIL");
 #else
     /* Self-test disabled — just wire SHA-256 ROM pointers (required for HMAC). */
     sha256_vector_init();

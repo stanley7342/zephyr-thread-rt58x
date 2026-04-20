@@ -104,24 +104,17 @@ static void otrStackTask(void *p1, void *p2, void *p3)
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
 
-    printk("[OT] task started\n");
     OT_THREAD_SAFE(
         otPlatUartEnable();
-        printk("[OT] uart enable done\n");
         ot_entropy_init();
-        printk("[OT] entropy init done\n");
         ot_alarmInit();
-        printk("[OT] alarm init done\n");
         ot_radioInit();
-        printk("[OT] radio init done\n");
         ot_instance = otInstanceInitSingle();
-        printk("[OT] instance=%p\n", ot_instance);
         assert(ot_instance);
 #if OPENTHREAD_ENABLE_DIAG
         otDiagInit(ot_instance);
 #endif
         otrInitUser(ot_instance);
-        printk("[OT] otrInitUser done\n");
     );
 
     while (true) {

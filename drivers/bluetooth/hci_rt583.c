@@ -30,7 +30,6 @@
 #include "ruci.h"
 #include "flashctl.h"
 
-#define LOG_PREFIX "[HCI] "
 
 
 /* BLE HCI H:4 packet type indicators */
@@ -76,7 +75,6 @@ __weak void     _crit_relock(uint32_t nest) { ARG_UNUSED(nest); }
 #if HCI_RT58X_DEBUG
 static void dump_hex(const char *dir, const uint8_t *data, uint16_t len)
 {
-	printk(LOG_PREFIX "%s[%u]: ", dir, len);
 	for (uint16_t i = 0; i < len && i < 40; i++) {
 		printk("%02x ", data[i]);
 	}
@@ -94,8 +92,6 @@ static void decode_tx(const uint8_t *data, uint16_t len)
 	uint16_t opcode = (uint16_t)data[2] << 8 | data[1];
 	uint8_t ogf = opcode >> 10;
 	uint16_t ocf = opcode & 0x3FF;
-	printk(LOG_PREFIX "  -> CMD opcode=0x%04x (OGF=0x%02x OCF=0x%04x) plen=%u\n",
-	       opcode, ogf, ocf, data[3]);
 }
 
 static void decode_rx(const uint8_t *data, uint16_t len)
@@ -108,14 +104,8 @@ static void decode_rx(const uint8_t *data, uint16_t len)
 
 	if (evt == 0x0E && plen >= 4) {
 		uint16_t opcode = (uint16_t)data[5] << 8 | data[4];
-		printk(LOG_PREFIX "  <- CMD_COMPLETE opcode=0x%04x status=0x%02x ncmd=%u\n",
-		       opcode, data[6], data[3]);
 	} else if (evt == 0x0F && plen >= 4) {
 		uint16_t opcode = (uint16_t)data[6] << 8 | data[5];
-		printk(LOG_PREFIX "  <- CMD_STATUS opcode=0x%04x status=0x%02x ncmd=%u\n",
-		       opcode, data[3], data[4]);
-	} else {
-		printk(LOG_PREFIX "  <- EVT code=0x%02x plen=%u\n", evt, plen);
 	}
 }
 #else
@@ -147,7 +137,6 @@ static int hci_evt_cb(void *p_arg)
 
 	struct net_buf *buf = bt_buf_get_evt(evt_code, false, K_NO_WAIT);
 	if (!buf) {
-		printk(LOG_PREFIX "drop evt 0x%02x (no buf)\n", evt_code);
 		/* CRITICAL: even if we can't forward the event to the host,
 		 * we must still return 1 for CMD_COMPLETE/CMD_STATUS so that
 		 * handle_event_status() releases g_rf_cmd_sem.  Without this,
@@ -196,7 +185,6 @@ static int hci_acl_cb(void *p_arg)
 
 	struct net_buf *buf = bt_buf_get_rx(BT_BUF_ACL_IN, K_NO_WAIT);
 	if (!buf) {
-		printk(LOG_PREFIX "drop ACL\n");
 		return 0;
 	}
 
@@ -241,12 +229,9 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 			if (rc == 0) {
 				break;
 			}
-			printk(LOG_PREFIX "cmd retry %d rc=%d pwr=0x%02x\n",
-			       i, rc, RfMcu_PowerStateCheck());
 			k_sleep(SEND_RETRY_DELAY);
 		}
 		if (rc != 0) {
-			printk(LOG_PREFIX "cmd send failed\n");
 			net_buf_unref(buf);
 			return -EIO;
 		}
@@ -278,7 +263,6 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 
 		uint8_t *raf_buf = k_malloc(total);
 		if (!raf_buf) {
-			printk(LOG_PREFIX "ACL alloc failed\n");
 			net_buf_unref(buf);
 			return -ENOMEM;
 		}
@@ -289,23 +273,18 @@ static int hci_rt58x_send(const struct device *dev, struct net_buf *buf)
 		sys_put_le16(hci_len,           &raf_buf[5]);
 		memcpy(&raf_buf[7], payload, hci_len);
 
-		/* printk(LOG_PREFIX "ACL-OUT len=%u seq=%u\n", total, tx_sn - 1); */
-		dump_hex("TX-ACL", raf_buf, total);
 
 		for (int i = 0; i < SEND_RETRY_MAX; i++) {
 			rc = hosal_rf_write_tx_data(raf_buf, total);
 			if (rc == 0) {
 				break;
 			}
-			printk(LOG_PREFIX "ACL retry %d rc=%d pwr=0x%02x\n",
-			       i, rc, RfMcu_PowerStateCheck());
 			k_sleep(SEND_RETRY_DELAY);
 		}
 
 		k_free(raf_buf);
 
 		if (rc != 0) {
-			printk(LOG_PREFIX "ACL send failed rc=%d\n", rc);
 			net_buf_unref(buf);
 			return -EIO;
 		}
@@ -368,9 +347,6 @@ static int hci_rt58x_setup(const struct device *dev,
 	 * Sending it here (much later, during bt_enable) causes the RF MCU
 	 * scheduler to de-prioritize the 15.4 TX queue → 15.4 frames never
 	 * appear OTA.  Skip it here; the early init already activated BLE. */
-	if (hci_rt58x_rf_already_init) {
-		printk(LOG_PREFIX "setup: RUCI_INITIATE_BLE skipped (done in AppTask)\n");
-	}
 
 	uint8_t cmd[] = {
 		H4_CMD, 0x01, 0xFC, RT58X_VS_SET_CTRL_INFO_PLEN,
@@ -390,7 +366,6 @@ static int hci_rt58x_setup(const struct device *dev,
 	}
 	if (rc != 0) {
 		hci_data.setup_in_progress = false;
-		printk(LOG_PREFIX "setup: FAILED rc=%d\n", rc);
 		return -EIO;
 	}
 
