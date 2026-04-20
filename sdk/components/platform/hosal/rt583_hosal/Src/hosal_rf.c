@@ -163,11 +163,6 @@ uint8_t  s_last_int_status;   /* last intStatus seen by ISR — visible from HCI
 
 void hosal_rf_dump_diag(void)
 {
-    extern uint32_t s_evt_count;
-    extern uint32_t s_proc_wakeups;
-    printk("[RF-DIAG] isr=%u evt=%u wake=%u last_sts=0x%02x pwr=0x%02x\n",
-           s_isr_count, s_evt_count, s_proc_wakeups,
-           s_last_int_status, RfMcu_PowerStateCheck());
 }
 static void __rf_event_callback(uint8_t intStatus) {
     s_isr_count++;
@@ -357,15 +352,6 @@ static hosal_rf_status_t __rf_sub_command_set(uint8_t *cmd_ptr,
     RUCI_ENDIAN_CONVERT((uint8_t *)&sCnfEvent, RUCI_CNF_EVENT);
     if (sCnfEvent.pci_cmd_subheader != expected_subheader) {
         /* Dump raw CNF bytes so we can see what the RF MCU actually returned. */
-        printk("[RF-CMD] CNF mismatch: exp_sub=0x%02x got evthdr=0x%02x sub=0x%02x len=%u"
-               " cmd_hdr=0x%02x cmd_sub=0x%02x status=%u\n",
-               expected_subheader,
-               ((uint8_t *)&sCnfEvent)[0],
-               ((uint8_t *)&sCnfEvent)[1],
-               ((uint8_t *)&sCnfEvent)[2],
-               ((uint8_t *)&sCnfEvent)[3],
-               ((uint8_t *)&sCnfEvent)[4],
-               ((uint8_t *)&sCnfEvent)[5]);
         return HOSAL_RF_STATUS_CONTENT_ERROR;
     }
     if (sCnfEvent.status != HOSAL_RF_STATUS_SUCCESS) {
@@ -985,9 +971,6 @@ int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     uint32_t nest = _crit_unlock();
     int sem_rc = k_sem_take(&g_rf_cmd_sem, K_SECONDS(5));
     if (sem_rc != 0) {
-        printk("[RF-CMD] SEM TIMEOUT pwr=0x%02x rp=%u wp=%u\n",
-               RfMcu_PowerStateCheck(),
-               ghosal_rf_cmd_state_q.rp, ghosal_rf_cmd_state_q.wp);
         /* Force-recover so subsequent commands can proceed */
         k_sem_reset(&g_rf_cmd_sem);
         k_sem_give(&g_rf_cmd_sem);
@@ -1004,7 +987,6 @@ int hosal_rf_write_command(uint8_t *command_ptr, uint32_t command_len) {
     {
         uint8_t *stale;
         while (k_msgq_get(&g_rf_evt_msgq, (void *)&stale, K_NO_WAIT) == 0) {
-            printk("[RF] discard stale evt sub=0x%02x\n", stale[4]);
             free(stale);
         }
     }
@@ -1236,7 +1218,6 @@ hosal_rf_status_t hosal_rf_ioctl(hosal_rf_ioctl_t ctl, void *p_arg) {
          * regardless of log level.  CONTENT_ERROR on AUTO_STATE_SET may be
          * expected in MULTI_PROTOCOL mode (RF MCU manages state internally),
          * but we want to see which IOCTLs fail and when. */
-        printk("[RF-IOCTL] ctl=%d err=%d\n", ctl, rval);
     }
     return rval;
 }
@@ -1261,7 +1242,6 @@ void hosal_rf_init(hosal_rf_mode_t mode)
      * reference rt584 and is safe to call before rf_common_init_by_fw. */
     RfMcu_DmaInit();
     if (rf_common_init_by_fw(mode, __rf_event_callback) != true) {
-        printk("[RF] init fw fail — halting\n");
         k_panic();
     }
 

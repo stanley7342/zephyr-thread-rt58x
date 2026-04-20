@@ -633,7 +633,6 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
                               tx_control,
                               otMacFrameGetSequence(aFrame));
         if (tx_ret != 0) {
-            printk("[OT-RADIO] TX FAIL ret=%d ctrl=0x%02x\n", tx_ret, tx_control);
             OT_NOTIFY(OT_SYSTEM_EVENT_RADIO_TX_NO_ACK);
         }
     }
@@ -740,14 +739,9 @@ static void _RxDoneEvent(uint16_t packet_length, uint8_t *rx_data,
 
     if (crc_status != 0) {
         /* RX CRC error — uncomment for RF debug */
-        /* printk("[OT-RADIO] RX CRC err ch=%u rssi=-%d\n", sCurrentChannel, (int)rssi); */
-        OT_NOTIFY_ISR(OT_SYSTEM_EVENT_RADIO_RX_CRC_FIALED);
         return;
     }
-    /* printk("[OT-RADIO] RX ok ch=%u len=%u rssi=-%d\n", sCurrentChannel, (unsigned)(packet_length - 9), (int)rssi); */
-
     otRadio_rxFrame_t *p = NULL;
-    OT_ENTER_CRITICAL_ISR();
     if (!utils_dlist_empty(&otRadio_var.frameList)) {
         p = (otRadio_rxFrame_t *)otRadio_var.frameList.next;
         otRadio_var.dbgFrameNum--;
@@ -832,16 +826,12 @@ void ot_radioTask(ot_system_event_t trxEvent)
                               OT_ERROR_NONE);
         }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_ERROR) {
-            printk("[OT-RADIO] TX_ERROR\n");
         }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_ACKED) {
             otPlatRadioTxDone(otRadio_var.aInstance, txframe,
                               otRadio_var.pAckFrame, OT_ERROR_NONE);
         }
         if (trxEvent & OT_SYSTEM_EVENT_RADIO_TX_NO_ACK) {
-            printk("[OT-RADIO] TX NO_ACK ch=%u len=%u\n",
-                   sCurrentChannel,
-                   txframe ? txframe->mLength : 0u);
             otPlatRadioTxDone(otRadio_var.aInstance, txframe, NULL,
                               OT_ERROR_NO_ACK);
         }
@@ -897,7 +887,6 @@ void ot_radioInit(void)
     /* All radio setup (callbacks, channel, auto-ack, src-match, EUI-64
      * derivation) is done by ieee802154_rt583.c at POST_KERNEL device
      * init.  Nothing left to do here. */
-    printk("[OT-RADIO] ot_radioInit: no-op (ieee802154 driver handles init)\n");
     return;
 #else
     lmac15p4_callback_t mac_cb;
@@ -907,7 +896,6 @@ void ot_radioInit(void)
     /* lmac15p4_init() + PHY/MAC PIB are done in AppTask::Init() before
      * this function is called — matching the Rafael official Matter SDK
      * sequence where BLEManagerImpl does rf_init + lmac15p4_init + PIB. */
-    printk("[OT-RADIO] ot_radioInit: setting callbacks\n");
 
     if (sMacAddrReadMode == 1) {
         rafael_otp_mac_addr(sIEEE_EUI64Addr);

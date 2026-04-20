@@ -410,10 +410,7 @@ public:
     void OnFabricRemoved(const chip::FabricTable & table, chip::FabricIndex /*idx*/) override
     {
         if (table.FabricCount() == 0) {
-            printk("[FAB] Last fabric removed — scheduling factory reset\n");
             (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
-        } else {
-            printk("[FAB] Fabric removed, %u remaining\n", (unsigned) table.FabricCount());
         }
     }
 };
@@ -422,7 +419,6 @@ static FactoryResetOnFabricRemoved sFabricDelegate;
 
 static void DoFactoryReset(intptr_t /* arg */)
 {
-    printk("[BTN] Executing factory reset — physical flash erase + reboot\n");
 
     /* Direct flash_erase on the storage partition (NVS backing store,
      * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
@@ -432,12 +428,9 @@ static void DoFactoryReset(intptr_t /* arg */)
     const struct device * flash_dev = PARTITION_DEVICE(storage_partition);
     off_t  offset = PARTITION_OFFSET(storage_partition);
     size_t size   = PARTITION_SIZE(storage_partition);
-    int rc = flash_erase(flash_dev, offset, size);
-    printk("[BTN] flash_erase storage @0x%08lx (%u bytes) -> %d\n",
-           (unsigned long) offset, (unsigned) size, rc);
+    (void) flash_erase(flash_dev, offset, size);
 
-    /* Reboot so the device comes up in a clean factory state. */
-    k_msleep(100); /* let the printk drain before reset */
+    k_msleep(100);
     sys_reboot(SYS_REBOOT_COLD);
 }
 
@@ -453,7 +446,6 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
     if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
         task.mFunction            = FunctionEvent::NoneSelected;
         task.mFunctionTimerActive = false;
-        printk("[BTN] Factory reset triggered (6s hold reached)\n");
         (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(DoFactoryReset, 0);
     }
 }
@@ -499,10 +491,8 @@ void AppTask::FunctionHandler(const AppEvent & event)
     AppTask & task = AppTask::Instance();
 
     if (event.ButtonEvent.ButtonIdx == kButtonFactoryReset) {
-        printk("[BTN] GPIO0 event pressed=%d\n", (int) event.ButtonEvent.Pressed);
         if (event.ButtonEvent.Pressed) {
             if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
-                printk("[BTN] GPIO0 pressed, hold 6s for factory reset\n");
                 task.mFunction = FunctionEvent::FactoryReset;
                 task.StartTimer(kFactoryResetTriggerTimeMs);
             }
@@ -510,7 +500,6 @@ void AppTask::FunctionHandler(const AppEvent & event)
             if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
                 task.CancelTimer();
                 task.mFunction = FunctionEvent::NoneSelected;
-                printk("[BTN] GPIO0 released before 6s, factory reset cancelled\n");
             }
         }
     } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
@@ -554,14 +543,12 @@ CHIP_ERROR AppTask::Init()
     /* ── Firmware version marker ────────────────────────────────────────────
      * Confirms new firmware is running and AppTask::Init() is entered.
      * If this line is absent from the log the object file was not rebuilt. */
-    printk("[BOOT] AppTask::Init (build " __DATE__ " " __TIME__ ")\n");
     t0 = k_uptime_get_32();
 
     /* Hardware crypto self-test — must run before hosal_rf_init() so the
      * shared AES/ECC accelerator is idle and lmac15p4 has not started. */
     crypto_selftest();
     phase_ms = k_uptime_get_32() - t0;
-    printk("[BOOT] crypto_selftest: %u ms\n", phase_ms);
 
     /* Initialize RF MCU in multi-protocol mode (BLE + 802.15.4/Thread).
      * Must be called once before InitChipStack() triggers either BLE or OT
@@ -592,12 +579,10 @@ CHIP_ERROR AppTask::Init()
         uint8_t ruci_ble_init[] = { 0x10, 0x01, 0x00 }; /* INITIATE_BLE */
         hosal_rf_write_command(ruci_ble_init, sizeof(ruci_ble_init));
         k_sleep(K_MSEC(20));
-        printk("[BOOT] RUCI_INITIATE_BLE sent (early, matching Rafael SDK)\n");
     }
 
     hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
     phase_ms = k_uptime_get_32() - t0;
-    printk("[BOOT] RF init + settle: %u ms\n", phase_ms);
 
     /* Initialise lmac15p4 radio layer for OpenThread (sets up RUCI callbacks,
      * channel, and MAC address from OTP/flash).  Must be called after
@@ -607,7 +592,6 @@ CHIP_ERROR AppTask::Init()
     ot_alarmInit();
     ot_entropy_init();
     phase_ms = k_uptime_get_32() - t0;
-    printk("[BOOT] OT radio+alarm+entropy: %u ms\n", phase_ms);
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
     /* Explicitly initialise the OT instance on this thread (8 KB stack).
@@ -626,7 +610,6 @@ CHIP_ERROR AppTask::Init()
      * with Zephyr's openthread_instance set by openthread_init(). */
     ot_set_instance(openthread_get_default_instance());
     phase_ms = k_uptime_get_32() - t0;
-    printk("[BOOT] openthread_init: %u ms\n", phase_ms);
 #endif
 
     /* Initialise CHIP memory allocator */
@@ -638,7 +621,6 @@ CHIP_ERROR AppTask::Init()
     t0 = k_uptime_get_32();
     err = PlatformMgr().InitChipStack();
     phase_ms = k_uptime_get_32() - t0;
-    printk("[BOOT] InitChipStack: %u ms\n", phase_ms);
     VerifyOrReturnError(err == CHIP_NO_ERROR, err,
                         LOG_ERR("InitChipStack failed: %" CHIP_ERROR_FORMAT, err.Format()));
 
@@ -767,7 +749,6 @@ static void ServerInitWork(intptr_t arg)
      * when the last fabric goes away. */
     if (auto * fabricTable = rt583_get_fabric_table()) {
         (void) fabricTable->AddFabricDelegate(&sFabricDelegate);
-        printk("[APP] FabricTable delegate registered\n");
     }
 
 #if defined(MATTER_FACTORY_RESET_ON_BOOT)

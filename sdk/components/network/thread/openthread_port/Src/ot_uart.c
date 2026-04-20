@@ -110,13 +110,10 @@ otError otPlatUartEnable(void)
     rx_work_len   = 0;
     rx_line_ready = false;
 
-    printk("[UART] otPlatUartEnable: dev=%p ready=%d",
-           ot_uart_dev, device_is_ready(ot_uart_dev));
 
     uart_irq_callback_user_data_set(ot_uart_dev, uart_rx_irq_cb, NULL);
     uart_irq_rx_enable(ot_uart_dev);
 
-    printk("[UART] RX interrupt enabled");
     return OT_ERROR_NONE;
 }
 
@@ -192,9 +189,7 @@ static int cli_output_cb(void *aContext, const char *aFormat, va_list aArguments
 /* ── otAppCliInit — app-level CLI initialisation ─────────────────────────── */
 void otAppCliInit(otInstance *aInstance)
 {
-    printk("[CLI] otAppCliInit called, instance=%p", aInstance);
     otCliInit(aInstance, cli_output_cb, NULL);
-    printk("[CLI] otCliInit done");
 }
 
 /* ── ot_uartLog — used by ot_logging.c ──────────────────────────────────── */

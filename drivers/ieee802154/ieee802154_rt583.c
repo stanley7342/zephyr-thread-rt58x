@@ -132,8 +132,6 @@ static int rt583_set_channel(const struct device *dev, uint16_t channel)
 	data->channel = (uint8_t)channel;
 	/* Defer real HW set to start() when lmac/RF MCU is ready */
 	if (data->lmac_ready) {
-		printk("[15.4] set_channel %u (idx=%u) + auto_state\n", channel,
-		       (unsigned)(channel - RT583_MIN_CHANNEL));
 		lmac15p4_channel_set((lmac154_channel_t)(channel - RT583_MIN_CHANNEL));
 		/* lmac15p4_channel_set clears auto_state internally.  If RX was
 		 * running (started=true), re-enable it so auto-ACK keeps working.
@@ -143,8 +141,6 @@ static int rt583_set_channel(const struct device *dev, uint16_t channel)
 		if (data->started) {
 			lmac15p4_auto_state_set(true);
 		}
-	} else {
-		printk("[15.4] set_channel cache %u (lmac not ready)\n", channel);
 	}
 	return 0;
 }
@@ -197,8 +193,6 @@ static int rt583_filter(const struct device *dev, bool set,
 			return 0;
 		}
 
-		printk("[15.4] filter push type=%d pan=0x%04x short=0x%04x ext=%08x%08x\n",
-		       (int)type, data->pan_id, data->short_addr, ext_hi, ext_lo);
 		lmac15p4_address_filter_set(/* pan_idx */ 0,
 					    data->promiscuous ? 1 : 0,
 					    data->short_addr,
@@ -211,8 +205,6 @@ static int rt583_filter(const struct device *dev, bool set,
 		data->hw_promiscuous  = data->promiscuous;
 		data->hw_coordinator  = data->coordinator;
 		memcpy(data->hw_mac_addr, data->mac_addr, sizeof(data->mac_addr));
-	} else {
-		printk("[15.4] filter cache type=%d (lmac not ready)\n", (int)type);
 	}
 	return 0;
 }
@@ -255,8 +247,6 @@ static int rt583_start(const struct device *dev)
 		uint32_t ext_lo, ext_hi;
 		memcpy(&ext_lo, &data->mac_addr[0], 4);
 		memcpy(&ext_hi, &data->mac_addr[4], 4);
-		printk("[15.4] start: flush filter pan=0x%04x short=0x%04x ext=%08x%08x ch=%d\n",
-		       data->pan_id, data->short_addr, ext_hi, ext_lo, (int)data->channel);
 		lmac15p4_address_filter_set(/* pan_idx */ 0,
 					    data->promiscuous ? 1 : 0,
 					    data->short_addr,
@@ -270,7 +260,6 @@ static int rt583_start(const struct device *dev)
 	 * auto_state_set(true) resets the lmac RX pipeline, dropping any
 	 * in-flight MLE Parent Response. */
 	if (!data->started) {
-		printk("[15.4] start() -> auto_state=on\n");
 		lmac15p4_auto_state_set(true);
 		data->started = true;
 	}
@@ -344,11 +333,6 @@ static int rt583_tx(const struct device *dev,
 
 	static uint32_t tx_count = 0;
 	tx_count++;
-	if (tx_count <= 10 || (tx_count & 0xF) == 0) {
-		printk("[15.4-TX] #%u len=%u ctl=0x%02x dsn=%u fc0=0x%02x sec=%u\n",
-		       tx_count, frag->len, (unsigned)mac_control,
-		       (unsigned)mac_dsn, (unsigned)fc0, (unsigned)sec_enabled);
-	}
 
 	/* Length passed to lmac15p4: legacy ot_radio.c used `mLength + 2`
 	 * where OT's mLength INCLUDES the 2-byte FCS placeholder.  Zephyr's
@@ -449,27 +433,8 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 	static uint32_t rx_bad_crc = 0;
 	if (crc_status != 0) {
 		rx_bad_crc++;
-		if ((rx_bad_crc & 0xF) == 1) {
-			printk("[15.4-RX] bad CRC count=%u rssi=%d len=%u\n",
-			       rx_bad_crc, -(int)rssi, packet_length);
-		}
 	} else {
 		rx_count++;
-		/* Dump every RX for the first 5 frames — lets us reverse-engineer
-		 * the exact lmac buffer layout against an OTBR-side sniffer. */
-		if (rx_count <= 5) {
-			printk("[15.4-RX] #%u rssi=%d lmac_len=%u bytes:\n",
-			       rx_count, -(int)rssi, packet_length);
-			uint16_t dump = packet_length > 64 ? 64 : packet_length;
-			for (uint16_t i = 0; i < dump; i++) {
-				printk("%02x ", pdata[i]);
-				if ((i & 15) == 15) printk("\n");
-			}
-			if ((dump & 15) != 0) printk("\n");
-		} else if ((rx_count & 0xF) == 0) {
-			printk("[15.4-RX] count=%u rssi=%d len=%u\n",
-			       rx_count, -(int)rssi, packet_length);
-		}
 	}
 
 	if (crc_status != 0 || packet_length < 10) {
@@ -494,11 +459,9 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 	pkt = net_pkt_rx_alloc_with_buffer(data->iface, psdu_len,
 					   AF_UNSPEC, 0, K_NO_WAIT);
 	if (!pkt) {
-		printk("[15.4-RX] alloc_with_buffer FAILED (ISR mem pressure?)\n");
 		return;
 	}
 	if (net_pkt_write(pkt, psdu_data, psdu_len) < 0) {
-		printk("[15.4-RX] net_pkt_write FAILED\n");
 		net_pkt_unref(pkt);
 		return;
 	}
@@ -517,10 +480,6 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 	if (rc < 0) {
 		static uint32_t nrd_fail = 0;
 		nrd_fail++;
-		if ((nrd_fail & 3) == 1) {
-			printk("[15.4-RX] net_recv_data FAILED rc=%d cnt=%u\n",
-			       rc, nrd_fail);
-		}
 		net_pkt_unref(pkt);
 	}
 }

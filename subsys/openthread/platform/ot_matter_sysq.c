@@ -62,6 +62,7 @@ static otInstance *s_ot_instance;
 static void rf_diag_work_fn(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(rf_diag_work, rf_diag_work_fn);
 
+#if 0  /* diagnostic helpers retained for future debug; currently unused */
 static const char *ot_role_str(otDeviceRole role)
 {
     switch (role) {
@@ -86,51 +87,12 @@ static void print_ipv6_addr(const otIp6Address *addr)
            (unsigned)((addr->mFields.m8[12] << 8) | addr->mFields.m8[13]),
            (unsigned)((addr->mFields.m8[14] << 8) | addr->mFields.m8[15]));
 }
+#endif /* diagnostic helpers */
 
 static void rf_diag_work_fn(struct k_work *work)
 {
+    ARG_UNUSED(work);
     hosal_rf_dump_diag();
-    if (s_ot_instance) {
-        otDeviceRole role = otThreadGetDeviceRole(s_ot_instance);
-        printk("[OT] role=%s rloc=0x%04x part=0x%08x\n",
-               ot_role_str(role),
-               otThreadGetRloc16(s_ot_instance),
-               (unsigned)otThreadGetPartitionId(s_ot_instance));
-
-        /* Dump all IPv6 addresses — key for SRP/mDNS debugging */
-        if (role != OT_DEVICE_ROLE_DISABLED && role != OT_DEVICE_ROLE_DETACHED) {
-            const otNetifAddress *addr = otIp6GetUnicastAddresses(s_ot_instance);
-            for (; addr; addr = addr->mNext) {
-                printk("[OT]   addr=");
-                print_ipv6_addr(&addr->mAddress);
-                printk("/%d%s%s%s\n", addr->mPrefixLength,
-                       addr->mMeshLocal ? " mesh" : "",
-                       addr->mPreferred ? " pref" : "",
-                       addr->mValid ? " valid" : "");
-            }
-
-            /* SRP client host info */
-            const otSrpClientHostInfo *host = otSrpClientGetHostInfo(s_ot_instance);
-            if (host && host->mName) {
-                printk("[SRP] host=%s state=%d addrs=%u\n",
-                       host->mName, host->mState,
-                       (unsigned)host->mNumAddresses);
-                for (uint8_t i = 0; i < host->mNumAddresses; i++) {
-                    printk("[SRP]   addr=");
-                    print_ipv6_addr(&host->mAddresses[i]);
-                    printk("\n");
-                }
-            }
-
-            /* SRP client services */
-            const otSrpClientService *svc = otSrpClientGetServices(s_ot_instance);
-            for (; svc; svc = svc->mNext) {
-                printk("[SRP] svc=%s.%s port=%u state=%d\n",
-                       svc->mInstanceName, svc->mName,
-                       svc->mPort, svc->mState);
-            }
-        }
-    }
     k_work_reschedule(&rf_diag_work, K_SECONDS(10));
 }
 

@@ -1053,7 +1053,6 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
             {
                 /* Constant load should not be failed at memory manipulation,
                    unless it's defect IC */
-                printk("[RF-MCU] ConstLoad FAILED err=%d\n", (int)error);
                 return error;
             }
         }

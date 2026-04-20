@@ -335,9 +335,49 @@ if (Test-Path $sdkSetup) {
         } catch { return $false }
     }
 
-    if ((Test-Path $tmp) -and -not (Test-7zMagic $tmp)) {
-        Write-Warning "    Cached file $tmp is not a valid 7z archive — re-downloading..."
-        Remove-Item $tmp -Force
+    # Expected SDK archive is ~2 GB.  Anything under 500 MB is a
+    # partial/truncated download even if the 7z magic bytes are valid.
+    $minBytes = 500MB
+
+    function Test-SdkArchive([string]$path) {
+        if (-not (Test-Path $path))        { return $false }
+        $len = (Get-Item $path).Length
+        if ($len -lt $minBytes)            { return $false }
+        if (-not (Test-7zMagic $path))     { return $false }
+        return $true
+    }
+
+    # Remove a file, retrying up to 5x with backoff if held by another process.
+    # On final failure, probe for common holders (7-Zip GUI, antivirus, explorer
+    # preview) and list running candidates so the user knows what to close.
+    function Remove-FileWithRetry([string]$path) {
+        for ($i = 1; $i -le 5; $i++) {
+            try {
+                Remove-Item $path -Force -ErrorAction Stop
+                return
+            } catch {
+                if (-not (Test-Path $path)) { return }
+                if ($i -lt 5) {
+                    Write-Host ("    File locked (attempt {0}/5) — waiting 2s..." -f $i)
+                    Start-Sleep -Seconds 2
+                    continue
+                }
+                # final: try to identify holders
+                $holders = Get-Process 7z, 7zFM, 7zG, explorer, MsMpEng, `
+                                       arm-zephyr-eabi-gcc, arm-zephyr-eabi-ld `
+                                       -ErrorAction SilentlyContinue |
+                           Select-Object -ExpandProperty ProcessName -Unique
+                $hint = if ($holders) { "Running candidates: $($holders -join ', ')" }
+                        else          { "Consider reboot, or use handle.exe (Sysinternals) to find the holder." }
+                throw "Cannot delete '$path' — file locked after 5 retries.`n  $hint"
+            }
+        }
+    }
+
+    if ((Test-Path $tmp) -and -not (Test-SdkArchive $tmp)) {
+        $len = (Get-Item $tmp).Length
+        Write-Warning ("    Cached {0} ({1:N0} bytes) is invalid/truncated — re-downloading..." -f $tmp, $len)
+        Remove-FileWithRetry $tmp
     }
 
     if (-not (Test-Path $tmp)) {
@@ -348,9 +388,10 @@ if (Test-Path $sdkSetup) {
             Remove-Item $tmp -ErrorAction SilentlyContinue
             throw "Download failed (curl exit $LASTEXITCODE): $sdkUrl"
         }
-        if (-not (Test-7zMagic $tmp)) {
-            Remove-Item $tmp -Force
-            throw "Download failed: received file is not a valid 7z archive. Check the URL:`n  $sdkUrl"
+        if (-not (Test-SdkArchive $tmp)) {
+            $len = (Test-Path $tmp) ? (Get-Item $tmp).Length : 0
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            throw ("Download failed: file too small or not a 7z archive ({0:N0} bytes, expected >= {1:N0}). Check network/proxy and retry:`n  {2}" -f $len, $minBytes, $sdkUrl)
         }
     } else {
         Write-Skip "SDK archive ($tmp)"
@@ -362,9 +403,18 @@ if (Test-Path $sdkSetup) {
     & 7z x $tmp -o"$sdkParent" -y -bb1 2>&1 | ForEach-Object {
         Write-Host ("    " + $_.ToString())
     }
+    if ($LASTEXITCODE -ne 0) {
+        throw "7z extract failed (exit $LASTEXITCODE).  Delete the cached archive and retry:`n  Remove-Item '$tmp' -Force"
+    }
+    if (-not (Test-Path $sdkSetup)) {
+        throw "Extraction looked OK but setup.cmd missing at '$sdkSetup' — archive may be incomplete.  Delete and retry:`n  Remove-Item '$tmp' -Force"
+    }
 
     Write-Host "    Running setup.cmd ..."
     & cmd.exe /c "`"$sdkSetup`""
+    if ($LASTEXITCODE -ne 0) {
+        throw "setup.cmd failed (exit $LASTEXITCODE)"
+    }
     Write-Ok "Zephyr SDK installed"
 }
 

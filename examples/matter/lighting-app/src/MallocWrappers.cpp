@@ -101,8 +101,6 @@ static void * do_alloc(size_t size)
 
     if (!raw) {
         s_oom_cnt++;
-        printk("[HEAP-OOM] malloc(%u) (allocs=%u oom=%u)\n",
-               (unsigned)size, s_alloc_cnt, s_oom_cnt);
         return nullptr;
     }
 
@@ -119,8 +117,6 @@ static void * do_alloc(size_t size)
     s_alloc_cnt++;
 #ifdef CONFIG_RT583_HEAP_TRACE
     if (s_trace_enabled) {
-        printk("[HEAP-ALLOC] #%u malloc(%u) → user=%p raw=%p\n",
-               id, (unsigned)size, user_ptr, raw);
     }
 #endif
     return user_ptr;
@@ -139,7 +135,6 @@ static void do_free(void * user_ptr)
     AllocHeader * hdr = raw_to_hdr(raw);
     if (hdr->magic == MAGIC_FREE) {
         s_bad_free_cnt++;
-        printk("[HEAP-DOUBLE-FREE] user=%p id=%u\n", user_ptr, hdr->alloc_id);
         return;
     }
     if (hdr->magic != MAGIC_ALLOC) {
@@ -147,26 +142,19 @@ static void do_free(void * user_ptr)
         /* Capture LR (return address) to identify caller */
         void * lr;
         __asm__ volatile("mov %0, lr" : "=r"(lr));
-        printk("[HEAP-BAD-FREE] user=%p magic=0x%08x caller_lr=%p\n",
-               user_ptr, (unsigned)hdr->magic, lr);
         return;
     }
 
     /* 2. Check canary. */
     uint32_t size     = hdr->size;
-    uint32_t alloc_id = hdr->alloc_id;
     uint32_t canary   = *user_to_canary(user_ptr, size);
     if (canary != CANARY_VAL) {
         s_overflow_cnt++;
-        printk("[HEAP-OVERFLOW] #%u malloc(%u) @ user=%p raw=%p: "
-               "canary=0x%08x (overflow=%u)\n",
-               alloc_id, size, user_ptr, raw, (unsigned)canary, s_overflow_cnt);
     }
 
     hdr->magic = MAGIC_FREE;
 #ifdef CONFIG_RT583_HEAP_TRACE
     if (s_trace_enabled) {
-        printk("[HEAP-FREE] #%u free(%p) size=%u\n", alloc_id, user_ptr, size);
     }
 #endif
     k_spinlock_key_t key = k_spin_lock(&s_lock);
@@ -195,7 +183,6 @@ static void * do_realloc(void * ptr, size_t new_size)
 
     AllocHeader * hdr = user_to_hdr(ptr);
     if (hdr->magic != MAGIC_ALLOC) {
-        printk("[HEAP-BAD-REALLOC] %p magic=0x%08x\n", ptr, (unsigned)hdr->magic);
         return nullptr;
     }
     void * np = do_alloc(new_size);
@@ -239,8 +226,6 @@ void chip_heap_enable_trace(bool /* on */) { /* compiled out */ }
 /* Snapshot of heap stats — call from AppTask for diagnostics. */
 void chip_heap_print_stats(void)
 {
-    printk("[HEAP-STATS] alloc_cnt=%u free_cnt=%u oom=%u overflow=%u bad_free=%u\n",
-           s_alloc_cnt, s_free_cnt, s_oom_cnt, s_overflow_cnt, s_bad_free_cnt);
 }
 
 } /* extern "C" */
