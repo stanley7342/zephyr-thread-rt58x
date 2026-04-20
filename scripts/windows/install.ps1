@@ -80,6 +80,32 @@ function Write-Skip([string]$msg) {
     Write-Host "    [--] $msg (already exists, skipping)" -ForegroundColor DarkGray
 }
 
+# ── Step 0: Windows long-path support ─────────────────────────────────────────
+# Matter's connectedhomeip tree generates deeply-nested paths (e.g. camera-av-
+# settings-user-level-management-server/...Cluster.cpp.o). Under sysbuild's
+# Direct-XIP the slot1 variant build dir (`lighting-app_slot1_variant`) pushes
+# the full path past the default 260-char MAX_PATH and `ar` can't read the .o.
+# Opt the machine into the Win10+ long-path API and tell git to do the same.
+Write-Step "Enabling long-path support"
+$script:RebootNeeded = $false
+$lpKey  = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+$lpProp = "LongPathsEnabled"
+$currentLp = (Get-ItemProperty -Path $lpKey -Name $lpProp -ErrorAction SilentlyContinue).$lpProp
+if ($currentLp -ne 1) {
+    Set-ItemProperty -Path $lpKey -Name $lpProp -Value 1 -Type DWord -Force
+    Write-Host "  [OK] Registered LongPathsEnabled=1 (reboot required to take effect)" -ForegroundColor Yellow
+    $script:RebootNeeded = $true
+} else {
+    Write-Host "  [--] LongPathsEnabled already set" -ForegroundColor DarkGray
+}
+$gitLp = (git config --global --get core.longpaths 2>$null)
+if ($gitLp -ne "true") {
+    git config --global core.longpaths true
+    Write-Host "  [OK] git config --global core.longpaths true" -ForegroundColor Green
+} else {
+    Write-Host "  [--] git core.longpaths already true" -ForegroundColor DarkGray
+}
+
 # ── Step 1: Required tools ────────────────────────────────────────────────────
 
 Write-Step "Checking required tools"
@@ -862,15 +888,16 @@ Write-Host ""
 Write-Host "Load the environment in every new PowerShell session:"
 Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Build:"
+Write-Host "Build + flash (sysbuild — MCUboot + app in one shot):"
 Write-Host "  cd $projectDir" -ForegroundColor Yellow
-Write-Host "  `$root = `$PWD.Path -replace '\\','/'" -ForegroundColor Yellow
-Write-Host "  west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr ``" -ForegroundColor Yellow
-Write-Host "      -d build/bootloader ``" -ForegroundColor Yellow
-Write-Host "      -- -DOVERLAY_CONFIG=`"`$root/boards/arm/rt583_evb/mcuboot.conf`" ``" -ForegroundColor Yellow
-Write-Host "         -DDTC_OVERLAY_FILE=`"`$root/boards/arm/rt583_evb/mcuboot.overlay`"" -ForegroundColor Yellow
-Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app" -ForegroundColor Yellow
+Write-Host "  west build --sysbuild -p always -b rt583_evb examples/thread -d build/thread" -ForegroundColor Yellow
+Write-Host "  west flash -d build/thread" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Flash:"
-Write-Host "  west flash -d build/bootloader" -ForegroundColor Yellow
-Write-Host "  west flash -d build/lighting-app" -ForegroundColor Yellow
+if ($script:RebootNeeded) {
+    Write-Host "======================================" -ForegroundColor Yellow
+    Write-Host "  REBOOT REQUIRED" -ForegroundColor Yellow
+    Write-Host "======================================" -ForegroundColor Yellow
+    Write-Host "LongPathsEnabled was just turned on. Windows needs a reboot before" -ForegroundColor Yellow
+    Write-Host "Matter's deep connectedhomeip paths will build under sysbuild." -ForegroundColor Yellow
+    Write-Host ""
+}

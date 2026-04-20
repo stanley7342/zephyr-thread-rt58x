@@ -16,26 +16,26 @@
  * Headroom: 928 KB slot − 866 KB image = 62 KB
  */
 
+/*
+ * Use PATH-based /delete-node/ here (not label-based with `&...`):
+ * Under sysbuild Direct-XIP the slot1_variant build re-applies this overlay
+ * on top of the slot0 build's already-processed DT, where staging_partition
+ * has been deleted on the first pass.  A label-based `&staging_partition`
+ * reference errors ("undefined node label") on the second pass; a path-based
+ * `/delete-node/ partition@...;` is idempotent.
+ */
 &slot0_partition {
     reg = <0x00010000 0x000E8000>;  /* 928 KB */
 };
 
-/*
- * Relocate slot1 to 0xF8000 (right after the enlarged slot0).
- * The base DTS defines partition@D8000, but changing reg would leave the
- * unit-address stale and trigger a dtc warning.  Delete the old node and
- * recreate it at the correct address so the name matches reg.
- */
-/delete-node/ &slot1_partition;
-
 &flash0 {
     partitions {
-        slot1_partition: partition@F8000 {
+        /delete-node/ partition@d8000;    /* original slot1 (800 KB) */
+        /delete-node/ partition@1a0000;   /* staging — overlaps new slot1 */
+
+        slot1_partition: partition@f8000 {
             label = "image-1";
-            reg = <0x000F8000 0x000E8000>;  /* 928 KB — equal to slot0, required by MCUboot */
+            reg = <0x000f8000 0x000e8000>;  /* 928 KB — equal to slot0, required by MCUboot */
         };
     };
 };
-
-/* staging overlaps with new slot1 — remove it (OTA disabled for matter_lighting) */
-/delete-node/ &staging_partition;

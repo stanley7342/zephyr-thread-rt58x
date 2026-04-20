@@ -5,7 +5,7 @@ Zephyr RTOS port for the **Rafael Microelectronics RT583** (ARM Cortex-M3 @ 64 M
 | Item | Value |
 |------|-------|
 | SoC | RT583 (ARM Cortex-M3, 64 MHz BBPLL) |
-| RAM / Flash | 144 KB / 1 MB |
+| RAM / Flash | 144 KB / 2 MB |
 | Zephyr | 4.4.0-rc1 |
 | Matter | v1.4.2 (connectedhomeip `72f238add7`) |
 | OpenThread | FTD (Full Thread Device) |
@@ -20,29 +20,30 @@ Zephyr RTOS port for the **Rafael Microelectronics RT583** (ARM Cortex-M3 @ 64 M
 - ✅ **Matter commissioning over BLE-Thread** — end-to-end with chip-tool or Apple/Google ecosystems: BLE PASE → Thread attach → CASE Sigma1/2/3 → SRP register → operational.
 - ✅ **`_matter._tcp` mDNS advertise** via SRP client to the Thread Border Router.
 - ✅ **Factory reset** — 6-sec GPIO0 hold **or** `RemoveFabric` command physically erases the NVS storage partition.
-- ✅ **OTA requestor** — MCUboot Direct-XIP, slot0/slot1 + staging partition.
+- ✅ **MCUboot** — built and flashed together with the app via one `west build --sysbuild` + `west flash` pair. Per-app modes: **Direct-XIP** (Thread CLI, BLE HRS, Blinky, Hello world) or **SINGLE_APP** (Matter lighting, because connectedhomeip's deeply-nested object paths push `ar`'s archive-path buffer past Windows' 260-char MAX_PATH on the Direct-XIP slot1 rebuild).
 - ✅ **OpenThread FTD CLI** — standalone build on the same board.
 
 ---
 
 ## Table of Contents
 
-1. [Quick Start — Windows](#1-quick-start--windows)
-2. [Quick Start — Linux / WSL / macOS](#2-quick-start--linux--wsl--macos)
-3. [Build Targets](#3-build-targets)
-4. [Flashing](#4-flashing)
-5. [Matter Commissioning with chip-tool](#5-matter-commissioning-with-chip-tool)
-6. [Factory Reset](#6-factory-reset)
-7. [OpenThread CLI Quick Start](#7-openthread-cli-quick-start)
-8. [Flash Layout](#8-flash-layout)
-9. [Troubleshooting](#9-troubleshooting)
-10. [Project Structure](#10-project-structure)
+1. [Quick Start](#1-quick-start)
+2. [Build Targets](#2-build-targets)
+3. [Flashing](#3-flashing)
+4. [Matter Commissioning with chip-tool](#4-matter-commissioning-with-chip-tool)
+5. [Factory Reset](#5-factory-reset)
+6. [OpenThread CLI Quick Start](#6-openthread-cli-quick-start)
+7. [Flash Layout](#7-flash-layout)
+8. [Troubleshooting](#8-troubleshooting)
+9. [Project Structure](#9-project-structure)
 
-See also [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) for the full step-by-step build reference.
+This repo targets **Windows + PowerShell 7 only**. See
+[`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) for the full step-by-step
+reference.
 
 ---
 
-## 1. Quick Start — Windows
+## 1. Quick Start
 
 > **Requirement**: PowerShell 7 (run as Administrator) — `winget install Microsoft.PowerShell`
 
@@ -76,39 +77,21 @@ without `--sysbuild` — the legacy two-step flow has been removed.
 
 ---
 
-## 2. Quick Start — Linux / WSL / macOS
+## 2. Build Targets
 
-```bash
-git clone https://github.com/stanley7342/zephyr-thread-rt58x.git
-cd zephyr-thread-rt58x
-bash scripts/linux/install.sh       # or scripts/macos/install.sh
-source ../env.sh
+| Target | Source | MCUboot mode | App image |
+|--------|--------|--------------|-----------|
+| **Matter lighting** | `examples/matter/lighting-app` | `SINGLE_APP` | `build/lighting-app/lighting-app/zephyr/zephyr.signed.bin` |
+| Thread FTD CLI | `examples/thread` | `DIRECT_XIP` | `build/thread/thread/zephyr/zephyr.signed.bin` |
+| BLE HRS (peripheral) | `examples/ble/peripheral/hrs` | `DIRECT_XIP` | `build/ble_hrs/hrs/zephyr/zephyr.signed.bin` |
+| Blinky | `examples/blinky` | `DIRECT_XIP` | `build/blinky/blinky/zephyr/zephyr.signed.bin` |
+| Hello world | `examples/hello_world` | `DIRECT_XIP` | `build/hello_world/hello_world/zephyr/zephyr.signed.bin` |
+| Flash unit test | `tests/flash` | `DIRECT_XIP` | `build/test_flash/test_flash/zephyr/zephyr.signed.bin` |
 
-west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-west flash -d build/lighting-app
-```
-
-First-time udev rules for CMSIS-DAP:
-```sh
-bash scripts/linux/flash.sh --setup-udev
-```
-
----
-
-## 3. Build Targets
-
-| Target | Source | Output |
-|--------|--------|--------|
-| MCUboot bootloader | `../bootloader/mcuboot/boot/zephyr` | `build/bootloader/zephyr/zephyr.bin` |
-| **Matter lighting** | `examples/matter/lighting-app` | `build/lighting-app/zephyr/zephyr.signed.bin` |
-| Thread FTD CLI | `examples/thread` | `build/thread/zephyr/zephyr.signed.bin` |
-| BLE HRS (peripheral) | `examples/ble/peripheral/hrs` | `build/ble_hrs/zephyr/zephyr.signed.bin` |
-| Blinky | `examples/blinky` | `build/blinky/zephyr/zephyr.signed.bin` |
-| Hello world | `examples/hello_world` | `build/hello_world/zephyr/zephyr.signed.bin` |
-| Flash unit test | `tests/flash` | `build/test_flash/zephyr/zephyr.signed.bin` |
-
-Build individually with sysbuild — each app has its own `sysbuild.conf` and
-`sysbuild/mcuboot.{conf,overlay}`:
+Every app carries its own `sysbuild.conf` (selects the MCUboot mode) and
+`sysbuild/mcuboot.{conf,overlay}` (driver bits + flash partition layout).
+One `west build --sysbuild` call configures and builds both MCUboot and the
+app into the same output tree, and one `west flash` programs both images:
 ```powershell
 west build --sysbuild -p always -b rt583_evb examples/thread               -d build/thread
 west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app  -d build/lighting-app
@@ -120,26 +103,26 @@ west build --sysbuild -p always -b rt583_evb tests/flash                   -d bu
 
 ---
 
-## 4. Flashing
+## 3. Flashing
 
-Requires a CMSIS-DAP debugger. `tools/windows/openocd.exe` and the `tcl/` scripts are tracked in the repo, so no separate OpenOCD install is needed on Windows.
+Requires a CMSIS-DAP debugger. `tools/windows/openocd.exe` and the `tcl/`
+scripts are tracked in the repo, so no separate OpenOCD install is needed on
+Windows.
 
-**First-time full flash (bootloader + app):**
+Sysbuild registers MCUboot and the app as two flashable domains inside the
+same build directory, so one command writes both:
 
-```powershell
-# Matter lighting-app (928 KB slot layout)
-west flash -d build/bootloader
-west flash -d build/lighting-app
-```
-
-**Incremental (same app, rebuilt):**
 ```powershell
 west flash -d build/lighting-app
 ```
+
+Re-running `west flash` after an app-only rebuild re-programs both domains;
+the MCUboot hex is unchanged so it's effectively a no-op for the bootloader
+on most OpenOCD runs.
 
 ---
 
-## 5. Matter Commissioning with chip-tool
+## 4. Matter Commissioning with chip-tool
 
 Prerequisites:
 - **OpenThread Border Router** (OTBR) running somewhere on your LAN
@@ -184,7 +167,7 @@ When the last fabric is removed, the device automatically factory-resets (NVS wi
 
 ---
 
-## 6. Factory Reset
+## 5. Factory Reset
 
 ### GPIO0 hold (6 seconds)
 
@@ -197,7 +180,7 @@ The device calls `flash_erase()` on the storage partition (0x001E0000 + 64 KB) a
 
 ### Via `RemoveFabric`
 
-See Section 5 — removing the last fabric triggers the same flash-erase path automatically.
+See Section 4 — removing the last fabric triggers the same flash-erase path automatically.
 
 ### Manual (OpenOCD)
 
@@ -210,7 +193,7 @@ openocd -f interface/cmsis-dap.cfg -f target/rt583.cfg `
 
 ---
 
-## 7. OpenThread CLI Quick Start
+## 6. OpenThread CLI Quick Start
 
 The `examples/thread` target builds a **standalone** OT FTD CLI (no Matter).
 
@@ -235,7 +218,7 @@ Full reference: [OpenThread CLI Reference](https://openthread.io/reference/cli).
 
 ---
 
-## 8. Flash Layout
+## 7. Flash Layout
 
 **Default (Thread CLI / Blinky / BLE HRS — 800 KB slots):**
 ```
@@ -260,15 +243,15 @@ Full reference: [OpenThread CLI Reference](https://openthread.io/reference/cli).
 
 ---
 
-## 9. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `find_package(Zephyr)` fails | env not loaded | `. .\env.ps1` (Windows) / `source ../env.sh` (Linux) |
+| `find_package(Zephyr)` fails | env not loaded | `. .\env.ps1` |
 | `recursive 'source' of 'Kconfig.zephyr' detected` (Windows only) | `ZEPHYR_HAL_ESPRESSIF_MODULE_DIR` unset, resolves `/zephyr/Kconfig` to drive root | re-source `env.ps1` — it sets the var to a stub path |
 | `boards/arm/rt583_evb/mcuboot.overlay: No such file` | `$root` wasn't set in the shell that ran `west build` | paste the `$root = $PWD.Path -replace '\\','/'` line in the **same** session, right before `west build` |
 | `Could NOT find Python3: missing Interpreter` | venv not activated in this shell | re-source env; `-p always` rebuild |
-| MCUboot `image not found` | Bootloader slot size ≠ app slot size | rebuild bootloader with matching DTC overlay |
+| MCUboot `image not found` | Partial flash (only app or only MCUboot made it) | `west flash -d build/<app>` programs both domains; if it persists, `rm -rf build/<app>` then rebuild with `-p always` |
 | RAM overflow during link | `CONFIG_MBEDTLS_HEAP_SIZE` too high for RAM | lower heap to 10240, keep `CONFIG_MBEDTLS_PSA_KEY_SLOT_COUNT=32` |
 | CASE fails with `PSA error -141 at DeriveKey` | mbedTLS heap or PSA key slots exhausted | ensure `CONFIG_MBEDTLS_HEAP_SIZE≥10240` + `CONFIG_MBEDTLS_PSA_KEY_SLOT_COUNT≥32` |
 | `Failed to advertise commissionable node: 3` then recovery | DNS-SD publishing races with SRP client register | benign — ignored after SRP client registers with OTBR |
@@ -278,7 +261,7 @@ Full reference: [OpenThread CLI Reference](https://openthread.io/reference/cli).
 
 ---
 
-## 10. Project Structure
+## 9. Project Structure
 
 ```
 zephyr-thread-rt58x/
@@ -291,12 +274,11 @@ zephyr-thread-rt58x/
 │   ├── thread/                 # Standalone OpenThread FTD CLI
 │   ├── ble/peripheral/hrs/     # BLE HRS sample
 │   ├── blinky/ hello_world/
-│   └── bootloader/             # MCUboot overlay configs
+│   └── bootloader/             # MCUboot overlay configs (legacy; sysbuild handles MCUboot per-app now)
 │
 ├── scripts/
-│   ├── windows/                # install / build / flash / uninstall (PowerShell 7)
-│   ├── linux/  macos/          # Bash equivalents
-│   └── build_all.ps1           # Build every target
+│   ├── windows/                # install / build / flash / uninstall (PowerShell 7 — the only supported host)
+│   └── strip_printk_newlines.py
 │
 ├── subsys/openthread/
 │   ├── CMakeLists.txt          # OT core + RUCI + RF sources

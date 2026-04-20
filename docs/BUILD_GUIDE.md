@@ -80,17 +80,17 @@ pip install -r C:\Users\Stanley\zephyr\scripts\requirements.txt
 
 | Target | Source | Output |
 |--------|--------|--------|
-| MCUboot bootloader | `../bootloader/mcuboot/boot/zephyr` | `build/bootloader/zephyr/zephyr.bin` |
-| **Matter lighting** | `examples/matter/lighting-app` | `build/lighting-app/zephyr/zephyr.signed.bin` |
-| Thread FTD CLI | `examples/thread` | `build/thread/zephyr/zephyr.signed.bin` |
-| BLE HRS | `examples/ble/peripheral/hrs` | `build/ble_hrs/zephyr/zephyr.signed.bin` |
-| Blinky | `examples/blinky` | `build/blinky/zephyr/zephyr.signed.bin` |
-| Hello world | `examples/hello_world` | `build/hello_world/zephyr/zephyr.signed.bin` |
+| **Matter lighting** | `examples/matter/lighting-app` | `build/lighting-app/lighting-app/zephyr/zephyr.signed.bin` |
+| Thread FTD CLI | `examples/thread` | `build/thread/thread/zephyr/zephyr.signed.bin` |
+| BLE HRS | `examples/ble/peripheral/hrs` | `build/ble_hrs/hrs/zephyr/zephyr.signed.bin` |
+| Blinky | `examples/blinky` | `build/blinky/blinky/zephyr/zephyr.signed.bin` |
+| Hello world | `examples/hello_world` | `build/hello_world/hello_world/zephyr/zephyr.signed.bin` |
+| Flash unit test | `tests/flash` | `build/test_flash/test_flash/zephyr/zephyr.signed.bin` |
 
-Build one at a time with sysbuild:
-```powershell
-west build --sysbuild -p always -b rt583_evb examples/<app> -d build/<app>
-```
+Every app carries its own `sysbuild.conf` and `sysbuild/mcuboot.{conf,overlay}`,
+so one `west build --sysbuild` invocation configures and builds MCUboot and
+the app together into a single output tree (`build/<app>/{mcuboot,<app>}/…`).
+MCUboot is no longer a separate target.
 
 ---
 
@@ -98,48 +98,32 @@ west build --sysbuild -p always -b rt583_evb examples/<app> -d build/<app>
 
 > **Must** be run from the project root (`zephyr-thread-rt58x/`) — relative paths below depend on it.
 
-### 4.1 MCUboot bootloader
-
-> **Important:** If the app uses a DTS overlay that changes flash partitions
-> (e.g. Matter lighting-app enlarges slot0/slot1 to 928 KB), the bootloader
-> **must** be built with the same overlay. Otherwise MCUboot's slot layout
-> won't match the app image header and it will report *image not found*.
-
-**The bootloader source lives in a different repo** (`../bootloader/mcuboot/boot/zephyr`), so the overlay paths must be **absolute with forward slashes**.  CMake on Windows interprets `\U` (from `C:\Users\...`) as a Unicode escape and errors out. We convert `$PWD` to forward slashes:
+### 4.1 One sysbuild invocation — MCUboot + app
 
 ```powershell
-$root = $PWD.Path -replace '\\','/'
-
-# Matter lighting-app (928 KB slots):
-west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
-    -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/boards/arm/rt583_evb/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/boards/arm/rt583_evb/mcuboot.overlay"
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 ```
 
-Why not a relative path to `DTC_OVERLAY_FILE`? Zephyr resolves relative overlay paths against `APPLICATION_SOURCE_DIR` (the bootloader's source dir in a *different* repo), not against the cwd. A relative path can never reach our project tree, so the path must be absolute.
+Swap the source path for any of the targets in §3. The flags:
+- `--sysbuild` enables Zephyr sysbuild; required for every target in this repo.
+- `-p always` pristine-rebuilds both images — needed whenever `prj.conf`,
+  `sysbuild.conf`, Kconfig, or any DTS/overlay file changes.
+- `-d build/<app>` creates the output tree; `build/<app>/mcuboot` holds the
+  bootloader build and `build/<app>/<app>` holds the signed app.
 
-### 4.2 Thread CLI
+The per-app `sysbuild/mcuboot.overlay` applies the flash layout from the app's
+`boards/rt583_evb.overlay` to the MCUboot image, so slot sizes always match —
+no absolute-path trickery or separate bootloader build.
 
-Source is in this repo → relative paths work:
-
-```powershell
-west build -p always -b rt583_evb examples/thread -d build/thread
-```
-
-### 4.3 Matter Lighting App
-
-```powershell
-west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-```
-
-### 4.4 Incremental build (code changes only)
+### 4.2 Incremental build (code changes only)
 
 ```powershell
 west build -d build/lighting-app
 ```
 
-Use `-p always` only when `prj.conf`, Kconfig, or DTS files changed.
+Drop `-p always` and `--sysbuild` when only C/C++ files changed — sysbuild
+keeps its state in the build directory and re-invokes both sub-builds as
+needed. Use `-p always` again when touching Kconfig / DTS / sysbuild configs.
 
 ---
 
@@ -148,19 +132,17 @@ Use `-p always` only when `prj.conf`, Kconfig, or DTS files changed.
 Hardware: connect **CMSIS-DAP** debugger to RT583-EVB.
 
 ```powershell
-west flash -d build/bootloader
-west flash -d build/lighting-app
-west flash -d build/thread
-```
-
-### First-time full flash (bootloader + app)
-
-```powershell
-west flash -d build/bootloader
 west flash -d build/lighting-app
 ```
 
-The bootloader only needs flashing once — unless you change `mcuboot.conf` / `mcuboot.overlay` / slot sizes.
+One `west flash` call writes both MCUboot and the app — sysbuild registers
+each as a flashable domain. The old two-step `west flash -d build/bootloader;
+west flash -d build/<app>` flow is gone along with the standalone bootloader
+build.
+
+To re-flash only the app after a code change, rebuild then re-run the same
+`west flash` — MCUboot's hex file is unchanged and re-programming it is a
+no-op on most OpenOCD runs.
 
 ---
 
@@ -171,17 +153,8 @@ The bootloader only needs flashing once — unless you change `mcuboot.conf` / `
 cd C:\Users\Stanley\zephyr-thread-rt58x
 . .\env.ps1
 
-# Build
-$root = $PWD.Path -replace '\\','/'
-west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
-    -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/boards/arm/rt583_evb/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/boards/arm/rt583_evb/mcuboot.overlay"
-
-west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-
-# Flash
-west flash -d build/bootloader
+# Build + flash (MCUboot + app in one sysbuild tree)
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 west flash -d build/lighting-app
 ```
 
@@ -196,24 +169,28 @@ I: [SVR]SetupQRCode: [MT:6FCJ142C00KA0648G00]
 I: [SVR]Manual pairing code: [34970112332]
 ```
 
-Commission with chip-tool (runs on the **commissioner host** — typically Linux / macOS / WSL, **not** on the Windows build machine). Requires an OTBR on the LAN + the OT Active Dataset hex.
+Commission with `chip-tool` from a commissioner host that is reachable from
+the OTBR (e.g. another Windows box with the connectedhomeip chip-tool port,
+or the OTBR device itself). The build host is not the commissioner — it just
+builds and flashes firmware.
 
-On WSL (from Windows) or Linux shell:
-```bash
+Pair over BLE + Thread:
+```
 chip-tool pairing ble-thread 0x9 hex:<dataset-tlv-hex> 20202021 3840
 ```
 
-> If you paste chip-tool commands into PowerShell, PS will interpret `<` as
-> input redirection and fail.  Keep `<placeholder>` syntax as documentation
-> only — replace the placeholder with the actual value before running, and
-> run from a POSIX shell.
+> Substitute `<dataset-tlv-hex>` with the actual hex string before running.
+> If you run chip-tool inside PowerShell, PS will treat `<` as input
+> redirection, so never paste the command with the angle-bracket placeholder
+> intact — replace it first, or run from a shell that does not redirect on
+> `<`.
 
 - `0x9` — node ID
 - `20202021` — SPAKE2+ passcode (default)
 - `3840` — discriminator (default)
 
-Get the dataset from OTBR:
-```bash
+Get the dataset from the OTBR:
+```
 ot-ctl dataset active -x
 ```
 
@@ -241,23 +218,25 @@ openocd -f interface/cmsis-dap.cfg -f target/rt583.cfg `
 
 ## 9. Flash Layout (MCUboot)
 
-**Default (Thread CLI / Blinky / BLE HRS):**
+RT583 has **2 MB** of on-chip flash (`0x00000000 – 0x001FFFFF`).
+
+**Default (Thread CLI / Blinky / BLE HRS / Hello world — Direct-XIP):**
 ```
 Address    Size    Partition
 0x000000   64 KB   boot_partition    (MCUboot)
-0x010000   800 KB  slot0_partition   (primary app)
-0x0D8000   800 KB  slot1_partition   (OTA / Direct XIP)
-0x1A0000   256 KB  staging_partition (OTA compressed download)
+0x010000  800 KB   slot0_partition   (primary app)
+0x0D8000  800 KB   slot1_partition   (Direct-XIP failover / OTA)
+0x1A0000  256 KB   staging_partition (OTA compressed download)
 0x1E0000   64 KB   storage_partition (NVS / settings / PSA ITS)
 0x1F0000   64 KB   factory_partition (reserved)
 ```
 
-**Matter lighting-app (DTS overlay — larger slots):**
+**Matter lighting-app (SINGLE_APP mode, 928 KB slots via DTS overlay):**
 ```
 Address    Size    Partition
 0x000000   64 KB   boot_partition    (MCUboot)
-0x010000   928 KB  slot0_partition   (primary app)
-0x0F8000   928 KB  slot1_partition   (OTA / Direct XIP)
+0x010000  928 KB   slot0_partition   (primary app — only slot MCUboot boots)
+0x0F8000  928 KB   slot1_partition   (defined for DT symmetry; unused in SINGLE_APP)
 0x1E0000   64 KB   storage_partition (NVS / settings / PSA ITS)
 0x1F0000   64 KB   factory_partition (reserved)
 ```
@@ -308,18 +287,17 @@ I: [DL]CHIPoBLE advertising started
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `source directory ... does not exist` | Run from wrong cwd | `cd zephyr-thread-rt58x` then use `../bootloader/...` |
+| `source directory ... does not exist` | Run from wrong cwd | `cd zephyr-thread-rt58x` and pass the app path under `examples/` |
 | `env.ps1 not found` | Not installed yet | Run `.\scripts\windows\install.ps1` first |
 | `west: command not found` | venv not active | `. .\env.ps1` |
 | `Missing jsonschema dependency` | Python dep missing | `pip install jsonschema` |
 | `Could NOT find Python3 (missing: Interpreter)` | venv not active in this shell | re-source `env.ps1` |
-| `Invalid character escape '\U'` in CMake | Windows backslash in path | convert to forward slashes: `$PWD.Path -replace '\\','/'` |
-| `failed to preprocess devicetree files` | Overlay path relative while source is in another repo | use absolute path (see §4.1) |
+| `Invalid character escape '\U'` in CMake | Windows backslash in path passed via `-D...=C:\Users\…` | convert to forward slashes: `$PWD.Path -replace '\\','/'`. Rare now that sysbuild carries overlays internally |
 | `openocd.exe` missing DLLs (libusb-1.0, libhidapi-0, libftdi1) | install.ps1 didn't run or DLL fetch failed | re-run `install.ps1`; DLLs land in `tools/windows/` |
 | `recursive 'source' of 'Kconfig.zephyr' detected` (Windows only) | Zephyr v4.4.0-rc1 `modules/hal_espressif/Kconfig:23` does `osource "$(ZEPHYR_HAL_ESPRESSIF_MODULE_DIR)/zephyr/Kconfig"`; with the var unset, `/zephyr/Kconfig` resolves to the current drive root and re-sources the main Kconfig | re-source `env.ps1` — it sets `$env:ZEPHYR_HAL_ESPRESSIF_MODULE_DIR` to a stub path so `osource` skips silently |
 | `Invalid BOARD` after a rebuild | `zephyr/module.yml` missing — it declares `board_root: .` | `git checkout zephyr/module.yml` then rebuild with `-p always` |
 | `connectedhomeip not found` | Not cloned | See §1 |
-| MCUboot `image not found` | Bootloader/app slot layouts mismatch | rebuild bootloader with the matching overlay |
+| MCUboot `image not found` | Sysbuild output partially flashed (e.g. only the app hex) | `west flash -d build/<app>` re-programs both domains; if still failing, delete `build/<app>` and rebuild with `-p always` |
 | RAM overflow during link | `CONFIG_MBEDTLS_HEAP_SIZE` too high | drop to 10240 |
 | CASE fails with `PSA error -141 at DeriveKey` | PSA key slots / heap exhausted | ensure `CONFIG_MBEDTLS_HEAP_SIZE ≥ 10240` + `CONFIG_MBEDTLS_PSA_KEY_SLOT_COUNT = 32` |
 | `Cannot delete ... file in use` during install | 7-Zip GUI / AV scanning the download | close 7zFM/Explorer preview; `install.ps1` retries 5× then lists candidates |
@@ -332,7 +310,7 @@ I: [DL]CHIPoBLE advertising started
 |---------|---------|-----------|
 | Backslashes in paths → CMake `\U` escape error | `C:\Users\...` in `-DDTC_OVERLAY_FILE=...` | `$root = $PWD.Path -replace '\\','/'` then use `$root/...` |
 | Line continuation | long `west build` command | end line with **backtick** `` ` ``, not `\` |
-| `<` / `>` in command args | `chip-tool ... hex:<tlv>` | PS parses as redirection — replace `<placeholder>` with actual value before running, or switch to WSL/bash |
+| `<` / `>` in command args | `chip-tool ... hex:<tlv>` | PS parses as redirection — replace `<placeholder>` with the actual value before running |
 | Dot-sourcing `env.ps1` | forgot the leading dot | `. .\env.ps1` (the dot + space is required) |
 | venv disappears in new shell | fresh PowerShell window | `. .\env.ps1` every new session |
 | `Remove-Item` fails on locked file | SDK install / stale 7z | `install.ps1` retries 5× and lists holders; otherwise reboot |

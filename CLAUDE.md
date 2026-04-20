@@ -10,7 +10,10 @@ The SDK is vendored into `sdk/` — no external `RAFAEL_SDK_BASE` env var needed
 
 > See [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) for the full step-by-step guide.
 
-**First-time setup (Windows):**
+**Supported host: Windows 11 + PowerShell 7 only.** Linux/macOS/WSL host
+install scripts have been removed from this repo.
+
+**First-time setup:**
 ```powershell
 # Bootstrap from the web (no prior clone needed):
 irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
@@ -19,60 +22,32 @@ irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scr
 .\scripts\windows\install.ps1
 ```
 
-**First-time setup (Linux/WSL):**
-```sh
-bash scripts/linux/install.sh
-```
-
-**First-time setup (macOS):**
-```sh
-bash scripts/macos/install.sh
-```
-
-**Load environment** (once per terminal, Windows):
+**Load environment (once per terminal):**
 ```powershell
 cd zephyr-thread-rt58x
 . .\env.ps1
 ```
 
-**Load environment** (once per terminal, Linux/macOS):
-```sh
-source ../env.sh
-```
-
-**Build (any platform — sysbuild is the only supported path):**
+**Build + flash (sysbuild is the only supported path):**
 ```powershell
 west build --sysbuild -p always -b rt583_evb examples/<app> -d build/<app>
 west flash -d build/<app>
 ```
 `<app>` = `thread`, `matter/lighting-app`, `ble/peripheral/hrs`, `blinky`,
-`hello_world`, etc. sysbuild builds MCUboot + app in one shot; `west flash`
-writes both images. The sysbuild config lives in each app's `sysbuild.conf`
-(enables `SB_CONFIG_MCUBOOT_MODE_DIRECT_XIP`) plus `sysbuild/mcuboot.{conf,overlay}`
-for RT583-specific driver bits and the 928 KB partition layout.
+`hello_world`, etc. Sysbuild builds MCUboot + app in one shot and `west flash`
+programs both. The sysbuild config lives in each app's `sysbuild.conf`
+(e.g. `SB_CONFIG_MCUBOOT_MODE_DIRECT_XIP` for most apps,
+`SB_CONFIG_MCUBOOT_MODE_SINGLE_APP` for matter/lighting-app) plus
+`sysbuild/mcuboot.{conf,overlay}` for RT583 driver bits and per-app
+partition layout.
 
 > Do not use `west build` without `--sysbuild`, and do not build MCUboot as a
 > separate invocation — both are error-prone legacy flows that have been
 > removed from this repo.
 
-**Build (Linux/WSL):**
-```sh
-west build -p always -b rt583_evb examples/thread
-```
-
-**Flash (Windows via OpenOCD + CMSIS-DAP):**
-```powershell
-west flash -d build/bootloader
-west flash -d build/lighting-app
-```
-
-**Flash (WSL/Linux via OpenOCD + CMSIS-DAP):**
-```sh
-bash scripts/linux/flash.sh -p thread        # slot0 (0x10000)
-bash scripts/linux/flash.sh --setup-udev     # first-time udev setup
-```
-
-**CI:** `.github/workflows/build.yml` — caches `zephyr/` and `modules/` keyed on `west.yml`.
+**CI:** `.github/workflows/build.yml` runs on `ubuntu-22.04` — the only
+remaining non-Windows touchpoint; the repo itself is Windows-only for
+interactive development.
 
 ## Critical Rules (learned the hard way)
 
@@ -140,7 +115,7 @@ zephyr-thread-rt58x/
 
 ## Hardware: RT583 EVB
 - **CPU**: ARM Cortex-M3, 64 MHz (BBPLL)
-- **Flash**: 1 MB at 0x00008000 (app region; bootloader occupies 0x00000000–0x00007FFF)
+- **Flash**: 2 MB at 0x00000000 (MCUboot at 0x00000000–0x0000FFFF; app slot0 starts at 0x00010000 per sysbuild overlay)
 - **RAM**: 144 KB at 0x20000000
 - **UART0**: 0xA0000000, IRQ=4, TX=GPIO16, RX=GPIO17, 115200 8N1
 - **COMM_SUBSYSTEM** (RF MCU): 0xA0400000, IRQ=20

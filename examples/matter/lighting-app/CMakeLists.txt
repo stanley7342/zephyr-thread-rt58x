@@ -28,16 +28,27 @@ if(NOT EXISTS "${CHIP_ROOT}/src/lib/core/CHIPError.h")
         "  cd ${WORKSPACE_DIR}/connectedhomeip && git fetch --depth=1 origin fdb31dbcb3ebe000ad3e41b386e90849937948f9 && git checkout fdb31dbcb3ebe000ad3e41b386e90849937948f9")
 endif()
 
-# ── Python3: prefer the active venv so codegen deps (python_path, matter IDL)
+# ── Python3: prefer the workspace venv so codegen deps (python_path, matter IDL)
 #    are available.  chip_codegen.cmake calls find_package(Python3) which would
 #    otherwise pick the system Python that lacks these packages.
+#
+#    NOTE: under `west build --sysbuild` the child Zephyr project is launched by
+#    ExternalZephyrProject_Cmake which does NOT inherit VIRTUAL_ENV, so the
+#    VIRTUAL_ENV check alone isn't enough.  Fall back to the canonical
+#    `<workspace>/.zephyr-venv` path that install.ps1 / install.sh create.
 if(NOT DEFINED Python3_EXECUTABLE)
-    if(DEFINED ENV{VIRTUAL_ENV})
-        if(WIN32)
-            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/Scripts/python.exe" CACHE FILEPATH "")
-        else()
-            set(Python3_EXECUTABLE "$ENV{VIRTUAL_ENV}/bin/python" CACHE FILEPATH "")
-        endif()
+    if(WIN32)
+        set(_rt583_venv_py_env  "$ENV{VIRTUAL_ENV}/Scripts/python.exe")
+        set(_rt583_venv_py_ws   "${WORKSPACE_DIR}/.zephyr-venv/Scripts/python.exe")
+    else()
+        set(_rt583_venv_py_env  "$ENV{VIRTUAL_ENV}/bin/python")
+        set(_rt583_venv_py_ws   "${WORKSPACE_DIR}/.zephyr-venv/bin/python")
+    endif()
+
+    if(DEFINED ENV{VIRTUAL_ENV} AND EXISTS "${_rt583_venv_py_env}")
+        set(Python3_EXECUTABLE "${_rt583_venv_py_env}" CACHE FILEPATH "")
+    elseif(EXISTS "${_rt583_venv_py_ws}")
+        set(Python3_EXECUTABLE "${_rt583_venv_py_ws}" CACHE FILEPATH "")
     endif()
 endif()
 
@@ -318,6 +329,28 @@ endif()
 
 include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
 
+# ── Diagnostic: dump codegen_paths.py state so sysbuild failures are visible ──
+# chip_codegen.cmake runs codegen_paths.py via execute_process without capturing
+# return code, so a failure there silently yields an empty OUT_NAMES list and
+# later blows up at add_custom_command. Repeat the call with RESULT/ERROR vars.
+find_package(Python3 QUIET)
+message(STATUS "[rt583-diag] Python3_EXECUTABLE = ${Python3_EXECUTABLE}")
+message(STATUS "[rt583-diag] VIRTUAL_ENV = $ENV{VIRTUAL_ENV}")
+message(STATUS "[rt583-diag] CHIP_ROOT = ${CHIP_ROOT}")
+message(STATUS "[rt583-diag] CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CHIP_ROOT}/scripts/codegen_paths.py"
+        "--idl" "${CMAKE_CURRENT_LIST_DIR}/lighting-app.matter"
+        "app/PluginApplicationCallbacks.h" "app/callback-stub.cpp"
+    RESULT_VARIABLE _rt583_cp_rc
+    OUTPUT_VARIABLE _rt583_cp_out
+    ERROR_VARIABLE  _rt583_cp_err
+)
+message(STATUS "[rt583-diag] codegen_paths.py rc=${_rt583_cp_rc}")
+message(STATUS "[rt583-diag] codegen_paths.py stdout: ${_rt583_cp_out}")
+message(STATUS "[rt583-diag] codegen_paths.py stderr: ${_rt583_cp_err}")
+
 chip_configure_data_model(app
     INCLUDE_SERVER
     ZAP_FILE ${CMAKE_CURRENT_LIST_DIR}/lighting-app.zap
@@ -462,12 +495,27 @@ target_compile_definitions(app PRIVATE
     CONFIG_RF_FW_INCLUDE_MULTI_2P4G=TRUE
     CONFIG_RF_MCU_CONST_LOAD_SUPPORTED=TRUE
     CONFIG_CRYPTO_AES_ENABLE=1
-
-    # NOTE: CHIP_PROJECT_CONFIG_INCLUDE is already provided by GN's
-    # SystemBuildConfig.h (included via CHIP_HAVE_CONFIG_H).  No need to
-    # duplicate it here.  The Server ODR fix is in connectedhomeip/
-    # Server.h (out-of-line getters).
 )
+
+# ── ODR fix: Server class layout must match across Zephyr-side and GN-side ─────
+# CONFIG_CHIP_USE_OT_ENDPOINT=y in prj.conf is consumed by
+# connectedhomeip/config/common/cmake/chip_gn_kconfig_defaults.cmake only when
+# that helper runs under the chip-module Kconfig path — it translates the
+# Kconfig symbol into a GN arg that surfaces as
+# CHIP_SYSTEM_CONFIG_USE_OPENTHREAD_ENDPOINT=1 inside GN's SystemBuildConfig.h.
+#
+# Every GN-side TU (Server.cpp, FabricTable.cpp, SessionManager.cpp, …) sees
+# the flag that way, but Zephyr-side TUs like AppTask.cpp do NOT pull in
+# SystemBuildConfig.h.  Without the define, Server.h / SessionManager.h compile
+# with different sizeof(UDPEndPoint) + sizeof(TransportMgr) and Server::mFabrics
+# lands at a different offset for each side — making Server::GetInstance()
+# .GetFabricTable() return a pointer that is 312 bytes off from the instance
+# that Server::Init() populated.  Symptom: FabricTable::mOperationalKeystore
+# reads NULL and CSRRequest fails with CHIP_ERROR_INCORRECT_STATE (0x03).
+#
+# Propagate the flag to every Zephyr-side TU (app + related modules) so both
+# sides agree on the Server layout.
+zephyr_compile_definitions(CHIP_SYSTEM_CONFIG_USE_OPENTHREAD_ENDPOINT=1)
 
 # Suppress warnings in vendored SDK sources
 target_compile_options(app PRIVATE -Wno-error=maybe-uninitialized)
