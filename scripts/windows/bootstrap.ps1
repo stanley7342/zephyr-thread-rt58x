@@ -8,14 +8,26 @@
       irm https://raw.githubusercontent.com/stanley7342/zephyr-thread-rt58x/master/scripts/windows/bootstrap.ps1 | iex
 
     Steps:
-      1. Clone zephyr-thread-rt58x to <current directory>\zephyr-thread-rt58x
-      2. Call install.ps1 to complete the full environment setup
+      1. Create <current directory>\matter and switch into it
+      2. Clone zephyr-thread-rt58x to <current directory>\matter\zephyr-thread-rt58x
+      3. Call install.ps1 to complete the full environment setup
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repo      = "https://github.com/stanley7342/zephyr-thread-rt58x.git"
+$matterDir = Join-Path $PWD "matter"
+
+if (-not (Test-Path $matterDir)) {
+    Write-Host "==> Creating $matterDir" -ForegroundColor Cyan
+    New-Item -ItemType Directory -Path $matterDir | Out-Null
+} else {
+    Write-Host "[--] $matterDir already exists" -ForegroundColor DarkGray
+}
+
+Set-Location $matterDir
+
 $cloneDir  = Join-Path $PWD "zephyr-thread-rt58x"
 $installPs = Join-Path $cloneDir "scripts\windows\install.ps1"
 
