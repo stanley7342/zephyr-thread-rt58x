@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # RT583-EVB — WSL/Linux flash script (CMSIS-DAP + OpenOCD)
 #
-# Prerequisites (Windows side):
+# Prerequisites (Windows side, if using WSL):
 #   1. winget install usbipd
-#   2. .\scripts\windows\attach-usb.ps1
+#   2. usbipd bind --busid <busid>; usbipd attach --wsl --busid <busid>
 #
 # Usage:
 #   bash scripts/linux/flash.sh -p thread        # slot0 (0x10000)

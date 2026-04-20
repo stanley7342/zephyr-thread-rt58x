@@ -867,8 +867,8 @@ Write-Host "  cd $projectDir" -ForegroundColor Yellow
 Write-Host "  `$root = `$PWD.Path -replace '\\','/'" -ForegroundColor Yellow
 Write-Host "  west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr ``" -ForegroundColor Yellow
 Write-Host "      -d build/bootloader ``" -ForegroundColor Yellow
-Write-Host "      -- -DOVERLAY_CONFIG=`"`$root/examples/bootloader/mcuboot.conf`" ``" -ForegroundColor Yellow
-Write-Host "         -DDTC_OVERLAY_FILE=`"`$root/examples/bootloader/mcuboot.overlay`"" -ForegroundColor Yellow
+Write-Host "      -- -DOVERLAY_CONFIG=`"`$root/boards/arm/rt583_evb/mcuboot.conf`" ``" -ForegroundColor Yellow
+Write-Host "         -DDTC_OVERLAY_FILE=`"`$root/boards/arm/rt583_evb/mcuboot.overlay`"" -ForegroundColor Yellow
 Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Flash:"

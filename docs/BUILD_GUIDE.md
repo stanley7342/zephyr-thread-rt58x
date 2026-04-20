@@ -87,9 +87,9 @@ pip install -r C:\Users\Stanley\zephyr\scripts\requirements.txt
 | Blinky | `examples/blinky` | `build/blinky/zephyr/zephyr.signed.bin` |
 | Hello world | `examples/hello_world` | `build/hello_world/zephyr/zephyr.signed.bin` |
 
-Build them all at once:
+Build one at a time with sysbuild:
 ```powershell
-.\scripts\windows\build_all.ps1
+west build --sysbuild -p always -b rt583_evb examples/<app> -d build/<app>
 ```
 
 ---
@@ -113,8 +113,8 @@ $root = $PWD.Path -replace '\\','/'
 # Matter lighting-app (928 KB slots):
 west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
     -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
+    -- -DOVERLAY_CONFIG="$root/boards/arm/rt583_evb/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="$root/boards/arm/rt583_evb/mcuboot.overlay"
 ```
 
 Why not a relative path to `DTC_OVERLAY_FILE`? Zephyr resolves relative overlay paths against `APPLICATION_SOURCE_DIR` (the bootloader's source dir in a *different* repo), not against the cwd. A relative path can never reach our project tree, so the path must be absolute.
@@ -175,8 +175,8 @@ cd C:\Users\Stanley\zephyr-thread-rt58x
 $root = $PWD.Path -replace '\\','/'
 west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
     -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
+    -- -DOVERLAY_CONFIG="$root/boards/arm/rt583_evb/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="$root/boards/arm/rt583_evb/mcuboot.overlay"
 
 west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 

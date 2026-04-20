@@ -40,19 +40,20 @@ cd zephyr-thread-rt58x
 source ../env.sh
 ```
 
-**Build (Windows — bootloader first, then app):**
+**Build (any platform — sysbuild is the only supported path):**
 ```powershell
-# Bootloader source lives in another repo, so overlay paths must be absolute
-# with forward slashes (CMake on Windows treats \U as a Unicode escape).
-$root = $PWD.Path -replace '\\','/'
-
-west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
-    -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
-
-west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
+west build --sysbuild -p always -b rt583_evb examples/<app> -d build/<app>
+west flash -d build/<app>
 ```
+`<app>` = `thread`, `matter/lighting-app`, `ble/peripheral/hrs`, `blinky`,
+`hello_world`, etc. sysbuild builds MCUboot + app in one shot; `west flash`
+writes both images. The sysbuild config lives in each app's `sysbuild.conf`
+(enables `SB_CONFIG_MCUBOOT_MODE_DIRECT_XIP`) plus `sysbuild/mcuboot.{conf,overlay}`
+for RT583-specific driver bits and the 928 KB partition layout.
+
+> Do not use `west build` without `--sysbuild`, and do not build MCUboot as a
+> separate invocation — both are error-prone legacy flows that have been
+> removed from this repo.
 
 **Build (Linux/WSL):**
 ```sh

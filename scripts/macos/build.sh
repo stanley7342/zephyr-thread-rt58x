@@ -61,7 +61,7 @@ BUILD_DIR="$PROJECT_DIR/build/$TARGET"
 OUT_BIN="$BUILD_DIR/${TARGET}_zephyr.bin"
 
 if [[ "$TARGET" == "bootloader" ]]; then
-    OVERLAY="$PROJECT_DIR/examples/bootloader/mcuboot.conf"
+    OVERLAY="$PROJECT_DIR/boards/arm/rt583_evb/mcuboot.conf"
 
     echo ""
     echo -e "\033[36m==> west build (MCUboot / rt583_evb)\033[0m"

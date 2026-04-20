@@ -63,29 +63,16 @@ cd zephyr-thread-rt58x
 . .\env.ps1
 ```
 
-### Step 3 — Build Matter lighting-app
-
-The bootloader source lives in another repo, so overlay paths **must be absolute with forward slashes** (CMake on Windows parses `\U` in paths like `C:\Users\...` as a Unicode escape). Paste the whole block — the `$root` line has to be in the same shell as `west build`:
+### Step 3 — Build + Flash
 
 ```powershell
-$root = $PWD.Path -replace '\\','/'
-
-# Bootloader (Matter needs the 928 KB slot layout)
-west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
-    -d build/bootloader `
-    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
-
-# App
-west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-```
-
-### Step 4 — Flash (once per session — bootloader first, then app)
-
-```powershell
-west flash -d build/bootloader
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 west flash -d build/lighting-app
 ```
+
+`--sysbuild` builds MCUboot + app in one invocation (driven by each app's
+`sysbuild.conf`). `west flash` then writes both images. Do not run `west build`
+without `--sysbuild` — the legacy two-step flow has been removed.
 
 ---
 
@@ -97,8 +84,8 @@ cd zephyr-thread-rt58x
 bash scripts/linux/install.sh       # or scripts/macos/install.sh
 source ../env.sh
 
-west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-bash scripts/linux/flash.sh -p lighting-app
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
+west flash -d build/lighting-app
 ```
 
 First-time udev rules for CMSIS-DAP:
@@ -120,9 +107,15 @@ bash scripts/linux/flash.sh --setup-udev
 | Hello world | `examples/hello_world` | `build/hello_world/zephyr/zephyr.signed.bin` |
 | Flash unit test | `tests/flash` | `build/test_flash/zephyr/zephyr.signed.bin` |
 
-Build them all at once:
+Build individually with sysbuild — each app has its own `sysbuild.conf` and
+`sysbuild/mcuboot.{conf,overlay}`:
 ```powershell
-.\scripts\windows\build_all.ps1
+west build --sysbuild -p always -b rt583_evb examples/thread               -d build/thread
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app  -d build/lighting-app
+west build --sysbuild -p always -b rt583_evb examples/ble/peripheral/hrs   -d build/ble_hrs
+west build --sysbuild -p always -b rt583_evb examples/blinky               -d build/blinky
+west build --sysbuild -p always -b rt583_evb examples/hello_world          -d build/hello_world
+west build --sysbuild -p always -b rt583_evb tests/flash                   -d build/test_flash
 ```
 
 ---
@@ -273,7 +266,7 @@ Full reference: [OpenThread CLI Reference](https://openthread.io/reference/cli).
 |---------|-------------|-----|
 | `find_package(Zephyr)` fails | env not loaded | `. .\env.ps1` (Windows) / `source ../env.sh` (Linux) |
 | `recursive 'source' of 'Kconfig.zephyr' detected` (Windows only) | `ZEPHYR_HAL_ESPRESSIF_MODULE_DIR` unset, resolves `/zephyr/Kconfig` to drive root | re-source `env.ps1` — it sets the var to a stub path |
-| `examples/bootloader/mcuboot.overlay: No such file` | `$root` wasn't set in the shell that ran `west build` | paste the `$root = $PWD.Path -replace '\\','/'` line in the **same** session, right before `west build` |
+| `boards/arm/rt583_evb/mcuboot.overlay: No such file` | `$root` wasn't set in the shell that ran `west build` | paste the `$root = $PWD.Path -replace '\\','/'` line in the **same** session, right before `west build` |
 | `Could NOT find Python3: missing Interpreter` | venv not activated in this shell | re-source env; `-p always` rebuild |
 | MCUboot `image not found` | Bootloader slot size ≠ app slot size | rebuild bootloader with matching DTC overlay |
 | RAM overflow during link | `CONFIG_MBEDTLS_HEAP_SIZE` too high for RAM | lower heap to 10240, keep `CONFIG_MBEDTLS_PSA_KEY_SLOT_COUNT=32` |

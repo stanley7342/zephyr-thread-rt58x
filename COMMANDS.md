@@ -77,11 +77,11 @@ west flash --bin-file build/lighting-app/zephyr/zephyr.bin
 
 ## 序列監視器
 
-```powershell
-.\scripts\windows\attach-serial.ps1
-```
+PuTTY / Tera Term 或 pyserial miniterm：`115200 8N1`，無 flow control。
 
-或用 PuTTY / Tera Term：`115200 8N1`，無 flow control。
+```powershell
+python -m serial.tools.miniterm <COM_PORT> 115200
+```
 
 ---
 

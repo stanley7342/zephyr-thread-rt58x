@@ -138,8 +138,8 @@ jobs:
 
           if [ "${{ matrix.is_bootloader }}" = "true" ]; then
             CMAKE_ARGS="${CMAKE_ARGS} \
-              -DOVERLAY_CONFIG=${PROJECT}/examples/bootloader/mcuboot.conf \
-              -DDTC_OVERLAY_FILE=${PROJECT}/examples/bootloader/mcuboot.overlay \
+              -DOVERLAY_CONFIG=${PROJECT}/boards/arm/rt583_evb/mcuboot.conf \
+              -DDTC_OVERLAY_FILE=${PROJECT}/boards/arm/rt583_evb/mcuboot.overlay \
               -DBOARD_ROOT=${PROJECT} \
               -DSOC_ROOT=${PROJECT} \
               -DDTS_ROOT=${PROJECT}"
