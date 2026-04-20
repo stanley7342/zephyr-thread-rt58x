@@ -691,6 +691,12 @@ $sysPythonScriptsFwd = $sysPythonScripts -replace "\\", "/"
 `$env:ZEPHYR_SDK_INSTALL_DIR   = "$sdkInstall"
 `$env:ZAP_INSTALL_PATH         = "$zapInstallDir"
 `$env:WEST_DIR                 = "$westDirFwd"
+# Workaround for Zephyr v4.4.0-rc1 Windows Kconfig recursion:
+# modules/hal_espressif/Kconfig does ``osource "`$(ZEPHYR_HAL_ESPRESSIF_MODULE_DIR)/zephyr/Kconfig"``.
+# With the var unset, it resolves to "/zephyr/Kconfig" which on Windows maps to
+# the current drive root (e.g. D:/zephyr/Kconfig) and recursively re-sources
+# the main Kconfig. Point it at a non-existent path so ``osource`` silently skips.
+`$env:ZEPHYR_HAL_ESPRESSIF_MODULE_DIR = "$($Workspace -replace '\\','/')/.nonexistent"
 # connectedhomeip codegen scripts need their own scripts/ dir in PYTHONPATH
 `$env:PYTHONPATH               = "$chipScriptsFwd;" + `$env:PYTHONPATH
 # Explicitly add venv Scripts so CMake find_program can locate gn, west, etc.
@@ -858,10 +864,11 @@ Write-Host "  . $envPs1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Build:"
 Write-Host "  cd $projectDir" -ForegroundColor Yellow
+Write-Host "  `$root = `$PWD.Path -replace '\\','/'" -ForegroundColor Yellow
 Write-Host "  west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr ``" -ForegroundColor Yellow
 Write-Host "      -d build/bootloader ``" -ForegroundColor Yellow
-Write-Host "      -- -DOVERLAY_CONFIG=`"examples/bootloader/mcuboot.conf`" ``" -ForegroundColor Yellow
-Write-Host "         -DDTC_OVERLAY_FILE=`"examples/bootloader/mcuboot.overlay`"" -ForegroundColor Yellow
+Write-Host "      -- -DOVERLAY_CONFIG=`"`$root/examples/bootloader/mcuboot.conf`" ``" -ForegroundColor Yellow
+Write-Host "         -DDTC_OVERLAY_FILE=`"`$root/examples/bootloader/mcuboot.overlay`"" -ForegroundColor Yellow
 Write-Host "  west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Flash:"

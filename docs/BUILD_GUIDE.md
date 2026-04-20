@@ -23,14 +23,17 @@ cd zephyr-thread-rt58x
 
 | Step | What it does |
 |------|-------------|
-| Required tools | Python 3.12, CMake, Ninja, Git, 7-Zip via winget |
+| Required tools | Python 3.14, CMake, Ninja, Git, 7-Zip via winget |
 | ZAP CLI | Matter code-generation tool (~60 MB) |
 | Zephyr SDK 1.0.1 | ARM toolchain (~2 GB) |
 | West workspace | `west init` + `west update` — downloads Zephyr (~500 MB) |
 | Python deps | `pip install` for Zephyr and connectedhomeip |
 | GN | Generate Ninja binary for the Matter GN build |
 | connectedhomeip submodules | pigweed, jsoncpp, nlassert, nlio, nanopb, abseil-cpp, openthread, uriparser |
+| OpenOCD DLLs | Runtime DLLs for `tools/windows/openocd.exe` — pulled from `%USERPROFILE%\openocd-rt58x\dist-win\bin\` if present, otherwise downloaded (xPack / MSYS2) |
 | env.ps1 | Generated inside the project directory |
+
+> `openocd.exe` and `tools/windows/tcl/` are tracked in the repo and are not touched by `install.ps1` anymore — only the runtime DLLs are handled.
 
 The install script validates the SDK archive (size ≥ 500 MB + 7z magic bytes) and aborts loudly if the download was truncated, so a failed download won't silently leave a broken SDK behind.
 
@@ -312,7 +315,9 @@ I: [DL]CHIPoBLE advertising started
 | `Could NOT find Python3 (missing: Interpreter)` | venv not active in this shell | re-source `env.ps1` |
 | `Invalid character escape '\U'` in CMake | Windows backslash in path | convert to forward slashes: `$PWD.Path -replace '\\','/'` |
 | `failed to preprocess devicetree files` | Overlay path relative while source is in another repo | use absolute path (see §4.1) |
-| `openocd.exe not found` | SDK not fully installed | re-run `install.ps1`; check SDK 7z size ≥ 500 MB |
+| `openocd.exe` missing DLLs (libusb-1.0, libhidapi-0, libftdi1) | install.ps1 didn't run or DLL fetch failed | re-run `install.ps1`; DLLs land in `tools/windows/` |
+| `recursive 'source' of 'Kconfig.zephyr' detected` (Windows only) | Zephyr v4.4.0-rc1 `modules/hal_espressif/Kconfig:23` does `osource "$(ZEPHYR_HAL_ESPRESSIF_MODULE_DIR)/zephyr/Kconfig"`; with the var unset, `/zephyr/Kconfig` resolves to the current drive root and re-sources the main Kconfig | re-source `env.ps1` — it sets `$env:ZEPHYR_HAL_ESPRESSIF_MODULE_DIR` to a stub path so `osource` skips silently |
+| `Invalid BOARD` after a rebuild | `zephyr/module.yml` missing — it declares `board_root: .` | `git checkout zephyr/module.yml` then rebuild with `-p always` |
 | `connectedhomeip not found` | Not cloned | See §1 |
 | MCUboot `image not found` | Bootloader/app slot layouts mismatch | rebuild bootloader with the matching overlay |
 | RAM overflow during link | `CONFIG_MBEDTLS_HEAP_SIZE` too high | drop to 10240 |

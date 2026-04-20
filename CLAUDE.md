@@ -42,10 +42,14 @@ source ../env.sh
 
 **Build (Windows — bootloader first, then app):**
 ```powershell
+# Bootloader source lives in another repo, so overlay paths must be absolute
+# with forward slashes (CMake on Windows treats \U as a Unicode escape).
+$root = $PWD.Path -replace '\\','/'
+
 west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
     -d build/bootloader `
-    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay"
+    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
 
 west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 ```

@@ -44,8 +44,7 @@ See also [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) for the full step-by-step 
 
 ## 1. Quick Start — Windows
 
-> **Requirement**: PowerShell 7 (run as Administrator).
-> If not installed: `winget install Microsoft.PowerShell`
+> **Requirement**: PowerShell 7 (run as Administrator) — `winget install Microsoft.PowerShell`
 
 ### Step 1 — One-click bootstrap
 
@@ -66,14 +65,18 @@ cd zephyr-thread-rt58x
 
 ### Step 3 — Build Matter lighting-app
 
-Bootloader must be built with the Matter overlay (larger slots):
+The bootloader source lives in another repo, so overlay paths **must be absolute with forward slashes** (CMake on Windows parses `\U` in paths like `C:\Users\...` as a Unicode escape). Paste the whole block — the `$root` line has to be in the same shell as `west build`:
 
 ```powershell
+$root = $PWD.Path -replace '\\','/'
+
+# Bootloader (Matter needs the 928 KB slot layout)
 west build -p always -b rt583_evb ../bootloader/mcuboot/boot/zephyr `
     -d build/bootloader `
-    -- -DOVERLAY_CONFIG="examples/bootloader/mcuboot.conf" `
-       -DDTC_OVERLAY_FILE="examples/bootloader/mcuboot.overlay"
+    -- -DOVERLAY_CONFIG="$root/examples/bootloader/mcuboot.conf" `
+       -DDTC_OVERLAY_FILE="$root/examples/bootloader/mcuboot.overlay"
 
+# App
 west build -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
 ```
 
@@ -126,7 +129,7 @@ Build them all at once:
 
 ## 4. Flashing
 
-Requires a CMSIS-DAP debugger (OpenOCD comes with Zephyr SDK).
+Requires a CMSIS-DAP debugger. `tools/windows/openocd.exe` and the `tcl/` scripts are tracked in the repo, so no separate OpenOCD install is needed on Windows.
 
 **First-time full flash (bootloader + app):**
 
@@ -269,6 +272,8 @@ Full reference: [OpenThread CLI Reference](https://openthread.io/reference/cli).
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `find_package(Zephyr)` fails | env not loaded | `. .\env.ps1` (Windows) / `source ../env.sh` (Linux) |
+| `recursive 'source' of 'Kconfig.zephyr' detected` (Windows only) | `ZEPHYR_HAL_ESPRESSIF_MODULE_DIR` unset, resolves `/zephyr/Kconfig` to drive root | re-source `env.ps1` — it sets the var to a stub path |
+| `examples/bootloader/mcuboot.overlay: No such file` | `$root` wasn't set in the shell that ran `west build` | paste the `$root = $PWD.Path -replace '\\','/'` line in the **same** session, right before `west build` |
 | `Could NOT find Python3: missing Interpreter` | venv not activated in this shell | re-source env; `-p always` rebuild |
 | MCUboot `image not found` | Bootloader slot size ≠ app slot size | rebuild bootloader with matching DTC overlay |
 | RAM overflow during link | `CONFIG_MBEDTLS_HEAP_SIZE` too high for RAM | lower heap to 10240, keep `CONFIG_MBEDTLS_PSA_KEY_SLOT_COUNT=32` |

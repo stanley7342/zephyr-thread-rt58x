@@ -419,7 +419,6 @@ static FactoryResetOnFabricRemoved sFabricDelegate;
 
 static void DoFactoryReset(intptr_t /* arg */)
 {
-
     /* Direct flash_erase on the storage partition (NVS backing store,
      * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
      * `flash erase_address 0x001E0000 0x10000`, but from the device.
@@ -428,7 +427,16 @@ static void DoFactoryReset(intptr_t /* arg */)
     const struct device * flash_dev = PARTITION_DEVICE(storage_partition);
     off_t  offset = PARTITION_OFFSET(storage_partition);
     size_t size   = PARTITION_SIZE(storage_partition);
-    (void) flash_erase(flash_dev, offset, size);
+
+    LOG_WRN("[BTN] Factory reset: erasing storage 0x%08lx + %u bytes",
+            (unsigned long) offset, (unsigned) size);
+
+    int rc = flash_erase(flash_dev, offset, size);
+    if (rc) {
+        LOG_ERR("[BTN] flash_erase failed: %d", rc);
+    } else {
+        LOG_WRN("[BTN] Factory reset complete — rebooting");
+    }
 
     k_msleep(100);
     sys_reboot(SYS_REBOOT_COLD);
@@ -495,11 +503,14 @@ void AppTask::FunctionHandler(const AppEvent & event)
             if (!task.mFunctionTimerActive && task.mFunction == FunctionEvent::NoneSelected) {
                 task.mFunction = FunctionEvent::FactoryReset;
                 task.StartTimer(kFactoryResetTriggerTimeMs);
+                LOG_INF("[BTN] Factory-reset countdown started (hold %u s)",
+                        kFactoryResetTriggerTimeMs / 1000U);
             }
         } else {
             if (task.mFunctionTimerActive && task.mFunction == FunctionEvent::FactoryReset) {
                 task.CancelTimer();
                 task.mFunction = FunctionEvent::NoneSelected;
+                LOG_INF("[BTN] Factory-reset cancelled (released before timeout)");
             }
         }
     } else if (event.ButtonEvent.ButtonIdx == kButtonLightToggle) {
