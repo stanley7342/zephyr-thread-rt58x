@@ -46,3 +46,4 @@ manifest:
 
   self:
     path: zephyr-thread-rt58x
+    west-commands: scripts/west-commands.yml

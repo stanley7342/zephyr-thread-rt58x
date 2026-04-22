@@ -1,0 +1,6 @@
+west-commands:
+  - file: scripts/west_commands/flash_isp.py
+    commands:
+      - name: flash-isp
+        class: FlashIsp
+        help: flash RT58x/RT584 over UART using isp_cli
