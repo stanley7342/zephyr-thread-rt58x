@@ -681,6 +681,9 @@ class ProgressBar:
         self.start_t = time.monotonic()
         self._count_w = len(str(self.total))
         self._last_pct10 = -1  # redraw throttle: tenths of a percent
+        # Enable ANSI escape processing on Windows so the green `#` sequence
+        # renders instead of printing literal `\x1b[32m`.
+        _enable_vt_mode_windows()
         if self.enabled:
             self._render()
 
@@ -704,7 +707,6 @@ class ProgressBar:
     def _render(self) -> None:
         frac = self.current / self.total
         filled = int(self.width * frac)
-        bar = "#" * filled + "-" * (self.width - filled)
         pct = frac * 100
         elapsed = max(time.monotonic() - self.start_t, 1e-6)
         cur = str(self.current).rjust(self._count_w)
@@ -718,7 +720,11 @@ class ProgressBar:
             remain_s = (self.total - self.current) * per_unit
         mm, ss = divmod(int(remain_s), 60)
         rate_s = self._fmt_rate(rate) if self.unit_bytes > 0 else " " * 10
-        line = (f"\r{_tag(self.label)} [{bar}] {cur}/{tot} {pct:5.1f}%  "
+        # Green fill + default-colour track, with explicit reset so the
+        # surrounding text stays uncoloured.
+        bar_filled = "\x1b[32m" + "#" * filled + "\x1b[0m"
+        bar_empty = "-" * (self.width - filled)
+        line = (f"\r{_tag(self.label)} [{bar_filled}{bar_empty}] {cur}/{tot} {pct:5.1f}%  "
                 f"{rate_s}  ETA {mm:02d}:{ss:02d}")
         self.stream.write(line)
         self.stream.flush()
