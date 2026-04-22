@@ -40,11 +40,6 @@ jobs:
             source: examples/ble/peripheral/hrs
             build_dir: build/ble_hrs
 
-          - target: bootloader
-            source: ../bootloader/mcuboot/boot/zephyr
-            build_dir: build/bootloader
-            is_bootloader: true
-
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
       # Checked out to $GITHUB_WORKSPACE/zephyr-thread so that
@@ -136,29 +131,22 @@ jobs:
           CMAKE_ARGS="-DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake"
           CMAKE_ARGS="${CMAKE_ARGS} -DIMGTOOL=${IMGTOOL_BIN}"
 
-          if [ "${{ matrix.is_bootloader }}" = "true" ]; then
-            CMAKE_ARGS="${CMAKE_ARGS} \
-              -DOVERLAY_CONFIG=${PROJECT}/boards/arm/rt583_evb/mcuboot.conf \
-              -DDTC_OVERLAY_FILE=${PROJECT}/boards/arm/rt583_evb/mcuboot.overlay \
-              -DBOARD_ROOT=${PROJECT} \
-              -DSOC_ROOT=${PROJECT} \
-              -DDTS_ROOT=${PROJECT}"
-          fi
-
-          west build -p always -b rt583_evb \
+          west build --sysbuild -p always -b rt583_evb \
             -d ${{ matrix.build_dir }} \
             ${{ matrix.source }} \
             -- ${CMAKE_ARGS}
 
       # ── Upload binary ─────────────────────────────────────────────────────
+      # Sysbuild nests per-image artifacts under build/<target>/<image>/zephyr/.
+      # Glob picks up MCUboot + signed app in one shot.
       - name: Upload ${{ matrix.target }} artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-${{ github.sha }}
           path: |
-            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.bin
-            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.signed.bin
-            zephyr-thread/${{ matrix.build_dir }}/zephyr/zephyr.elf
+            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.bin
+            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.signed.bin
+            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.elf
           if-no-files-found: ignore
           retention-days: 30
 
@@ -359,7 +347,7 @@ jobs:
           [ -z "${IMGTOOL_BIN}" ] && { echo "ERROR: imgtool not found" >&2; exit 1; }
 
           PYTHON3_BIN="$(which python3)"
-          west build -p always -b rt583_evb \
+          west build --sysbuild -p always -b rt583_evb \
             -d build/matter_lighting \
             examples/matter/lighting-app \
             -- \
@@ -374,7 +362,8 @@ jobs:
         with:
           name: matter_lighting-${{ github.sha }}
           path: |
-            zephyr-thread/build/matter_lighting/matter_lighting_zephyr.bin
-            zephyr-thread/build/matter_lighting/zephyr/zephyr.elf
+            zephyr-thread/build/matter_lighting/*/zephyr/zephyr.bin
+            zephyr-thread/build/matter_lighting/*/zephyr/zephyr.signed.bin
+            zephyr-thread/build/matter_lighting/*/zephyr/zephyr.elf
           if-no-files-found: ignore
           retention-days: 30
