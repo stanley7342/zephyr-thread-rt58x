@@ -16,3 +16,16 @@ env.ps1
 # zap-cli is fetched by install.ps1; its Electron app.asar is often locked
 # by running zap/node/electron processes, which blocks git clean/checkout.
 zap-cli/
+
+# Python bytecode caches (flash_isp.py, isp_client.py, etc.)
+__pycache__/
+*.pyc
+
+# PyInstaller output for tools/isp_cli/ — the spec + source is tracked,
+# but build artifacts and the compiled .exe are not.
+tools/isp_cli/build/
+tools/isp_cli/dist/
+tools/isp_cli/downloads/
+
+# Stray `b/` from early `west build -d b/l/...` experiments.
+/b/
