@@ -122,7 +122,10 @@ config RT583_HEAP_TRACE
 
 endif # CHIP
 
-# BLE
+# BLE — same SDK glue, just different RF MCU sources / hosal_rf path
+# per SoC. Enable BLE_RT583 when building for SOC_RT583, BLE_RT584 for
+# SOC_RT584. The HCI driver (drivers/bluetooth/hci_rt583.c) is
+# SoC-agnostic; it talks to the COMM_SUBSYSTEM via hosal_rf.
 config BLE_RT583
     bool "Bluetooth LE for Rafael RT583"
     depends on SOC_RT583
@@ -130,3 +133,14 @@ config BLE_RT583
     help
       Enables the BLE stack on the RT583 SoC via the integrated
       BLE controller firmware and Zephyr's BLE host stack.
+
+config BLE_RT584
+    bool "Bluetooth LE for Rafael RT584 (Phase A — structure only)"
+    depends on SOC_RT584
+    select BT_HCI_SETUP if BT
+    help
+      RT584 BLE port — same SDK glue as RT583 (hci_rt583.c is generic,
+      pulls hosal_rf / rf_mcu / RUCI / RF firmware via the rt584 SoC
+      subtree). Controller bring-up has NOT been validated on real
+      hardware yet — expect to debug RF MCU init / IRQ wiring at first
+      run.

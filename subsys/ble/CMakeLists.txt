@@ -1,30 +1,51 @@
-# subsys/ble/CMakeLists.txt — RT583 BLE platform sources
-# Included by example CMakeLists.txt when CONFIG_BLE_RT583=y.
+# subsys/ble/CMakeLists.txt — Rafael (rt583/rt584) BLE platform sources
+# Included by example CMakeLists.txt when CONFIG_BLE_RT583=y or CONFIG_BLE_RT584=y.
 #
 # Expects RAFAEL_SDK and RT583_PROJECT_DIR to be set by the caller.
 
-set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
-set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
 set(RUCI_INC      ${RAFAEL_SDK}/components/network/ruci/Inc)
-set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
-set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
-set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
 set(UTIL_INC      ${RAFAEL_SDK}/components/utility/utility/Inc)
 set(LOG_INC       ${RAFAEL_SDK}/components/utility/log)
+
+# SoC-specific paths.
+if(CONFIG_BLE_RT584)
+    set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt584)
+    set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt584)
+    set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Inc)
+    set(RT_DRV_INC    ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Inc)
+    set(RT_SYS_INC    ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_system/Include)
+    set(HOSAL_SRC     ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Src)
+    set(SOC_DRV_SRC   ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src)
+    set(RF_FW_SRCS
+        ${RT569_FW_DIR}/Src/rt569s_fw.c
+        ${RT569_FW_DIR}/Src/rt569s_init.c
+    )
+else()
+    set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
+    set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
+    set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
+    set(RT_DRV_INC    ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
+    set(RT_SYS_INC    ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
+    set(HOSAL_SRC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src)
+    set(SOC_DRV_SRC   ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Src)
+    set(RF_FW_SRCS
+        ${RT569_FW_DIR}/Src/rt569mp_fw.c
+        ${RT569_FW_DIR}/Src/rt569mp_init.c
+    )
+endif()
 
 # ── RF MCU + firmware + RUCI + utility ────────────────────────────────────────
 target_sources(app PRIVATE
     # HOSAL RF (Zephyr port) + LPM
-    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_lpm.c
-    ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Src/lpm.c
+    ${HOSAL_SRC}/hosal_rf.c
+    ${HOSAL_SRC}/hosal_lpm.c
+    ${SOC_DRV_SRC}/lpm.c
 
     # RF MCU
     ${RT569_RF_DIR}/Src/rf_mcu.c
     ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
     ${RT569_RF_DIR}/Src/rf_common_init.c
-    ${RT569_FW_DIR}/Src/rt569mp_fw.c
-    ${RT569_FW_DIR}/Src/rt569mp_init.c
+    ${RF_FW_SRCS}
 
     # RUCI (command protocol)
     ${RAFAEL_SDK}/components/network/ruci/Src/ruci.c
@@ -47,14 +68,15 @@ target_sources(app PRIVATE
     ${RAFAEL_SDK}/components/utility/log/log.c
     ${RAFAEL_SDK}/components/network/thread/openthread_port/Src/log_shim.c
 
-    # HCI driver (only when Zephyr BT host stack is enabled)
+    # HCI driver (only when Zephyr BT host stack is enabled). Same source
+    # for rt583 / rt584 — uses hosal_rf API, not SoC registers directly.
     $<$<BOOL:${CONFIG_BT}>:${RT583_PROJECT_DIR}/drivers/bluetooth/hci_rt583.c>
 )
 
 target_include_directories(app PRIVATE
     ${HOSAL_INC}
-    ${RT583_DRV_INC}
-    ${RT583_SYS_INC}
+    ${RT_DRV_INC}
+    ${RT_SYS_INC}
     ${UTIL_INC}
     ${LOG_INC}
     ${RT569_RF_DIR}/Inc
@@ -62,16 +84,24 @@ target_include_directories(app PRIVATE
     ${RUCI_INC}
 )
 
-target_compile_definitions(app PRIVATE
-    CONFIG_RT583=1
-    CHIP_TYPE=3
-    "CONFIG_RF_FW_INCLUDE_BLE=TRUE"
-    "CONFIG_RF_FW_INCLUDE_PCI=FALSE"
-)
+# CHIP_TYPE=3 is rt583-specific; rt584 vendor SDK doesn't gate on it.
+if(CONFIG_BLE_RT583)
+    target_compile_definitions(app PRIVATE
+        CONFIG_RT583=1
+        CHIP_TYPE=3
+        "CONFIG_RF_FW_INCLUDE_BLE=TRUE"
+        "CONFIG_RF_FW_INCLUDE_PCI=FALSE"
+    )
+else()
+    target_compile_definitions(app PRIVATE
+        "CONFIG_RF_FW_INCLUDE_BLE=TRUE"
+        "CONFIG_RF_FW_INCLUDE_PCI=FALSE"
+    )
+endif()
 
 # Suppress warnings in vendored SDK sources we don't own
 set_source_files_properties(
     ${RT569_RF_DIR}/Src/rf_common_init.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_lpm.c
+    ${HOSAL_SRC}/hosal_lpm.c
     PROPERTIES COMPILE_FLAGS "-Wno-unused-variable"
 )
