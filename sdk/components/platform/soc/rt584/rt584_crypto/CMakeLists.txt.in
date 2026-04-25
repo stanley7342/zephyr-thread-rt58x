@@ -1,0 +1,2 @@
+sdk_add_static_library(rt58h_crypto)
+sdk_add_include_directories(Inc)

@@ -1,20 +1,36 @@
-# subsys/openthread/CMakeLists.txt — RT583 OpenThread FTD platform
-# Included by the root CMakeLists.txt when CONFIG_OPENTHREAD_RT583=y.
+# subsys/openthread/CMakeLists.txt — Rafael (rt583/rt584) OpenThread FTD platform
+# Included by the root CMakeLists.txt when CONFIG_OPENTHREAD_RT583=y or
+# CONFIG_OPENTHREAD_RT584=y. SoC-specific paths (RF MCU sources/firmware,
+# driver/system include dirs, hosal) are selected from the active SoC; the
+# rest of the OT stack (lmac15p4, RUCI, openthread_port glue) is shared.
 
 set(OT_PORT_INC   ${RAFAEL_SDK}/components/network/thread/openthread_port/Inc)
 set(OT_PORT_SRC   ${RAFAEL_SDK}/components/network/thread/openthread_port/Src)
 set(OT_PORT_UTILS ${RAFAEL_SDK}/components/network/thread/openthread_port/utils)
 set(OT_ROOT       ${RAFAEL_SDK}/components/network/thread/openthread)
-
-set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
-set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
 set(RUCI_INC      ${RAFAEL_SDK}/components/network/ruci/Inc)
 set(LMAC_INC      ${RAFAEL_SDK}/components/network/lmac15p4/Inc)
-set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
-set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
-set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
-set(RT583_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto/Inc)
-set(RT583_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto)
+
+if(CONFIG_OPENTHREAD_RT584)
+    set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt584)
+    set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt584)
+    set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Inc)
+    set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_system/Include)
+    set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Inc)
+    # rt584 crypto sources live in rt584_crypto/ (vendored upstream); rt583
+    # has rt583_crypto/. Share the variable names so the rest of this file
+    # stays SoC-agnostic.
+    set(RT583_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_crypto/Inc)
+    set(RT583_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_crypto)
+else()
+    set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
+    set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
+    set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
+    set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
+    set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
+    set(RT583_CRYPTO_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto/Inc)
+    set(RT583_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_crypto)
+endif()
 set(UTIL_INC      ${RAFAEL_SDK}/components/utility/utility/Inc)
 set(LOG_INC       ${RAFAEL_SDK}/components/utility/log)
 set(MBEDTLS_INC   ${OT_ROOT}/third_party/mbedtls/repo/include)
@@ -110,12 +126,9 @@ target_sources(app PRIVATE
     # library) via cmake/zephyr_module/CMakeLists.txt — do NOT add it here or
     # hosal_trng_get_random_number duplicates across two archives.
     ${RAFAEL_SDK}/components/network/lmac15p4/Src/lmac15p4.c
-    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
     ${RT569_RF_DIR}/Src/rf_mcu.c
     ${RT569_RF_DIR}/Src/rf_mcu_ahb.c
     ${RT569_RF_DIR}/Src/rf_common_init.c
-    ${RT569_FW_DIR}/Src/rt569mp_fw.c
-    ${RT569_FW_DIR}/Src/rt569mp_init.c
 
     # rt583_crypto (replaces librt583_crypto.a)
     ${RT583_CRYPTO_SRC}/rt_aes.c
@@ -173,6 +186,23 @@ target_sources(app PRIVATE
     # spinel (was in libopenthread-platform-utils-static.a)
     ${OT_ROOT}/src/lib/spinel/spinel.c
 )
+
+# SoC-specific RF firmware blob + hosal_rf.
+# rt583: rt569mp_fw.c / rt569mp_init.c (rt583 hosal)
+# rt584: rt569s_fw.c  / rt569s_init.c  (rt584 hosal)
+if(CONFIG_OPENTHREAD_RT584)
+    target_sources(app PRIVATE
+        ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Src/hosal_rf.c
+        ${RT569_FW_DIR}/Src/rt569s_fw.c
+        ${RT569_FW_DIR}/Src/rt569s_init.c
+    )
+else()
+    target_sources(app PRIVATE
+        ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
+        ${RT569_FW_DIR}/Src/rt569mp_fw.c
+        ${RT569_FW_DIR}/Src/rt569mp_init.c
+    )
+endif()
 
 # OT thread management: ot_zephyr.c for the Thread CLI example;
 # ot_matter_sysq.c for the Matter build.

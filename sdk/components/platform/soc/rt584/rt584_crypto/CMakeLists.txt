@@ -1,0 +1,15 @@
+sdk_generate_library(rt584_crypto)
+sdk_add_include_directories(Inc)
+if(CONFIG_CRYPTO_SECP256R1_ENABLE)
+    sdk_library_add_sources(rt_ecjpake.c)
+endif()
+sdk_library_add_sources(
+    rt_aes.c
+    rt_crypto_util.c
+    rt_crypto.c
+    rt_ctr_drbg.c
+    rt_hmac_drbg.c
+    rt_sha256.c
+    rt_sm3.c
+    rt_sm4.c
+)

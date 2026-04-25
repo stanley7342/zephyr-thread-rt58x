@@ -22,11 +22,23 @@ config OPENTHREAD_RT583
       Provides FTD functionality with hardware-backed radio, TRNG, and
       Cortex-M3 alarm via the RT583 HOSAL/LMAC15P4 layer.
       Replaces Zephyr's modules/lib/openthread and its platform stubs.
+
+config OPENTHREAD_RT584
+    bool "Rafael RT584 SDK OpenThread (Phase A — structure only)"
+    depends on SOC_RT584 && OPENTHREAD
+    help
+      RT584 OpenThread port — same SDK glue as RT583 (lmac15p4 / RUCI /
+      ot_radio.c are SoC-agnostic) but pulls rt569-rf/rt584/ + rt569-fw
+      /rt584/ instead. RF MCU bring-up has NOT been validated on real
+      hardware — expect to debug RF init / IRQ wiring at first run.
 endchoice
 
-if OPENTHREAD_RT583
+# Both rt583 and rt584 use the same lmac15p4 / RUCI stack, so the PIB
+# defaults are identical. Keep the RT583_ prefix for the Kconfig symbols
+# to avoid breaking existing build configurations.
+if OPENTHREAD_RT583 || OPENTHREAD_RT584
 
-menu "RT583 IEEE 802.15.4 PHY/MAC PIB"
+menu "Rafael IEEE 802.15.4 PHY/MAC PIB"
 
 config RT583_PHY_PIB_TURNAROUND_TIMER
     int "PHY turnaround time (symbols)"
@@ -87,7 +99,7 @@ config RT583_RF_FW_EXPECTED_CRC32
       blob is verified at boot. Set to 0 to print the CRC without checking.
       Run once with 0, read the log, then set this value to lock it down.
 
-endif # OPENTHREAD_RT583
+endif # OPENTHREAD_RT583 || OPENTHREAD_RT584
 
 # Matter application options
 if CHIP

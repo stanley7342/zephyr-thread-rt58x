@@ -1,0 +1,10 @@
+sdk_generate_library(rt569_rf)
+sdk_add_include_directories(include)
+sdk_library_add_sources(
+    Src/rf_common_init.c
+    Src/rf_mcu.c
+    Src/rf_mcu_ahb.c
+    Src/rf_mcu_spi.c
+    Src/rf_tx_comp.c
+    Src/rf_test.c
+)
