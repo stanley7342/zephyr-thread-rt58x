@@ -1,0 +1,30 @@
+if SOC_RT584
+
+# Enable Zephyr's earliest SoC hook so we can run bare-metal UART
+# diagnostics at the very start of z_prep_c — before .bss zero, .data
+# copy, FPU init, and interrupt setup. If [PREP] doesn't appear, the
+# fault is in z_arm_reset / vector load / hardware boot. If [PREP] does
+# appear but [BOOT] (later SYS_INIT) doesn't, fault is in core Zephyr
+# init.
+config SOC_PREP_HOOK
+    default y
+
+# CM33 with TrustZone: MSPLIM / PSPLIM may be at a non-zero reset value
+# (depending on chip-specific reset behavior). Without this, Zephyr's
+# z_arm_reset doesn't clear them and the first push during reset can
+# trigger a stack-limit UsageFault — silent boot hang. Upstream's
+# Reset_Handler does __set_MSPLIM/__set_PSPLIM to clear them; we need
+# the equivalent.
+config INIT_ARCH_HW_AT_BOOT
+    default y
+
+
+# RT584 clock: SystemInit + change_ahb_system_clk(SYS_64MHZ_CLK) in rt584 soc.c
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+    default 64000000
+
+# RT584 external IRQs: 0–47 (Aux_Comp_IRQn = 47 is the highest in mcu.h)
+config NUM_IRQS
+    default 48
+
+endif # SOC_RT584

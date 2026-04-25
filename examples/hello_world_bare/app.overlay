@@ -1,0 +1,31 @@
+/*
+ * Standalone build — image lives at the start of flash (0x10000000).
+ * Replace partitions: a single slot0 covering the whole flash, used as
+ * code-partition. No MCUboot.
+ */
+
+/delete-node/ &boot_partition;
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &storage_partition;
+/delete-node/ &factory_partition;
+
+&flash0 {
+    partitions {
+        slot0_partition: partition@0 {
+            label = "image-0";
+            reg = <0x00000000 0x001F0000>;  /* 1984 KB, almost whole 2 MB */
+        };
+
+        storage_partition: partition@1f0000 {
+            label = "storage";
+            reg = <0x001F0000 0x00010000>;  /* 64 KB */
+        };
+    };
+};
+
+/ {
+    chosen {
+        zephyr,code-partition = &slot0_partition;
+    };
+};

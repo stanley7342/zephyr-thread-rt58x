@@ -1,0 +1,20 @@
+# Rafael RT584 SoC Kconfig (Cortex-M33, ARMv8-M Mainline)
+
+config SOC_SERIES_RT584
+    select ARM
+    select CPU_CORTEX_M33
+    select CPU_HAS_ARM_MPU       # RT584 mcu.h: __MPU_PRESENT = 1
+    select CPU_HAS_ARM_SAU       # __SAUREGION_PRESENT = 1
+    select CPU_HAS_FPU           # __FPU_PRESENT = 1 (CMSIS asserts)
+    select ARMV8_M_MAINLINE
+    select ARMV8_M_DSP           # __DSP_PRESENT = 1
+
+config SOC_RT584
+    bool
+    select SOC_SERIES_RT584
+
+config SOC_SERIES
+    default "rt584" if SOC_SERIES_RT584
+
+config SOC
+    default "rt584" if SOC_RT584

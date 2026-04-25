@@ -1,0 +1,33 @@
+/*
+ * RT583 partition resize — the default rt583.dtsi ships with 800 KB slots,
+ * MCUboot needs equal-sized slots of at least 928 KB for Matter lighting-app
+ * to fit. The app-side DTS inherits these same partitions (since MCUboot
+ * and the app share flash0), so resizing here is sufficient.
+ *
+ * Layout (2 MB flash):
+ *   0x000000 – 0x010000  boot_partition    64 KB  MCUboot
+ *   0x010000 – 0x0F8000  slot0_partition  928 KB  primary app
+ *   0x0F8000 – 0x1E0000  slot1_partition  928 KB  OTA / Direct-XIP failover
+ *   0x1E0000 – 0x1F0000  storage_partition 64 KB  settings / NVS
+ *   0x1F0000 – 0x200000  factory_partition 64 KB  factory data
+ *
+ * staging_partition (in rt583.dtsi but not in rt584.dtsi) overlaps the
+ * enlarged slot1 and is removed.
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+/delete-node/ &slot1_partition;
+
+&flash0 {
+    partitions {
+        slot1_partition: partition@F8000 {
+            label = "image-1";
+            reg = <0x000F8000 0x000E8000>;  /* 928 KB — equal to slot0 */
+        };
+    };
+};
+
+/delete-node/ &staging_partition;

@@ -8,3 +8,14 @@ config FLASH_RT583
       Flash driver for Rafael RT583 internal SPI flash.
       Wraps the HOSAL/flashctl API into Zephyr flash_driver_api.
       Supports 4KB sector erase and 256-byte page writes.
+
+config FLASH_RT584
+    bool "Rafael RT584 internal flash driver"
+    depends on SOC_SERIES_RT584
+    select FLASH_HAS_DRIVER_ENABLED
+    select FLASH_HAS_PAGE_LAYOUT
+    default y
+    help
+      Flash driver for Rafael RT584 internal SPI flash (Cortex-M33).
+      Wraps the flashctl API into Zephyr flash_driver_api. Same
+      granularity as RT583 (4 KB sector, 256-byte page).

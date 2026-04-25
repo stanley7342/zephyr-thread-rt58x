@@ -6,3 +6,12 @@ config UART_RT583
     default y
     help
       UART driver for Rafael RT583. Wraps the HOSAL UART layer.
+
+config UART_RT584
+    bool "Rafael RT584 UART driver"
+    depends on SERIAL && SOC_SERIES_RT584
+    select SERIAL_HAS_DRIVER
+    select SERIAL_SUPPORT_INTERRUPT
+    default y
+    help
+      UART driver for Rafael RT584 (Cortex-M33). Wraps the HOSAL UART layer.

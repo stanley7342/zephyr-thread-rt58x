@@ -1,0 +1,137 @@
+/*
+ * RT584 SoC device tree include (ARM Cortex-M33, ARMv8-M Mainline)
+ *
+ * Memory map sourced from:
+ *   components/platform/soc/rt584/rt584_driver/Inc/reg_base.h
+ *   components/platform/soc/rt584/rt584_evb/evb/ld/rt584_2MB.ld
+ *
+ * PERIPH_BASE = 0x40000000  (SYSCTRL, GPIO, UART0 @ +0x12000, …)
+ *
+ * IRQ numbers (from mcu.h IRQn_Type enum):
+ *   Uart0_IRQn = 16
+ *   Uart1_IRQn = 17
+ *   Uart2_IRQn = 18
+ *   CommSubsystem_IRQn = 45
+ */
+
+#include <arm/armv8-m.dtsi>
+
+/ {
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        cpu0: cpu@0 {
+            compatible = "arm,cortex-m33";
+            reg = <0>;
+        };
+    };
+
+    /*
+     * Direct-XIP layout (2 MB flash @ 0x10000000):
+     *
+     *   0x000000  boot       64 KB  MCUboot
+     *   0x010000  slot0     928 KB  App primary   (Direct XIP)
+     *   0x0F8000  slot1     928 KB  App secondary (Direct XIP)
+     *   0x1E0000  storage    64 KB  NVS / settings
+     *   0x1F0000  factory    64 KB  MP sector / factory data
+     *
+     * Slot 0 and Slot 1 are equal-sized as Direct XIP requires.
+     * Bare-bring-up builds use slot0 only; MCUboot chains into it.
+     */
+    flash_controller: flash-controller@40009000 {
+        compatible = "rafael,rt584-flash";
+        reg = <0x40009000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        flash0: flash@10000000 {
+            compatible = "soc-nv-flash";
+            reg = <0x10000000 0x200000>;  /* 2 MB */
+            write-block-size = <1>;
+            erase-block-size = <4096>;
+
+            partitions {
+                compatible = "fixed-partitions";
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                boot_partition: partition@0 {
+                    label = "mcuboot";
+                    reg = <0x00000000 0x00010000>;  /* 64 KB */
+                    read-only;
+                };
+
+                slot0_partition: partition@10000 {
+                    label = "image-0";
+                    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+                };
+
+                slot1_partition: partition@f8000 {
+                    label = "image-1";
+                    reg = <0x000F8000 0x000E8000>;  /* 928 KB (Direct XIP == slot0) */
+                };
+
+                storage_partition: partition@1e0000 {
+                    label = "storage";
+                    reg = <0x001E0000 0x00010000>;  /* 64 KB */
+                };
+
+                factory_partition: partition@1f0000 {
+                    label = "factory";
+                    reg = <0x001F0000 0x00010000>;  /* 64 KB */
+                };
+            };
+        };
+    };
+
+    sram0: memory@30000000 {
+        compatible = "mmio-sram";
+        /* 192 KB per rt584_2MB.ld VMA_DATA + VMA_HEAP + VMA_STACK */
+        reg = <0x30000000 0x30000>;
+    };
+
+    soc {
+        /*
+         * UART0 — stdio console
+         *   Base : PERIPH_BASE + 0x12000 = 0x40012000
+         *   IRQ  : Uart0_IRQn = 16
+         *   Pins : TX=GPIO17, RX=GPIO16 (rt584 EVB convention, see
+         *          components/utility/uart_stdio/uart_stdio.c)
+         *   Baud : 115200
+         */
+        uart0: uart@40012000 {
+            compatible = "rafael,rt584-uart";
+            reg = <0x40012000 0x1000>;
+            interrupts = <16 1>;
+            uart-id = <0>;
+            current-speed = <115200>;
+            tx-pin = <17>;
+            rx-pin = <16>;
+            status = "okay";
+        };
+
+        /*
+         * UART1
+         *   Base : PERIPH_BASE + 0x13000 = 0x40013000
+         *   IRQ  : Uart1_IRQn = 17
+         */
+        uart1: uart@40013000 {
+            compatible = "rafael,rt584-uart";
+            reg = <0x40013000 0x1000>;
+            interrupts = <17 1>;
+            uart-id = <1>;
+            current-speed = <115200>;
+            status = "disabled";
+        };
+    };
+};
+
+/* RT584 Cortex-M33 NVIC: 3 priority bits (__NVIC_PRIO_BITS = 3 in mcu.h) */
+&nvic {
+    arm,num-irq-priority-bits = <3>;
+};
+
+&uart0 {
+    status = "okay";
+};

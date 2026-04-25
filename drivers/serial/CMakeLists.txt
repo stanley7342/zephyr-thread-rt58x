@@ -1,12 +1,11 @@
-if(CONFIG_UART_RT583)
-
-zephyr_library()
-zephyr_library_sources(uart_rt583.c)
-
-get_filename_component(_RT583_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
-zephyr_library_include_directories(
-    ${_RT583_REPO_ROOT}/sdk/components/platform/soc/rt583/rt583_driver/Inc
-    ${_RT583_REPO_ROOT}/sdk/components/platform/hosal/rt583_hosal/Inc
-)
-
-endif() # CONFIG_UART_RT583
+# Out-of-tree UART drivers for Rafael RT58x SoCs.
+#
+# The real sources + include paths are wired into Zephyr's `drivers__serial`
+# library target from cmake/zephyr_module/CMakeLists.txt, which runs at the
+# correct point in Zephyr's build graph (after drivers__serial is created).
+#
+# This file is intentionally a no-op — kept only so that a glance at
+# drivers/serial/ shows that the folder is driver-aware. If Zephyr ever
+# starts auto-adding this directory in the future, flip the logic back to
+# use zephyr_library_sources() and remove the duplicates from
+# cmake/zephyr_module/CMakeLists.txt.

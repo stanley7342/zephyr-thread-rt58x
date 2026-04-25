@@ -3,3 +3,9 @@ config SOC_SERIES_RT583
     select CPU_CORTEX_M3
     help
       RT583/RT581/RT583 SoCs based on ARM Cortex-M3.
+
+config SOC_SERIES_RT584
+    bool "Rafael Microelectronics RT584 series"
+    select CPU_CORTEX_M33
+    help
+      RT584/RT584H/RT584L SoCs based on ARM Cortex-M33 (ARMv8-M Mainline).

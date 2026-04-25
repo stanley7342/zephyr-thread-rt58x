@@ -1,0 +1,13 @@
+description: Rafael RT584 internal SPI flash controller
+
+compatible: "rafael,rt584-flash"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+  "#address-cells":
+    const: 1
+  "#size-cells":
+    const: 1
