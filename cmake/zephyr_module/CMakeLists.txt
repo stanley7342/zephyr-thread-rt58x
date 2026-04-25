@@ -95,81 +95,6 @@ if(CONFIG_SOC_SERIES_RT583)
         )
     endif()
 
-    # ── OpenThread public headers (for Matter GN build) ──────────────────
-    # When CONFIG_OPENTHREAD_RT583=y, Zephyr's OT module does NOT add
-    # modules/lib/openthread/include to the global system include path
-    # (CONFIG_OPENTHREAD_SOURCES=n).  Add it here so that:
-    #  1. Zephyr's OT L2 layer (openthread.c) can find <openthread/instance.h>
-    #  2. Matter's chip-module picks it up via zephyr_get_compile_flags() and
-    #     writes it into the GN build's args.gn target_cflags — this must happen
-    #     during find_package(Zephyr) module processing (before chip-module runs).
-    # The SDK's own OT headers are added as PRIVATE -I in
-    # subsys/openthread/CMakeLists.txt (higher priority, not visible here).
-    if(CONFIG_OPENTHREAD_RT583)
-        zephyr_system_include_directories(
-            ${ZEPHYR_BASE}/../modules/lib/openthread/include
-            ${ZEPHYR_BASE}/../modules/lib/openthread/examples/platforms
-        )
-
-        # ── Strip Zephyr OT platform stubs that we override in sdk/ ──────
-        # Zephyr's modules/openthread unconditionally builds openthread_platform
-        # with default alarm / entropy / misc / platform / crypto stubs. Our SDK
-        # provides hardware-backed replacements in subsys/openthread/platform/ and
-        # sdk/.../openthread_port/Src/ that also export the same otPlat* symbols
-        # — collisions previously were masked by -Wl,--allow-multiple-definition.
-        #
-        # We defer a cleanup that edits the openthread_platform target AFTER
-        # Zephyr's module processing has created it, removing the files whose
-        # symbols our sources re-define. Remaining files (memory.c, settings.c,
-        # logging.c, radio.c shim) are left intact.
-        #
-        # openthread.c in openthread_utils: also defines otTaskletsSignalPending /
-        # otSysEventSignalPending which our ot_zephyr.c (Thread CLI build) defines
-        # for the ot_task_sem wake path.  Strip it only when Zephyr's L2 OT is NOT
-        # enabled (Matter build keeps L2 → keeps openthread.c).
-        function(_rt583_strip_ot_platform_sources)
-            # Files whose otPlat*/otSys* symbols our SDK replaces:
-            if(CONFIG_IEEE802154_RT583_FULL)
-                set(_strip_regex
-                    "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|memory)\\.c$"
-                )
-            else()
-                set(_strip_regex
-                    "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|radio|memory)\\.c$"
-                )
-            endif()
-            set(_did_platform 0)
-            set(_did_utils 0)
-            if(TARGET openthread_platform)
-                get_target_property(_srcs openthread_platform SOURCES)
-                if(_srcs)
-                    set(_before ${_srcs})
-                    list(FILTER _srcs EXCLUDE REGEX "${_strip_regex}")
-                    set_target_properties(openthread_platform PROPERTIES SOURCES "${_srcs}")
-                    list(LENGTH _before _b)
-                    list(LENGTH _srcs _a)
-                    set(_did_platform 1)
-                    message(STATUS "[ot-strip] openthread_platform: ${_b} -> ${_a} sources")
-                endif()
-            endif()
-            if(NOT CONFIG_NET_L2_OPENTHREAD AND TARGET openthread_utils)
-                get_target_property(_srcs openthread_utils SOURCES)
-                if(_srcs)
-                    list(LENGTH _srcs _b)
-                    list(FILTER _srcs EXCLUDE REGEX "(^|/)openthread\\.c$")
-                    set_target_properties(openthread_utils PROPERTIES SOURCES "${_srcs}")
-                    list(LENGTH _srcs _a)
-                    set(_did_utils 1)
-                    message(STATUS "[ot-strip] openthread_utils: ${_b} -> ${_a} sources")
-                endif()
-            endif()
-            if(NOT _did_platform)
-                message(STATUS "[ot-strip] openthread_platform target not found (skipped)")
-            endif()
-        endfunction()
-        cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL _rt583_strip_ot_platform_sources)
-    endif()
-
     # ── Flash driver (drivers__flash) ─────────────────────────────────────
     # flash_rt583.c includes <zephyr/drivers/flash.h> (Zephyr flash API).
     # flash_rt583_hal.c includes "flashctl.h" (RT583 HW API).
@@ -271,3 +196,90 @@ if(CONFIG_SOC_SERIES_RT584)
         )
     endif()
 endif() # CONFIG_SOC_SERIES_RT584
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OpenThread platform integration — applies to BOTH rt583 and rt584 builds.
+# When CONFIG_OPENTHREAD_RT58{3,4}=y, our subsys/openthread/CMakeLists.txt
+# pulls the SDK OT sources into libapp.a. Zephyr's modules/lib/openthread
+# is still loaded but its CONFIG_OPENTHREAD_SOURCES=n suppresses most
+# duplicate compilation; the leftovers (entropy/alarm/platform stubs in
+# openthread_platform target, openthread.c in openthread_utils) need to
+# be stripped because their otPlat*/otSys* symbols collide with our SDK
+# port's. We strip them here (deferred to after the OT module finishes
+# creating its targets).
+# ══════════════════════════════════════════════════════════════════════════
+if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
+    # OpenThread public headers (for Matter GN build):
+    # CONFIG_OPENTHREAD_SOURCES=n means Zephyr's OT module does NOT add
+    # modules/lib/openthread/include to the global system include path.
+    # Add it here so:
+    #  1. Zephyr's OT L2 layer (openthread.c) can find <openthread/instance.h>
+    #  2. Matter's chip-module picks it up via zephyr_get_compile_flags() and
+    #     writes it into the GN build's args.gn target_cflags — must happen
+    #     during find_package(Zephyr) module processing (before chip-module
+    #     runs).
+    zephyr_system_include_directories(
+        ${ZEPHYR_BASE}/../modules/lib/openthread/include
+        ${ZEPHYR_BASE}/../modules/lib/openthread/examples/platforms
+    )
+
+    # Strip Zephyr OT platform stubs that we override in sdk/.
+    # Zephyr's modules/openthread unconditionally builds openthread_platform
+    # with default alarm / entropy / misc / platform / crypto stubs. Our
+    # SDK provides hardware-backed replacements in subsys/openthread/platform
+    # and sdk/.../openthread_port/Src/ that also export the same otPlat*
+    # symbols — collisions previously were masked by
+    # -Wl,--allow-multiple-definition.
+    #
+    # We defer a cleanup that edits the openthread_platform target AFTER
+    # Zephyr's module processing has created it, removing files whose
+    # symbols our sources re-define. memory.c / settings.c / logging.c /
+    # radio.c shim are left intact (we don't override those).
+    #
+    # openthread.c in openthread_utils also defines
+    # otTaskletsSignalPending / otSysEventSignalPending which our ot_zephyr.c
+    # (Thread CLI build) defines for the ot_task_sem wake path. Strip it
+    # only when Zephyr's L2 OT is NOT enabled (Matter build keeps L2 →
+    # keeps openthread.c).
+    function(_rafael_strip_ot_platform_sources)
+        if(CONFIG_IEEE802154_RT583_FULL)
+            set(_strip_regex
+                "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|memory)\\.c$"
+            )
+        else()
+            set(_strip_regex
+                "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|radio|memory)\\.c$"
+            )
+        endif()
+        set(_did_platform 0)
+        set(_did_utils 0)
+        if(TARGET openthread_platform)
+            get_target_property(_srcs openthread_platform SOURCES)
+            if(_srcs)
+                set(_before ${_srcs})
+                list(FILTER _srcs EXCLUDE REGEX "${_strip_regex}")
+                set_target_properties(openthread_platform PROPERTIES SOURCES "${_srcs}")
+                list(LENGTH _before _b)
+                list(LENGTH _srcs _a)
+                set(_did_platform 1)
+                message(STATUS "[ot-strip] openthread_platform: ${_b} -> ${_a} sources")
+            endif()
+        endif()
+        if(NOT CONFIG_NET_L2_OPENTHREAD AND TARGET openthread_utils)
+            get_target_property(_srcs openthread_utils SOURCES)
+            if(_srcs)
+                list(LENGTH _srcs _b)
+                list(FILTER _srcs EXCLUDE REGEX "(^|/)openthread\\.c$")
+                set_target_properties(openthread_utils PROPERTIES SOURCES "${_srcs}")
+                list(LENGTH _srcs _a)
+                set(_did_utils 1)
+                message(STATUS "[ot-strip] openthread_utils: ${_b} -> ${_a} sources")
+            endif()
+        endif()
+        if(NOT _did_platform)
+            message(STATUS "[ot-strip] openthread_platform target not found (skipped)")
+        endif()
+    endfunction()
+    cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL _rafael_strip_ot_platform_sources)
+endif() # CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584

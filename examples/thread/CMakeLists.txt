@@ -27,31 +27,53 @@ if(CONFIG_OTA)
 endif()
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
 
-# RT583 platform include dirs for app-level sources (OT port, main.c, etc.)
+# Per-SoC platform include dirs for app-level sources (OT port, main.c, etc.).
 # Platform sources themselves are provided by cmake/zephyr_module/CMakeLists.txt.
 set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
-set(RT569_RF_DIR   ${RT583_PROJECT_DIR}/sdk/components/network/rt569-rf/rt583)
 set(OT_ROOT        ${RT583_PROJECT_DIR}/sdk/components/network/thread/openthread)
+set(OT_PORT_INC    ${RT583_PROJECT_DIR}/sdk/components/network/thread/openthread_port/Inc)
+set(LMAC_INC       ${RT583_PROJECT_DIR}/sdk/components/network/lmac15p4/Inc)
+
+if(CONFIG_OPENTHREAD_RT584)
+    set(RT_DRV_INC  ${RT583_PLATFORM}/soc/rt584/rt584_driver/Inc)
+    set(RT_SYS_INC  ${RT583_PLATFORM}/soc/rt584/rt584_system/Include)
+    set(RT_HOSAL_INC ${RT583_PLATFORM}/hosal/rt584_hosal/Inc)
+    set(RT569_RF_DIR ${RT583_PROJECT_DIR}/sdk/components/network/rt569-rf/rt584)
+    # rt584's RF header dir is lowercase `include/`, rt583 uses `Inc/`.
+    set(RT569_RF_INC ${RT569_RF_DIR}/include)
+    set(SOC_DRV_SRC ${RT583_PLATFORM}/soc/rt584/rt584_driver/Src)
+else()
+    set(RT_DRV_INC  ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc)
+    set(RT_SYS_INC  ${RT583_PLATFORM}/soc/rt583/rt583_system/Include)
+    set(RT_HOSAL_INC ${RT583_PLATFORM}/hosal/rt583_hosal/Inc)
+    set(RT569_RF_DIR ${RT583_PROJECT_DIR}/sdk/components/network/rt569-rf/rt583)
+    set(RT569_RF_INC ${RT569_RF_DIR}/Inc)
+    set(SOC_DRV_SRC ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src)
+endif()
 
 target_include_directories(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-    ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
+    ${RT_DRV_INC}
+    ${RT_SYS_INC}
+    ${RT_HOSAL_INC}
     # RF MCU types — needed by comm_subsystem_drv.c
-    ${RT569_RF_DIR}/Inc
+    ${RT569_RF_INC}
     # OpenThread public API — needed by main.c (<openthread/cli.h> etc.)
     ${OT_ROOT}/include
+    # OpenThread Rafael port headers (openthread_port.h, ot_zephyr.h, …)
+    ${OT_PORT_INC}
+    # 802.15.4 LMAC headers (lmac15p4.h)
+    ${LMAC_INC}
 )
 
 # comm_subsystem_drv.c is only needed by the Thread example (not MCUboot).
 target_sources(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
+    ${SOC_DRV_SRC}/comm_subsystem_drv.c
 )
 
 # ── OpenThread subsystem ──────────────────────────────────────────────────────
 # RAFAEL_SDK must be set before including subsys/openthread/CMakeLists.txt
 # because it uses the variable to locate SDK sources.
-if(CONFIG_OPENTHREAD_RT583)
+if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
     set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
     include(${RT583_PROJECT_DIR}/subsys/openthread/CMakeLists.txt)
 endif()

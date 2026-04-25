@@ -13,7 +13,10 @@ set(LMAC_INC      ${RAFAEL_SDK}/components/network/lmac15p4/Inc)
 
 if(CONFIG_OPENTHREAD_RT584)
     set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt584)
+    # rt584 RF header dir is lowercase `include/`; rt583 uses `Inc/`.
+    set(RT569_RF_INC  ${RT569_RF_DIR}/include)
     set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt584)
+    set(RT569_FW_INC  ${RT569_FW_DIR}/include)
     set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Inc)
     set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_system/Include)
     set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Inc)
@@ -24,7 +27,9 @@ if(CONFIG_OPENTHREAD_RT584)
     set(RT583_CRYPTO_SRC ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_crypto)
 else()
     set(RT569_RF_DIR  ${RAFAEL_SDK}/components/network/rt569-rf/rt583)
+    set(RT569_RF_INC  ${RT569_RF_DIR}/Inc)
     set(RT569_FW_DIR  ${RAFAEL_SDK}/components/network/rt569-fw/rt583)
+    set(RT569_FW_INC  ${RT569_FW_DIR}/Inc)
     set(RT583_DRV_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_driver/Inc)
     set(RT583_SYS_INC ${RAFAEL_SDK}/components/platform/soc/rt583/rt583_system/Include)
     set(HOSAL_INC     ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Inc)
@@ -187,18 +192,41 @@ target_sources(app PRIVATE
     ${OT_ROOT}/src/lib/spinel/spinel.c
 )
 
-# SoC-specific RF firmware blob + hosal_rf.
-# rt583: rt569mp_fw.c / rt569mp_init.c (rt583 hosal)
-# rt584: rt569s_fw.c  / rt569s_init.c  (rt584 hosal)
+# SoC-specific RF firmware blob filenames differ:
+#   rt583 → rt569mp_{fw,init}.c
+#   rt584 → rt569s_{fw,init}.c
+# The hosal_rf source is always the rt583 path because that file is our
+# hand-written Zephyr port (FreeRTOS → k_sem/k_msgq/k_thread). rt584's
+# upstream hosal_rf.c is the original FreeRTOS vendor code; can't be
+# compiled here. The hosal_rf API surface matches between the two SoCs,
+# and the rt584 RF MCU flow is driven through rf_mcu.c (SoC-specific) so
+# the Zephyr-port hosal_rf.c works for both.
+target_sources(app PRIVATE
+    ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
+)
 if(CONFIG_OPENTHREAD_RT584)
     target_sources(app PRIVATE
-        ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Src/hosal_rf.c
         ${RT569_FW_DIR}/Src/rt569s_fw.c
         ${RT569_FW_DIR}/Src/rt569s_init.c
+        # rf_common_init_by_fw on rt584 calls into SADC. Pull it in here
+        # together with the MP-sector reader (mpcalrftrimread / mpcaladcinit
+        # are referenced by sadc.c and rf_common_init.c).
+        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/sadc.c
+        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/wdt.c
+        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/trng.c
+        # otp.c provides rt_write_rng_enable used by trng.c.
+        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/otp.c
+        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_system/Src/mp_sector.c
+        # ot_entropy.c / ot_crypto.c on rt584 still call hosal_trng.
+        ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Src/hosal_trng.c
+        # rt584-specific compat stubs:
+        #   aes_fw_init                       — RT583 API not in rt584 rt_aes.c
+        #   Tx_Power_Compensation_Init/Handler — rt584's rf_tx_comp.c is
+        #     FreeRTOS-tied; stubbed instead of porting (Phase B).
+        ${CMAKE_CURRENT_LIST_DIR}/platform/rt584_compat.c
     )
 else()
     target_sources(app PRIVATE
-        ${RAFAEL_SDK}/components/platform/hosal/rt583_hosal/Src/hosal_rf.c
         ${RT569_FW_DIR}/Src/rt569mp_fw.c
         ${RT569_FW_DIR}/Src/rt569mp_init.c
     )
@@ -248,8 +276,8 @@ target_include_directories(app PRIVATE
     ${RT583_CRYPTO_INC}
     ${UTIL_INC}
     ${LOG_INC}
-    ${RT569_RF_DIR}/Inc
-    ${RT569_FW_DIR}/Inc
+    ${RT569_RF_INC}
+    ${RT569_FW_INC}
     ${RUCI_INC}
 )
 
@@ -273,13 +301,20 @@ zephyr_system_include_directories(
     ${ZEPHYR_BASE}/../modules/lib/openthread/examples/platforms
 )
 
+if(CONFIG_OPENTHREAD_RT584)
+    # rt584 RF firmware blob is selected by CONFIG_RT584H / CONFIG_RT584L
+    # (preprocessor defines, not Kconfig). User's chip is rt584L (chip ID
+    # 0x1584). To target rt584H, change to CONFIG_RT584H=1.
+    target_compile_definitions(app PRIVATE CONFIG_RT584L=1)
+else()
+    target_compile_definitions(app PRIVATE CHIP_TYPE=3)
+endif()
+
 target_compile_definitions(app PRIVATE
     OPENTHREAD_CONFIG_FILE="openthread-core-rt583-zephyr-config.h"
-    CONFIG_RT583=1
     OPENTHREAD_FTD=1
     OPENTHREAD_MTD=0
     OPENTHREAD_RADIO=0
-    CHIP_TYPE=3
     CONFIG_CRYPTO_SECP256R1_ENABLE=1
     # Enable AES hardware acceleration in rt_aes.c (guards aes_key_init,
     # aes_ecb_encrypt, etc. behind #if defined(CONFIG_CRYPTO_AES_ENABLE)).
@@ -313,9 +348,11 @@ target_compile_options(app PRIVATE
 
 zephyr_compile_definitions(
     OPENTHREAD_CONFIG_FILE="openthread-core-rt583-zephyr-config.h"
-    CONFIG_RT583=1
     OPENTHREAD_FTD=1
 )
+if(NOT CONFIG_OPENTHREAD_RT584)
+    zephyr_compile_definitions(CONFIG_RT583=1)
+endif()
 
 # _fini is referenced by newlib's __libc_fini_array (C++ destructor path) but not
 # provided on bare-metal targets. Define it as zero so the linker is satisfied.
