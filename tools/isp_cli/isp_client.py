@@ -54,10 +54,14 @@ CHIP_LAYOUT = {
     "rt584": {"boot": 0x10000000, "app": 0x10010000},
 }
 
-# Flash device id → chip family. Populated from observed hardware; add more as
-# needed. 0x001565C8 is the GigaDevice GD25LE128 seen on RT583 EVB.
+# Flash device id → chip family. Populated from observed hardware; add more
+# as needed.
+#   0x001565C8: GD25LE128 on RT583 EVB (raw JEDEC id from rt58x ROM ISP).
+#   0x801565C8: same flash on RT584 EVB; rt584 ROM ISP sets bit 31 on the
+#               returned id (chip-family marker, not part of JEDEC).
 FLASH_ID_TO_CHIP = {
     0x001565C8: "rt58x",
+    0x801565C8: "rt584",
 }
 
 
