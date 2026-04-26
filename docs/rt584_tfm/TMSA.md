@@ -189,7 +189,7 @@ capability (per A.PHYS, A.NO_SCA, A.NO_FI).
 
 | Threat | Objective | Implementation evidence |
 |---|---|---|
-| T.FW_MOD, T.UNSIGNED_FW | O.SECURE_BOOT — only signature-verified firmware runs | MCUboot `BOOT_SIGNATURE_TYPE_NONE=y` (no signing in current dev tree); production must switch to ED25519 / RSA / ECDSA |
+| T.FW_MOD, T.UNSIGNED_FW | O.SECURE_BOOT — only signature-verified firmware runs | MCUboot `SB_CONFIG_BOOT_SIGNATURE_TYPE_ED25519=y` ([sysbuild.conf](../../examples/thread/sysbuild.conf)); image carries Ed25519 signature, MCUboot rejects bad-signature images at slot validation. Stock dev key — production replaces with project-owned signing key + OTP-anchored public-key hash (see SG.4 below) |
 | T.ROLLBACK | O.ANTI_ROLLBACK — accept only firmware with security counter ≥ on-device counter | MCUboot supports `MCUBOOT_HW_DOWNGRADE_PREVENTION` — **not yet enabled** |
 | T.DEBUG_DUMP | O.DEBUG_LOCK — JTAG/SWD disabled in production lifecycle | **rt584 OTP debug-lock fuse not identified** — see residual risks §9 |
 | T.FLASH_DUMP | O.FLASH_PROT — flash readout protection in production | rt584 internal flash readable via SWD when debug enabled — depends on O.DEBUG_LOCK |
@@ -251,11 +251,12 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 
 | | |
 |---|---|
-| Status | ⚠️ Code present, signing disabled in dev |
-| Implementation | MCUboot with image signature verification |
-| Evidence | [examples/thread/sysbuild/mcuboot/prj.conf](../../examples/thread/sysbuild/mcuboot/prj.conf) — `BOOT_SIGNATURE_TYPE_NONE=y` for current build; flips to `BOOT_SIGNATURE_TYPE_ED25519` for production |
-| Gap | Public key currently in flash; production must put key hash in OTP and have MCUboot verify against OTP-anchored hash (`MCUBOOT_HW_KEY=y`) |
-| Effort to close | 2–3 days for OTP-anchored boot — needs Rafael OTP region docs |
+| Status | ✅ ED25519 signature verification active |
+| Implementation | MCUboot with `SB_CONFIG_BOOT_SIGNATURE_TYPE_ED25519=y` in [examples/thread/sysbuild.conf](../../examples/thread/sysbuild.conf). Image header carries an Ed25519 signature; MCUboot loads slot only after verifying signature against the public key compiled into the bootloader. Image-with-bad-signature → MCUboot logs `image_validate: failed` and refuses to chainload. |
+| Evidence | Build pipeline produces `zephyr.signed.bin` with TLV-area Ed25519 signature; MCUboot built with ED25519 + tinycrypt-ed25519 + sha256. Boot trace `*** Booting MCUboot ... Image 0 loaded from primary slot` confirms signature passed. |
+| Gap | Public key is compiled into the MCUboot binary (in flash), not anchored to an OTP key-hash fuse. An attacker who can reflash the MCUboot region (debug port + no SG.2 lifecycle lock) could replace the key. To close: enable `CONFIG_MCUBOOT_HW_KEY=y` and burn the public-key SHA-256 into rt584 OTP, then rely on rt584's secure-boot-hash check at reset. Depends on rt584 OTP fuse documentation (also blocking SG.2). |
+| Production hardening | Replace `SB_CONFIG_BOOT_SIGNATURE_KEY_FILE` (defaults to MCUboot's stock `root-ed25519.pem`) with project-owned signing key; provision public-key hash into rt584 OTP; flip `CONFIG_MCUBOOT_HW_KEY=y`. |
+| Effort to OTP-anchor | 2–3 days once Rafael OTP secure-boot fuse layout is confirmed |
 
 ### SG.5 — Secure Update
 
@@ -323,7 +324,7 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 | 1. Unique Identification | ⚠️ Partial |
 | 2. Lifecycle | ❌ |
 | 3. Attestation | ❌ |
-| 4. Secure Boot | ⚠️ |
+| 4. Secure Boot | ✅ ED25519 (key in flash, OTP-anchoring deferred) |
 | 5. Secure Update | ✅ |
 | 6. Anti-Rollback | ⚠️ Partial (OTA path) |
 | 7. Isolation | ❌ (silicon) |
@@ -331,8 +332,8 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 | 9. Secure Storage | ⚠️ |
 | 10. Cryptographic Services | ✅ |
 
-**Overall PSA L1 readiness: 2 ✅ / 5 ⚠️ / 3 ❌ — short of self-assessment threshold.**
-**Realistic closure effort (excluding SG.7): 3–5 weeks of focused work.**
+**Overall PSA L1 readiness: 3 ✅ / 4 ⚠️ / 3 ❌ — getting close to self-assessment threshold (need any one of SG.2/3/6 to ⚠️ at minimum).**
+**Realistic closure effort (excluding SG.7): 2–4 weeks of focused work.**
 
 ---
 
