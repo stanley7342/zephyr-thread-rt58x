@@ -20,6 +20,7 @@
  */
 
 #include <zephyr/init.h>
+#include <zephyr/irq.h>
 #include <stdint.h>
 
 extern void     systempmuupdatedcdc(void);
@@ -27,6 +28,31 @@ extern uint32_t change_ahb_system_clk(int sys_clk_mode);
 extern uint32_t change_peri_clk(int sys_clk_mode);
 extern void     enable_perclk(uint32_t clock);
 extern void     pin_set_mode(uint32_t pin_number, uint32_t mode);
+extern void     flash_timing_init(void);
+/* flash_enable_qe is __STATIC_INLINE in flashctl.h — not externally
+ * linkable. Skipping it; rt584 flash QSPI mode is already enabled by
+ * the boot ROM's flash bring-up, so calling it is purely an upstream
+ * SDK convention. */
+extern void     rco1m_and_rco32k_calibration(void);
+
+/* COMM_SUBSYSTEM IRQ — fired by the RF MCU on rt584. Vector slot 45,
+ * versus 20 on rt583. The vendor RfMcu_IsrHandler is exported by
+ * rf_mcu.c and reads/dispatches the comm_subsystem mailbox. */
+#define RT584_COMM_SUBSYSTEM_IRQN   45
+#define RT584_COMM_SUBSYSTEM_IRQPRI 2
+
+#if defined(CONFIG_OPENTHREAD_RT584) || defined(CONFIG_BLE_RT584)
+extern void RfMcu_IsrHandler(void);
+
+volatile uint32_t rt584_comm_irq_count;
+
+static void rt584_comm_subsystem_isr(const void *arg)
+{
+    ARG_UNUSED(arg);
+    rt584_comm_irq_count++;
+    RfMcu_IsrHandler();
+}
+#endif /* CONFIG_OPENTHREAD_RT584 || CONFIG_BLE_RT584 */
 
 /* sysctrl.h sys_clk_sel_t values */
 #define RT584_SYS_CLK_64MHZ  2
@@ -67,12 +93,30 @@ static void rt584_pin_mux_default(void)
 #define EARLY_UART0_EN    (*(volatile uint32_t *)(EARLY_UART0_BASE + 0x30))
 
 #define EARLY_LSR_THRE    (1u << 5)
+#define EARLY_LSR_TEMT    (1u << 6)            /* Transmitter empty (shift reg) */
 #define EARLY_FCR_DEFVAL  (0x02 | 0x04)        /* CLEAR_RCVR | CLEAR_XMIT  */
 #define EARLY_LCR_8N1     0x03
 
 static void early_uart_setup(void)
 {
+    /* Pin mux is already correct after MCUboot (or set by previous boot).
+     * Skip the disable + reconfigure dance entirely if UART is already
+     * up at our target baud — that handoff produced a garbled byte at
+     * the MCUboot → app boundary even with TEMT drain.
+     *
+     * If UART is OFF (cold-boot, no bootloader), do the full setup. */
+    if (EARLY_UART0_EN == 1
+        && EARLY_UART0_DLX == 34
+        && EARLY_UART0_FDL == 6
+        && (EARLY_UART0_LCR & 0x03) == EARLY_LCR_8N1) {
+        return;
+    }
+
     pin_set_mode(17, RT584_MODE_UART0_TX);
+
+    /* Drain any in-flight TX byte before disabling. */
+    for (int i = 0; i < 100000
+         && (EARLY_UART0_LSR & EARLY_LSR_TEMT) != EARLY_LSR_TEMT; i++) {}
 
     EARLY_UART0_EN  = 0;
     EARLY_UART0_FCR = 0;
@@ -112,10 +156,33 @@ void soc_prep_hook(void)
 {
 }
 
+/* SEC_CTRL register layout (RT584):
+ *   0x50003020  sec_peri_attr[0]   bit26 = COMM_SUBSYSTEM (RT569_AHB)
+ *   0x50003024  sec_peri_attr[1]
+ *   0x50003028  sec_peri_attr[2]
+ *   0x5000302C  sec_idau_ctrl
+ * Bit semantics (vendor partition.h L254): 0 = secure, 1 = non-secure. */
+#define RT584_SEC_PERI_ATTR0  (*(volatile uint32_t *)0x50003020UL)
+#define RT584_SEC_PERI_ATTR1  (*(volatile uint32_t *)0x50003024UL)
+#define RT584_SEC_PERI_ATTR2  (*(volatile uint32_t *)0x50003028UL)
+#define RT584_SEC_IDAU_CTRL   (*(volatile uint32_t *)0x5000302CUL)
+
 static int rt584_soc_init(void)
 {
+    /* Drain any in-flight TX byte from MCUboot's last log line BEFORE
+     * we touch PMU / clocks (PLL relock + perclk reselect briefly
+     * glitches UART output, killing whatever's mid-shift). */
+    for (int i = 0; i < 100000
+         && (EARLY_UART0_LSR & EARLY_LSR_TEMT) != EARLY_LSR_TEMT; i++) {}
+
     /* DCDC tuning before PLL change so 64 MHz BBPLL locks reliably. */
     systempmuupdatedcdc();
+    /* Match upstream systeminit's CMSE branch: flash timing + RCO
+     * calibration. Without rco1m_and_rco32k_calibration the COMM_SUBSYSTEM
+     * RF MCU has no slow clock and never asserts SYS_READY after reset
+     * → hosal_rf_init() spins forever in RfMcu_SysRdySignalWaitAhb. */
+    flash_timing_init();
+    rco1m_and_rco32k_calibration();
     /* 64 MHz AHB; baud divisors and SystemCoreClock assume this. */
     (void)change_ahb_system_clk(RT584_SYS_CLK_64MHZ);
     /* Peripheral clock select (UART baud table calibrated for this). */
@@ -131,6 +198,32 @@ static int rt584_soc_init(void)
      * settings; this keeps the early window functional in case anything
      * before then wants to send a byte. */
     early_uart_setup();
+
+    /* Re-arm IDAU peripheral attribute table. MCUboot leaves
+     * sec_peri_attr[0..2] = 0 (all secure) and sec_idau_ctrl = 1, but the
+     * IDAU only latches attributes for peripherals MCUboot actually
+     * touched (UART0 bit 18). Without an explicit rewrite here, accessing
+     * COMM_SUBSYSTEM_AHB (bit 26) via the secure alias 0x5001a000
+     * silently drops writes and returns 0 → hosal_rf_init() spins forever
+     * in RfMcu_SysRdySignalWaitAhb. The peri_attr writes are no-op
+     * (already 0); the sec_idau_ctrl rewrite is the load-bearing one. */
+    RT584_SEC_PERI_ATTR0 = 0;
+    RT584_SEC_PERI_ATTR1 = 0;
+    RT584_SEC_PERI_ATTR2 = 0;
+    RT584_SEC_IDAU_CTRL  = 1;
+
+#if defined(CONFIG_OPENTHREAD_RT584) || defined(CONFIG_BLE_RT584)
+    /* Wire COMM_SUBSYSTEM IRQ (45) → vendor RfMcu_IsrHandler. Don't
+     * irq_enable here — gRfMcuIsrCfg.commsubsystem_isr is still NULL
+     * until hosal_rf_init() runs in the OT/BLE subsystem driver, and
+     * enabling now would null-pointer-crash on a warm reset with a
+     * pending IRQ from the previous boot session. The subsystem driver
+     * enables IRQ_45 itself after hosal_rf_init(). */
+    IRQ_CONNECT(RT584_COMM_SUBSYSTEM_IRQN,
+                RT584_COMM_SUBSYSTEM_IRQPRI,
+                rt584_comm_subsystem_isr,
+                NULL, 0);
+#endif
 
     return 0;
 }

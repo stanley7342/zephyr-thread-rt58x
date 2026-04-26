@@ -1134,9 +1134,8 @@ uint32_t mpsectorwritetxpwrcfg(uint8_t updatetxpwrlevel)
 {
 
 
-    uint32_t read_addr = 0, i = 0;
+    uint32_t read_addr = 0;
     uint8_t txpwrlevel = 0;
-	uint8_t buf[8];
     if ((updatetxpwrlevel == TX_POWER_20DBM_DEF) || (updatetxpwrlevel == TX_POWER_14DBM_DEF) || (updatetxpwrlevel == TX_POWER_0DBM_DEF))
     {
 

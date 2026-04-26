@@ -1,11 +1,12 @@
 /*
- * main.c — RT583-EVB OpenThread FTD CLI example
+ * main.c — OpenThread FTD CLI example (rt583_evb / rt584_evb).
  *
  * Build:
- *   west build -p always -b rt583_evb examples/thread
+ *   west build --sysbuild -p always -b rt583_evb examples/thread -d build/thread583
+ *   west build --sysbuild -p always -b rt584_evb examples/thread -d build/thread584
  *
  * Flash:
- *   bash tools/linux/flash.sh --bin build/zephyr/zephyr.bin
+ *   west flash -d build/thread583   # or build/thread584
  *
  * RULE: Never call printk from a k_timer expiry or any ISR.
  * k_timer expiry runs in SysTick ISR context. printk holds a spinlock;
@@ -70,8 +71,8 @@ void otrInitUser(otInstance *instance)
 int main(void)
 {
     (printk)("======================================\n");
-    (printk)("  RT583-EVB  Zephyr + OpenThread CLI  \n");
-    (printk)("  Built: " __DATE__ " " __TIME__ "  \n");
+    (printk)("  %s  Zephyr + OpenThread CLI\n", CONFIG_BOARD);
+    (printk)("  Built: " __DATE__ " " __TIME__ "\n");
     (printk)("======================================\n");
 
     k_thread_create(&wdog_thread_data, wdog_stack, K_THREAD_STACK_SIZEOF(wdog_stack),

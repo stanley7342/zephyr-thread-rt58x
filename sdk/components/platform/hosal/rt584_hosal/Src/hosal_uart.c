@@ -91,7 +91,27 @@ int hosal_uart_init(hosal_uart_dev_t* uart_dev) {
     uint32_t cval;
 
         uart = g_uart_handle[cfg->uart_id].uart;
-    
+
+        /* If UART is already enabled with the same baud config (typical
+         * after MCUboot chainload — UART left running at 115200), skip
+         * the disable + reconfigure dance. Otherwise the temporary OFF
+         * window kills the last in-flight byte from the prior image and
+         * produces a garbled byte at the boundary. */
+        {
+            uint32_t want_dlx = cfg->baud_rate & 0xFFFF;
+            uint32_t want_fdl = (cfg->baud_rate >> 16) & 0xFF;
+            if (uart->uart_en == UART_ENABLE
+                && uart->dlx == want_dlx
+                && uart->fdl == want_fdl) {
+                return 0;
+            }
+        }
+
+        /* About to disable — drain TX first so any in-flight byte from
+         * the previous image (e.g. MCUboot's last log line) finishes
+         * shifting out instead of getting truncated. */
+        while ((uart->lsr & UART_LSR_TEMT) != UART_LSR_TEMT) {}
+
         if (cfg->uart_id == HOSAL_UART2_ID)
         {
             pin_set_mode(cfg->rx_pin, MODE_UART2_RX); 

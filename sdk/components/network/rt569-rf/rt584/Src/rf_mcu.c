@@ -1032,7 +1032,16 @@ RF_MCU_INIT_STATUS RfMcu_SysInit(
 
     RfMcu_ChipIdCheck();
 
+    /* HostModeEnable → WAKE_UP → RESET → SysRdyWait. The vendor SDK omits
+     * WAKE_UP and relies on cold-boot leaving the RF MCU in NORMAL state,
+     * but a warm reset (SYSRESETREQ from SWD / soft reset) leaves it in
+     * deep-sleep. Without WAKE_UP, RESET cannot complete and SYS_READY
+     * never asserts → SysRdySignalWait spins forever. Mirrors the same
+     * fix already applied to rt583 rf_mcu.c. */
     RfMcu_HostModeEnable();
+#if (CFG_RF_MCU_CTRL_TYPE == RF_MCU_CTRL_BY_AHB)
+    RfMcu_HostCtrl(COMM_SUBSYSTEM_HOST_CTRL_WAKE_UP);
+#endif
 
     if (rf_mcu_init_state != RF_MCU_INIT_WITHOUT_RESET)
     {

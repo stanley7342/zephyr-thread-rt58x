@@ -260,7 +260,6 @@ uint32_t sadc_calibration(sadc_cal_type_t cal_type, sadc_value_t *adc_val) {
     uint32_t read_status;
     mp_cal_adc_t mp_cal_adc;
     mp_cal_temp_adc_t mp_cal_temp_adc;
-    int32_t cal_vol = 0;
 
     if (cal_type == SADC_CALIBRATION_VBAT) {
 
@@ -304,7 +303,7 @@ uint32_t sadc_calibration(sadc_cal_type_t cal_type, sadc_value_t *adc_val) {
     } else if (cal_type == SADC_CALIBRATION_TEMP) {
         read_status = mpcaltempadcread(&mp_cal_temp_adc);
         if (read_status == STATUS_SUCCESS) {
-            *adc_val = (float)(*adc_val - mp_cal_temp_adc.adc_1) / 9.3 + 25;
+            *adc_val = (float)(*adc_val - mp_cal_temp_adc.adc_1) / 9.3f + 25.0f;
         } else {
             *adc_val = *adc_val;
         }

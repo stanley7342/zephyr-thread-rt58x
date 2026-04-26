@@ -134,15 +134,51 @@ if(CONFIG_SOC_SERIES_RT584)
     # (0x10000000) into peripheral pointer macros, routing every access
     # to the secure alias. Required, not optional — without these flags
     # the chip silently no-ops every peripheral write.
+    # rt584 peripheral aliasing: the entire 0x4xxxxxxx NS bank is
+    # non-functional from secure state. Every peripheral access must go
+    # through the 0x5xxxxxxx secure alias, which the vendor macros
+    # produce only when the corresponding CONFIG_*_SECURE_EN is defined.
+    # Mirror the full set from upstream default-rt584h-evb.config — anything
+    # we leave NS-aliased silently no-ops at runtime (hosal_rf_init hung
+    # because COMM_SUBSYSTEM_AHB was at NS, never asserted IRQ 45).
     zephyr_compile_definitions(
         SET_SYS_CLK=2
         CONFIG_HELLOWORLD=1
         CONFIG_HOSAL_SOC_DISABLE_MP_SECTOR_INIT=1
-        CONFIG_SYSCTRL_SECURE_EN=1
-        CONFIG_GPIO_SECURE_EN=1
-        CONFIG_SOC_PMU_SECURE_EN=1
+        CONFIG_AUX_COMP_SECURE_EN=1
+        CONFIG_BOD_COMP_SECURE_EN=1
+        CONFIG_COMM_SUBSYSTEM_AHB_SECURE_EN=1
+        CONFIG_DMA0_SECURE_EN=1
+        CONFIG_DMA1_SECURE_EN=1
+        CONFIG_DPD_SECURE_EN=1
         CONFIG_FLASHCTRL_SECURE_EN=1
+        CONFIG_GPIO_SECURE_EN=1
+        CONFIG_I2C_MASTER0_SECURE_EN=1
+        CONFIG_I2C_MASTER1_SECURE_EN=1
+        CONFIG_I2C_SLAVE_SECURE_EN=1
+        CONFIG_I2S0_SECURE_EN=1
+        CONFIG_IRM_SECURE_EN=1
+        CONFIG_PWM_SECURE_EN=1
+        CONFIG_QSPI0_SECURE_EN=1
+        CONFIG_QSPI1_SECURE_EN=1
+        CONFIG_RCO1M_CAL_SECURE_EN=1
+        CONFIG_RCO32K_CAL_SECURE_EN=1
+        CONFIG_RTC_SECURE_EN=1
+        CONFIG_SADC_SECURE_EN=1
+        CONFIG_SLOWTIMER0_SECURE_EN=1
+        CONFIG_SLOWTIMER1_SECURE_EN=1
+        CONFIG_SOC_PMU_SECURE_EN=1
+        CONFIG_SWI0_SECURE_EN=1
+        CONFIG_SWI1_SECURE_EN=1
+        CONFIG_SYSCTRL_SECURE_EN=1
+        CONFIG_TIMER0_SECURE_EN=1
+        CONFIG_TIMER1_SECURE_EN=1
+        CONFIG_TIMER2_SECURE_EN=1
         CONFIG_UART0_SECURE_EN=1
+        CONFIG_UART1_SECURE_EN=1
+        CONFIG_UART2_SECURE_EN=1
+        CONFIG_WDT_SECURE_EN=1
+        CONFIG_XDMA_SECURE_EN=1
     )
 
     # Platform sources: sysctrl (clock + pinmux), sysfun (delay),

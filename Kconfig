@@ -14,6 +14,8 @@ rsource "subsys/ota/Kconfig"
 # compile modules/lib/openthread core or its platform stubs (entropy.c, radio.c …).
 # Our subsys/openthread/CMakeLists.txt compiles the SDK OT from source instead.
 choice OPENTHREAD_IMPLEMENTATION
+    default OPENTHREAD_RT583 if SOC_RT583
+    default OPENTHREAD_RT584 if SOC_RT584
 config OPENTHREAD_RT583
     bool "Rafael RT583 SDK OpenThread"
     depends on SOC_RT583 && OPENTHREAD
@@ -24,13 +26,12 @@ config OPENTHREAD_RT583
       Replaces Zephyr's modules/lib/openthread and its platform stubs.
 
 config OPENTHREAD_RT584
-    bool "Rafael RT584 SDK OpenThread (Phase A — structure only)"
+    bool "Rafael RT584 SDK OpenThread"
     depends on SOC_RT584 && OPENTHREAD
     help
       RT584 OpenThread port — same SDK glue as RT583 (lmac15p4 / RUCI /
       ot_radio.c are SoC-agnostic) but pulls rt569-rf/rt584/ + rt569-fw
-      /rt584/ instead. RF MCU bring-up has NOT been validated on real
-      hardware — expect to debug RF init / IRQ wiring at first run.
+      /rt584/ instead.
 endchoice
 
 # Both rt583 and rt584 use the same lmac15p4 / RUCI stack, so the PIB
@@ -129,18 +130,18 @@ endif # CHIP
 config BLE_RT583
     bool "Bluetooth LE for Rafael RT583"
     depends on SOC_RT583
+    default y if SOC_RT583 && BT
     select BT_HCI_SETUP if BT
     help
       Enables the BLE stack on the RT583 SoC via the integrated
       BLE controller firmware and Zephyr's BLE host stack.
 
 config BLE_RT584
-    bool "Bluetooth LE for Rafael RT584 (Phase A — structure only)"
+    bool "Bluetooth LE for Rafael RT584"
     depends on SOC_RT584
+    default y if SOC_RT584 && BT
     select BT_HCI_SETUP if BT
     help
       RT584 BLE port — same SDK glue as RT583 (hci_rt583.c is generic,
       pulls hosal_rf / rf_mcu / RUCI / RF firmware via the rt584 SoC
-      subtree). Controller bring-up has NOT been validated on real
-      hardware yet — expect to debug RF MCU init / IRQ wiring at first
-      run.
+      subtree).
