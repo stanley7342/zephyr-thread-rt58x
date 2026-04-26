@@ -271,11 +271,12 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 
 | | |
 |---|---|
-| Status | ❌ Not enabled |
-| Implementation | None |
-| Evidence | n/a |
-| Gap | `MCUBOOT_HW_DOWNGRADE_PREVENTION=y` not set; OTP security counter not wired |
-| Effort to close | 1–2 days — enable Kconfig, allocate OTP word for counter, write counter on signed image |
+| Status | ⚠️ Partial (OTA path covered) |
+| Implementation | Direct-XIP version comparison with build number tie-breaker |
+| Evidence | [examples/thread/sysbuild/mcuboot/prj.conf](../../examples/thread/sysbuild/mcuboot/prj.conf) — `CONFIG_BOOT_VERSION_CMP_USE_BUILD_NUMBER=y` (commit on `master` after `b667b42`); MCUboot at every boot evaluates both slots and runs the higher `major.minor.revision+build`. An attacker who lands a downgraded image in the inactive slot cannot displace the current image. |
+| Gap | An attacker with debug-port access can write a downgraded image directly to slot0 — version comparison alone doesn't help there. Closing this requires an HW-anchored security counter (`MCUBOOT_HW_DOWNGRADE_PREVENTION` + platform `boot_nv_security_counter_*` impl) — see [SG6_anti_rollback_followup.md](SG6_anti_rollback_followup.md) for the implementation skeleton. |
+| Effort to close fully | 1.5–2 days for flash-backed counter; OTP anchoring depends on SG.2 / Rafael fuse docs |
+| Coverage today | Mitigates T.OTA_REPLAY (the primary Internet-facing downgrade vector). T.DEBUG_DUMP path remains open and is shifted onto SG.2 Lifecycle (which is also ❌ — chained risk). |
 
 ### SG.7 — Isolation
 
@@ -324,14 +325,14 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 | 3. Attestation | ❌ |
 | 4. Secure Boot | ⚠️ |
 | 5. Secure Update | ✅ |
-| 6. Anti-Rollback | ❌ |
+| 6. Anti-Rollback | ⚠️ Partial (OTA path) |
 | 7. Isolation | ❌ (silicon) |
 | 8. Interaction | N/A |
 | 9. Secure Storage | ⚠️ |
 | 10. Cryptographic Services | ✅ |
 
-**Overall PSA L1 readiness: 2 ✅ / 4 ⚠️ / 4 ❌ — short of self-assessment threshold.**
-**Realistic closure effort (excluding SG.7): 4–6 weeks of focused work.**
+**Overall PSA L1 readiness: 2 ✅ / 5 ⚠️ / 3 ❌ — short of self-assessment threshold.**
+**Realistic closure effort (excluding SG.7): 3–5 weeks of focused work.**
 
 ---
 
