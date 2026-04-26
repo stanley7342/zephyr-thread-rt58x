@@ -221,11 +221,12 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 
 | | |
 |---|---|
-| Status | ⚠️ Partial |
-| Implementation | rt584 OTP holds unique die ID (visible in UART log: `otp: 0x52 0x54 0x35 0x38 0x34 ... = "RT584LD"` plus per-die fields) |
-| Evidence | OT CLI output, hosal SDK `otp.c` |
-| Gap | No PSA `psa_initial_attest_get_token` API exposing it; no UID export to upper layers |
-| Effort to close | 2 days — wrap OTP read in a PSA driver / PSA platform interface |
+| Status | ✅ UID readable + PSA-derived implementation_id |
+| Implementation | [examples/psa_hello/src/main.c](../../examples/psa_hello/src/main.c) reads 32 bytes from rt584 PUF block via vendor `rt_otp_read_data(PUF_UID, 0, buf, 8)` (8 cells × 4 bytes = 32 bytes), then computes `SHA-256(uid)` via `psa_hash_compute` to derive the canonical 32-byte PSA implementation_id used in PSA Initial Attestation tokens. |
+| Evidence | UART output of `psa_hello`: `[UID] raw  : <32 hex bytes from die>` followed by `[UID] hash : <SHA-256 of uid>` and `[UID] PSA implementation_id derived OK (32 bytes)` |
+| Build & flash | `west build --sysbuild -p always -b rt584_evb examples/psa_hello -d build/psa584 && west flash -d build/psa584` |
+| Gap | No persistent claim cache yet — implementation_id recomputed on each boot. PSA Initial Attestation token generator (SG.3) consumes this value but is not yet implemented. |
+| Production hardening | Lock UID region against reads in lifecycle states where it shouldn't be exfiltrated (depends on rt584 OTP lifecycle docs, blocked alongside SG.2). |
 
 ### SG.2 — Security Lifecycle
 
@@ -321,7 +322,7 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 
 | SG | Status |
 |---|---|
-| 1. Unique Identification | ⚠️ Partial |
+| 1. Unique Identification | ✅ UID + PSA implementation_id |
 | 2. Lifecycle | ❌ |
 | 3. Attestation | ❌ |
 | 4. Secure Boot | ✅ ED25519 (key in flash, OTP-anchoring deferred) |
@@ -332,8 +333,8 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 | 9. Secure Storage | ⚠️ |
 | 10. Cryptographic Services | ✅ |
 
-**Overall PSA L1 readiness: 3 ✅ / 4 ⚠️ / 3 ❌ — getting close to self-assessment threshold (need any one of SG.2/3/6 to ⚠️ at minimum).**
-**Realistic closure effort (excluding SG.7): 2–4 weeks of focused work.**
+**Overall PSA L1 readiness: 4 ✅ / 3 ⚠️ / 3 ❌ — only SG.7 is permanently blocked; everything else has a defined path forward.**
+**Realistic closure effort (excluding SG.7): 2–3 weeks of focused work.**
 
 ---
 

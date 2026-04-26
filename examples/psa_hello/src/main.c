@@ -11,6 +11,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#if defined(PSA_HELLO_HAS_UID)
+/* rt584 vendor OTP read API.  PUF_UID = 0; cells are 4 bytes each;
+ * we read 8 cells = 32 bytes (raw die-unique ID + ROM-burned chip-info). */
+#include "pufs_rt_regs.h"
+#define UID_CELLS  8
+#define UID_BYTES  (UID_CELLS * 4)
+#endif
+
 /* SHA-256("hello") — well-known test vector. */
 static const uint8_t expected_sha256[32] = {
     0x2c, 0xf2, 0x4d, 0xba, 0x5f, 0xb0, 0xa3, 0x0e,
@@ -63,6 +71,34 @@ int main(void)
     } else {
         printk("[PSA] FAIL — digest mismatch\n");
     }
+
+#if defined(PSA_HELLO_HAS_UID)
+    /* SG.1 Unique Identification demo: read die-unique ID from rt584 PUF
+     * block, derive a 32-byte PSA implementation_id by hashing it. This
+     * is the canonical pattern for PSA Initial Attestation's
+     * "implementation ID" claim — burning the per-device fingerprint
+     * into a fixed-length value the attestation token can carry. */
+    uint32_t uid_words[UID_CELLS] = {0};
+    uint32_t rc = rt_otp_read_data(PUF_UID, 0, uid_words, UID_CELLS);
+    if (rc != 0) {
+        printk("[UID] FAIL: rt_otp_read_data -> %u\n", (unsigned)rc);
+    } else {
+        hexdump("[UID] raw  :", (const uint8_t *)uid_words, UID_BYTES);
+
+        uint8_t impl_id[PSA_HASH_LENGTH(PSA_ALG_SHA_256)];
+        size_t impl_id_len = 0;
+        status = psa_hash_compute(PSA_ALG_SHA_256,
+                                  (const uint8_t *)uid_words, UID_BYTES,
+                                  impl_id, sizeof(impl_id), &impl_id_len);
+        if (status == PSA_SUCCESS) {
+            hexdump("[UID] hash :", impl_id, impl_id_len);
+            printk("[UID] PSA implementation_id derived OK (%u bytes)\n",
+                   (unsigned)impl_id_len);
+        } else {
+            printk("[UID] FAIL: psa_hash_compute(uid) -> %d\n", status);
+        }
+    }
+#endif
 
     while (1) {
         k_msleep(1000);
