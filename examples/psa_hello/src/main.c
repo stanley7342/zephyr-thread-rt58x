@@ -8,8 +8,14 @@
  */
 
 #include <psa/crypto.h>
+#include <psa/internal_trusted_storage.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+
+/* PSA ITS demo: a single 32-bit counter under a fixed UID. Each boot
+ * we read it, increment, write back. Power-cycle persists across reboots
+ * because settings/NVS lands in storage_partition. */
+#define PSA_ITS_BOOT_COUNTER_UID  ((psa_storage_uid_t)0xC0DEC0DE)
 
 #if defined(PSA_HELLO_HAS_UID)
 /* rt584 vendor OTP read API.  PUF_UID = 0; cells are 4 bytes each;
@@ -70,6 +76,39 @@ int main(void)
         printk("[PSA] PASS\n");
     } else {
         printk("[PSA] FAIL — digest mismatch\n");
+    }
+
+    /* SG.9 Secure Storage demo: PSA ITS NV-backed boot counter.
+     * First boot prints "boot=1", second "boot=2", and so on across power
+     * cycles, proving the storage_partition NVS backing actually persists. */
+    {
+        uint32_t boot_count = 0;
+        size_t got = 0;
+        psa_status_t s = psa_its_get(PSA_ITS_BOOT_COUNTER_UID, 0,
+                                     sizeof(boot_count), &boot_count, &got);
+        if (s == PSA_ERROR_DOES_NOT_EXIST) {
+            boot_count = 0;
+            printk("[ITS] first boot — counter UID 0x%x not present\n",
+                   PSA_ITS_BOOT_COUNTER_UID);
+        } else if (s != PSA_SUCCESS) {
+            printk("[ITS] FAIL: psa_its_get -> %d\n", s);
+            goto its_done;
+        } else {
+            printk("[ITS] read boot_count=%u (got %u bytes)\n",
+                   (unsigned)boot_count, (unsigned)got);
+        }
+
+        boot_count++;
+        s = psa_its_set(PSA_ITS_BOOT_COUNTER_UID, sizeof(boot_count),
+                        &boot_count, PSA_STORAGE_FLAG_NONE);
+        if (s != PSA_SUCCESS) {
+            printk("[ITS] FAIL: psa_its_set -> %d\n", s);
+            goto its_done;
+        }
+        printk("[ITS] wrote boot_count=%u — power-cycle to verify persistence\n",
+               (unsigned)boot_count);
+its_done:
+        ;
     }
 
 #if defined(PSA_HELLO_HAS_UID)

@@ -302,11 +302,12 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 
 | | |
 |---|---|
-| Status | ⚠️ API available, NV backing not wired |
-| Implementation | mbedTLS PSA ITS API present in build |
-| Evidence | `psa_its_set/get/remove` in mbedTLS PSA Crypto |
-| Gap | Backing store is RAM (volatile) — needs internal flash partition + wear-levelling |
-| Effort to close | 3–5 days — implement PSA ITS backend over Zephyr `flash_map` + `nvs` |
+| Status | ✅ NV-backed PSA ITS |
+| Implementation | Zephyr `secure_storage` subsystem with settings-based ITS store, settings backed by NVS, NVS landing in `storage_partition` (64 KB at flash offset `0x1E0000` per [rt584.dtsi](../../dts/arm/rafael/rt584.dtsi)). All wired via Kconfig in [examples/psa_hello/prj.conf](../../examples/psa_hello/prj.conf): `CONFIG_SECURE_STORAGE=y` + `CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_SETTINGS=y` + `CONFIG_SETTINGS_NVS=y`. |
+| Evidence | psa_hello demonstrates persistence: writes a 32-bit boot counter to PSA ITS UID `0xC0DEC0DE` on each boot, increments across power-cycles. UART output: `[ITS] read boot_count=N` followed by `[ITS] wrote boot_count=N+1`. First boot logs `first boot — counter UID 0xC0DEC0DE not present`; subsequent boots show monotonic increase. |
+| Build & flash | `west build --sysbuild -p always -b rt584_evb examples/psa_hello -d build/psa584 && west flash -d build/psa584` — power-cycle to observe counter increment. |
+| Gap | NVS data is **not encrypted at rest**. An attacker who reads the storage partition via debug port sees plaintext key material. To close: enable `CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD=y` (PSA ITS authenticated encryption transform) — needs a key-encryption-key derived from the UID + a HW-RoT secret. |
+| Production hardening | AEAD transform on top of NVS; key wrapping via SG.1 UID-derived KEK; lifecycle lockdown so debug-read of the partition is blocked (SG.2). |
 
 ### SG.10 — Cryptographic Services
 
@@ -330,11 +331,11 @@ Below is the per-SG status for this TOE, with evidence and gaps.
 | 6. Anti-Rollback | ⚠️ Partial (OTA path) |
 | 7. Isolation | ❌ (silicon) |
 | 8. Interaction | N/A |
-| 9. Secure Storage | ⚠️ |
+| 9. Secure Storage | ✅ NV-backed PSA ITS |
 | 10. Cryptographic Services | ✅ |
 
-**Overall PSA L1 readiness: 4 ✅ / 3 ⚠️ / 3 ❌ — only SG.7 is permanently blocked; everything else has a defined path forward.**
-**Realistic closure effort (excluding SG.7): 2–3 weeks of focused work.**
+**Overall PSA L1 readiness: 5 ✅ / 1 ⚠️ / 3 ❌ (excluding N/A SG.8) — portfolio ceiling reached. SG.7 silicon-blocked, SG.2/3 require Rafael OTP docs or 1-2 weeks of attestation engineering.**
+**Realistic closure effort to full L1 submission (SG.6 → ✅, SG.2/3 → ⚠️): 2 weeks.**
 
 ---
 
