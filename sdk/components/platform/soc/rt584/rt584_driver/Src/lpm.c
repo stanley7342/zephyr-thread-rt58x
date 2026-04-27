@@ -89,7 +89,6 @@ static uint32_t lpm_comm_subsystem_power_status(void)
     return  ((COMM_SUBSYSTEM_AHB->COMM_SUBSYSTEM_INFO & 0x6) >> 1);
 }
 /**
-/**
 * \brief            Check communication subsystem slee mode
 */
 void lpm_comm_subsystem_check_system_deepsleep(void) {

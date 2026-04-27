@@ -123,7 +123,7 @@ uint32_t hosal_gpio_set_debounce_time(uint32_t time) {
     return rval;
 }
 
-uint32_t hosal_gpio_setup_deep_sleep_io(uint8_t pin_number, uint8_t level) {
+uint32_t hosal_gpio_setup_deep_sleep_io(uint8_t pin_number, gpio_pin_wake_t level) {
     uint32_t rval;
 
     rval = gpio_setup_deep_sleep_io(pin_number, level);
@@ -139,7 +139,7 @@ uint32_t hosal_gpio_disable_deep_sleep_io(uint8_t pin_number) {
     return rval;
 }
 
-uint32_t hosal_gpio_setup_deep_powerdown_io(uint8_t pin_number, uint8_t level) {
+uint32_t hosal_gpio_setup_deep_powerdown_io(uint8_t pin_number, gpio_pin_wake_t level) {
     uint32_t rval;
 
     rval = gpio_setup_deep_powerdown_io(pin_number, level);
