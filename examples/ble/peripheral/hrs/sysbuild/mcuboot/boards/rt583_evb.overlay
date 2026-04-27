@@ -1,0 +1,33 @@
+/*
+ * RT583 partition resize for ble_hrs example.
+ *
+ * Default rt583.dtsi ships 800 KB slots + a 256 KB staging_partition.
+ * Resize slot0/slot1 to 928 KB each so the same bootloader works for the
+ * BLE HRS sample as well as larger apps (Matter ~866 KB).  Slot1 then
+ * overlaps staging, so delete staging too.  RT584's default DT already
+ * has 928 KB slots and no staging — this overlay is rt583-only.
+ *
+ * Resulting layout (2 MB flash):
+ *   0x000000 – 0x010000  boot_partition    64 KB  MCUboot
+ *   0x010000 – 0x0F8000  slot0_partition  928 KB  primary app
+ *   0x0F8000 – 0x1E0000  slot1_partition  928 KB  Direct-XIP failover / OTA
+ *   0x1E0000 – 0x1F0000  storage_partition 64 KB  settings / NVS
+ *   0x1F0000 – 0x200000  factory_partition 64 KB  factory data
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+/delete-node/ &slot1_partition;
+
+&flash0 {
+    partitions {
+        slot1_partition: partition@F8000 {
+            label = "image-1";
+            reg = <0x000F8000 0x000E8000>;  /* 928 KB — equal to slot0 */
+        };
+    };
+};
+
+/delete-node/ &staging_partition;

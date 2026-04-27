@@ -1,0 +1,26 @@
+/*
+ * RT583 partition resize for blinky example.
+ *
+ * Default rt583.dtsi ships 800 KB slots + a 256 KB staging_partition.
+ * Resize slot0/slot1 to 928 KB so the bootloader matches the layout used
+ * by larger apps in the same repo. Slot1 then overlaps staging, so delete
+ * staging too. RT584's default DT already has 928 KB slots — this overlay
+ * is rt583-only.
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+/delete-node/ &slot1_partition;
+
+&flash0 {
+    partitions {
+        slot1_partition: partition@F8000 {
+            label = "image-1";
+            reg = <0x000F8000 0x000E8000>;  /* 928 KB */
+        };
+    };
+};
+
+/delete-node/ &staging_partition;

@@ -1,0 +1,10 @@
+/*
+ * Shared MCUboot DTS overlay — bootloader runs from boot_partition (offset 0).
+ * Per-board partition resizing lives in boards/<board>.overlay.
+ */
+
+/ {
+    chosen {
+        zephyr,code-partition = &boot_partition;
+    };
+};
