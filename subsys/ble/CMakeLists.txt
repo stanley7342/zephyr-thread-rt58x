@@ -78,7 +78,7 @@ target_sources(app PRIVATE
 
     # HCI driver (only when Zephyr BT host stack is enabled). Same source
     # for rt583 / rt584 — uses hosal_rf API, not SoC registers directly.
-    $<$<BOOL:${CONFIG_BT}>:${RT583_PROJECT_DIR}/drivers/bluetooth/hci_rt583.c>
+    $<$<BOOL:${CONFIG_BT}>:${RT583_PROJECT_DIR}/drivers/bluetooth/hci_rafael.c>
 )
 
 target_include_directories(app PRIVATE
