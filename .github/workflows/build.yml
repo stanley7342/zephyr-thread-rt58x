@@ -14,31 +14,21 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.target }}
+    name: ${{ matrix.target.name }}-${{ matrix.board }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false   # keep building other targets even if one fails
       matrix:
-        include:
-          - target: thread
-            source: examples/thread
-            build_dir: build/thread
-
-          - target: blinky
-            source: examples/blinky
-            build_dir: build/blinky
-
-          - target: hello_world
-            source: examples/hello_world
-            build_dir: build/hello_world
-
-          - target: test_flash
-            source: tests/flash
-            build_dir: build/test_flash
-
-          - target: ble_hrs
-            source: examples/ble/peripheral/hrs
-            build_dir: build/ble_hrs
+        board: [rt583_evb, rt584_evb]
+        target:
+          - { name: thread,      source: examples/thread,                build_dir: build/thread }
+          - { name: blinky,      source: examples/blinky,                build_dir: build/blinky }
+          - { name: hello_world, source: examples/hello_world,           build_dir: build/hello_world }
+          - { name: test_flash,  source: tests/flash,                    build_dir: build/test_flash }
+          - { name: ble_hrs,     source: examples/ble/peripheral/hrs,    build_dir: build/ble_hrs }
+        exclude:
+          # tests/flash is rt583-specific (CONFIG_UART_RT583 / CONFIG_FLASH_RT583).
+          - { board: rt584_evb, target: { name: test_flash, source: tests/flash, build_dir: build/test_flash } }
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
@@ -110,7 +100,7 @@ jobs:
         run: ~/zephyr-sdk/setup.sh -c
 
       # ── Build ─────────────────────────────────────────────────────────────
-      - name: Build ${{ matrix.target }}
+      - name: Build ${{ matrix.target.name }} (${{ matrix.board }})
         working-directory: zephyr-thread
         env:
           ZEPHYR_BASE: ${{ github.workspace }}/zephyr
@@ -131,29 +121,33 @@ jobs:
           CMAKE_ARGS="-DZephyr_DIR=${ZEPHYR_BASE}/share/zephyr-package/cmake"
           CMAKE_ARGS="${CMAKE_ARGS} -DIMGTOOL=${IMGTOOL_BIN}"
 
-          west build --sysbuild -p always -b rt583_evb \
-            -d ${{ matrix.build_dir }} \
-            ${{ matrix.source }} \
+          west build --sysbuild -p always -b ${{ matrix.board }} \
+            -d ${{ matrix.target.build_dir }} \
+            ${{ matrix.target.source }} \
             -- ${CMAKE_ARGS}
 
       # ── Upload binary ─────────────────────────────────────────────────────
       # Sysbuild nests per-image artifacts under build/<target>/<image>/zephyr/.
       # Glob picks up MCUboot + signed app in one shot.
-      - name: Upload ${{ matrix.target }} artifacts
+      - name: Upload ${{ matrix.target.name }}-${{ matrix.board }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-${{ github.sha }}
+          name: ${{ matrix.target.name }}-${{ matrix.board }}-${{ github.sha }}
           path: |
-            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.bin
-            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.signed.bin
-            zephyr-thread/${{ matrix.build_dir }}/*/zephyr/zephyr.elf
+            zephyr-thread/${{ matrix.target.build_dir }}/*/zephyr/zephyr.bin
+            zephyr-thread/${{ matrix.target.build_dir }}/*/zephyr/zephyr.signed.bin
+            zephyr-thread/${{ matrix.target.build_dir }}/*/zephyr/zephyr.elf
           if-no-files-found: ignore
           retention-days: 30
 
   # ── Matter Lighting (separate job — needs connectedhomeip) ────────────────
   matter:
-    name: matter_lighting
+    name: matter_lighting-${{ matrix.board }}
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [rt583_evb, rt584_evb]
 
     steps:
       # ── Checkout ────────────────────────────────────────────────────────────
@@ -347,7 +341,7 @@ jobs:
           [ -z "${IMGTOOL_BIN}" ] && { echo "ERROR: imgtool not found" >&2; exit 1; }
 
           PYTHON3_BIN="$(which python3)"
-          west build --sysbuild -p always -b rt583_evb \
+          west build --sysbuild -p always -b ${{ matrix.board }} \
             -d build/matter_lighting \
             examples/matter/lighting-app \
             -- \
@@ -357,10 +351,10 @@ jobs:
             -DPython3_EXECUTABLE="${PYTHON3_BIN}"
 
       # ── Upload ───────────────────────────────────────────────────────────────
-      - name: Upload matter_lighting artifacts
+      - name: Upload matter_lighting-${{ matrix.board }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: matter_lighting-${{ github.sha }}
+          name: matter_lighting-${{ matrix.board }}-${{ github.sha }}
           path: |
             zephyr-thread/build/matter_lighting/*/zephyr/zephyr.bin
             zephyr-thread/build/matter_lighting/*/zephyr/zephyr.signed.bin
