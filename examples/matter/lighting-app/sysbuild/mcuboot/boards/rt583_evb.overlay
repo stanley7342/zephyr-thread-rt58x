@@ -1,0 +1,42 @@
+/*
+ * rt583-specific MCUboot partition resize.
+ *
+ * Default rt583.dtsi has slot0/slot1 = 800 KB, but matter-lighting image
+ * is ~866 KB. Bump both slots to 928 KB so a single bootloader works for
+ * the Matter app and smaller apps alike. (MCUboot uses min(slot0, slot1)
+ * as the signing size; both slots must be able to hold the same image
+ * for Direct-XIP failover or swap.)
+ *
+ * Layout after resize (2 MB flash):
+ *   0x000000 – 0x010000  boot_partition    64 KB  MCUboot
+ *   0x010000 – 0x0F8000  slot0_partition  928 KB  primary app
+ *   0x0F8000 – 0x1E0000  slot1_partition  928 KB  OTA / Direct-XIP failover
+ *   0x1E0000 – 0x1F0000  storage_partition 64 KB  settings / NVS
+ *   0x1F0000 – 0x200000  factory_partition 64 KB  factory data
+ *
+ * staging_partition (rt583-only) is deleted — overlapped with the new
+ * larger slot1.
+ */
+
+&slot0_partition {
+    reg = <0x00010000 0x000E8000>;  /* 928 KB */
+};
+
+/*
+ * Relocate slot1 to 0xF8000 (right after the enlarged slot0).
+ * Delete the old node and recreate it so unit-address matches reg
+ * (avoids dtc warnings).
+ */
+/delete-node/ &slot1_partition;
+
+&flash0 {
+    partitions {
+        slot1_partition: partition@F8000 {
+            label = "image-1";
+            reg = <0x000F8000 0x000E8000>;  /* 928 KB — equal to slot0, required by MCUboot */
+        };
+    };
+};
+
+/* staging overlaps with the enlarged slot1 — remove it. */
+/delete-node/ &staging_partition;

@@ -92,7 +92,9 @@ static void print_ipv6_addr(const otIp6Address *addr)
 static void rf_diag_work_fn(struct k_work *work)
 {
     ARG_UNUSED(work);
-    hosal_rf_dump_diag();
+#if defined(CONFIG_SOC_SERIES_RT583)
+    hosal_rf_dump_diag();  /* rt584 hosal_rf has no equivalent diag dump */
+#endif
     k_work_reschedule(&rf_diag_work, K_SECONDS(10));
 }
 

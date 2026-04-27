@@ -428,7 +428,14 @@ static const struct bt_hci_driver_api hci_rt58x_api = {
 	.setup = hci_rt58x_setup,
 };
 
+/* DT compat is SoC-specific because Zephyr's DEVICE_DT_INST_DEFINE keys off
+ * a single DT_DRV_COMPAT. The driver body is shared; only the compat string
+ * differs between rt583 (rafael,rt583-bt-hci) and rt584 (rafael,rt584-bt-hci). */
+#if defined(CONFIG_SOC_SERIES_RT584)
+#define DT_DRV_COMPAT rafael_rt584_bt_hci
+#else
 #define DT_DRV_COMPAT rafael_rt583_bt_hci
+#endif
 
 DEVICE_DT_INST_DEFINE(0, hci_rt58x_init, NULL,
 		      &hci_data, NULL,

@@ -63,7 +63,9 @@ extern "C" {
                               DEBOUNCE_SLOWCLOCKS_1024 */
 /* RT583 SDK combined GPIO ISR (dispatches to per-pin callbacks) */
 extern void gpio_handler(void);
+#if defined(CONFIG_BT)
 extern bool hci_rt58x_rf_already_init;
+#endif
 int lmac15p4_init(uint8_t modem, uint8_t band_type);
 void lmac15p4_phy_pib_set(uint16_t, uint8_t, uint8_t, uint16_t);
 void lmac15p4_mac_pib_set(uint32_t, uint32_t, uint8_t, uint8_t, uint32_t, uint8_t, uint8_t);
@@ -567,8 +569,13 @@ CHIP_ERROR AppTask::Init()
      * both require an initialized RF MCU; MULTI_PROTOCOL loads firmware that
      * supports both simultaneously. */
     t0 = k_uptime_get_32();
+#if defined(CONFIG_BT)
+    /* hosal_lpm.c is built only via subsys/ble/CMakeLists.txt (which is
+     * included only when CONFIG_BT=y). LPM keeps the system in SLEEP0 so
+     * lmac15p4 can manage the RF MCU power. */
     hosal_lpm_init();
     hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
+#endif
     hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
     k_sleep(K_MSEC(50));
 
@@ -581,6 +588,7 @@ CHIP_ERROR AppTask::Init()
     lmac15p4_phy_pib_set(128, 1, 85, 128);
     lmac15p4_mac_pib_set(320, 544, 8, 10, 16896, 4, 5);
 
+#if defined(CONFIG_BT)
     /* Send RUCI_INITIATE_BLE right after lmac15p4_init — matching Rafael
      * official SDK timing (BLEManagerImpl: rf_init → lmac15p4_init → PIB →
      * ble_init which sends INITIATE_BLE internally).  This must happen here
@@ -593,6 +601,7 @@ CHIP_ERROR AppTask::Init()
     }
 
     hci_rt58x_rf_already_init = true;  /* tell BLE HCI driver to skip re-init */
+#endif
     phase_ms = k_uptime_get_32() - t0;
 
     /* Initialise lmac15p4 radio layer for OpenThread (sets up RUCI callbacks,

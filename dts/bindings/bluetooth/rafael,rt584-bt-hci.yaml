@@ -1,0 +1,13 @@
+description: Rafael RT584 integrated Bluetooth LE controller (HCI over COMM_SUBSYSTEM)
+
+compatible: "rafael,rt584-bt-hci"
+
+include: bt-hci.yaml
+
+properties:
+  bt-hci-name:
+    default: "RT584 BLE"
+  bt-hci-bus:
+    default: "virtual"
+  bt-hci-quirks:
+    default: ["no-reset"]

@@ -16,5 +16,11 @@
         zephyr,console          = &uart0;
         zephyr,shell-uart       = &uart0;
         zephyr,code-partition   = &slot0_partition;
+        zephyr,entropy          = &trng;
+        zephyr,bt-hci           = &bt_hci_rt584;
     };
+};
+
+&bt_hci_rt584 {
+    status = "okay";
 };

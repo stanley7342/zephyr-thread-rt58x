@@ -10,3 +10,14 @@ config ENTROPY_RT583
 	  Requires ENTROPY_GENERATOR=y (set in board defconfig).
 	  Selects ENTROPY_HAS_DRIVER to signal a real entropy source is present,
 	  enabling CSPRNG_ENABLED for BLE and OpenThread.
+
+config ENTROPY_RT584
+	bool "Rafael RT584 hardware TRNG entropy driver"
+	default y
+	depends on DT_HAS_RAFAEL_RT584_TRNG_ENABLED && ENTROPY_GENERATOR
+	select ENTROPY_HAS_DRIVER
+	help
+	  Enable the RT584 TRNG-based hardware entropy driver.
+	  Requires ENTROPY_GENERATOR=y (set in board defconfig).
+	  Selects ENTROPY_HAS_DRIVER so mbedTLS PSA can seed its DRBG and
+	  CSPRNG_ENABLED is set (required by Matter psa_crypto_init).

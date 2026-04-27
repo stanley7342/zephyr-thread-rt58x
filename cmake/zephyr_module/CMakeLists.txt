@@ -179,6 +179,13 @@ if(CONFIG_SOC_SERIES_RT584)
         CONFIG_UART2_SECURE_EN=1
         CONFIG_WDT_SECURE_EN=1
         CONFIG_XDMA_SECURE_EN=1
+        # Propagate CPU-feature CONFIG_* into the GN-side connectedhomeip
+        # build. zephyr_compile_definitions reaches CHIP's GN flags via
+        # zephyr_get_compile_flags(); autoconf.h (-include) does not. Without
+        # CONFIG_CPU_HAS_FPU=1 here, every CHIP TU including <core_cm33.h>
+        # via cmsis_core_m.h fails with "__FPU_PRESENT and CONFIG_CPU_HAS_FPU
+        # are not set to the same value" because rt584's __FPU_PRESENT=1.
+        CONFIG_CPU_HAS_FPU=1
     )
 
     # Platform sources: sysctrl (clock + pinmux), sysfun (delay),
@@ -213,6 +220,20 @@ if(CONFIG_SOC_SERIES_RT584)
             ${_RT583_PLATFORM}/soc/rt584/rt584_driver/Inc
             ${_RT583_PLATFORM}/soc/rt584/rt584_system/Include
             ${_RT583_PLATFORM}/hosal/rt584_hosal/Inc
+        )
+    endif()
+
+    # Entropy driver (drivers__entropy) — wraps hosal_trng. Required for
+    # mbedTLS PSA seed; without it psa_crypto_init() returns -148
+    # (PSA_ERROR_INSUFFICIENT_ENTROPY) and Matter InitChipStack fails.
+    if(CONFIG_ENTROPY_RT584 AND TARGET drivers__entropy)
+        target_sources(drivers__entropy PRIVATE
+            ${_RT583_MODULE_ROOT}/drivers/entropy/entropy_rt584.c
+            ${_RT584_HOSAL_SRC}/hosal_trng.c
+        )
+        target_include_directories(drivers__entropy PRIVATE
+            ${_RT583_PLATFORM}/hosal/rt584_hosal/Inc
+            ${_RT583_PLATFORM}/soc/rt584/rt584_driver/Inc
         )
     endif()
 

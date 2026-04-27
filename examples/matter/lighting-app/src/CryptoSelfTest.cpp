@@ -220,8 +220,10 @@ void crypto_selftest(void)
     bool hmac_ok     = test_hmac_sha256();
 
     bool all_ok = aes_ecb_ok && aes_cbc_ok && hmac_ok;
-#else
+#elif defined(CONFIG_SOC_SERIES_RT583)
     /* Self-test disabled — just wire SHA-256 ROM pointers (required for HMAC). */
     sha256_vector_init();
+#else
+    /* rt584: SHA-256 served by mbedTLS PSA backend; no ROM wiring needed. */
 #endif
 }

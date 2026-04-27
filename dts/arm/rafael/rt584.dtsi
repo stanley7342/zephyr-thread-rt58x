@@ -135,3 +135,20 @@
 &uart0 {
     status = "okay";
 };
+
+/*
+ * Peripherals with no memory-mapped register base — placed at root level
+ * (not inside soc) to avoid the dtc simple_bus_reg warning which fires
+ * when a child of a simple-bus node lacks a reg property.
+ */
+/ {
+    trng: trng {
+        compatible = "rafael,rt584-trng";
+        status = "okay";
+    };
+
+    bt_hci_rt584: bt-hci {
+        compatible = "rafael,rt584-bt-hci";
+        status = "disabled";
+    };
+};

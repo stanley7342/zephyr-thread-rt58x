@@ -1,0 +1,17 @@
+/*
+ * Shared MCUboot DTS overlay.
+ *
+ * MCUboot must run from boot_partition (offset 0). Without this chosen,
+ * Zephyr sets FLASH_LOAD_OFFSET to slot0's offset and the bootloader
+ * links at the wrong address.
+ *
+ * Per-board partition resizing lives in boards/<board>.overlay
+ * (rt583 needs to grow slots from 800 KB → 928 KB; rt584 partitions
+ * already match — no rt584 overlay needed).
+ */
+
+/ {
+    chosen {
+        zephyr,code-partition = &boot_partition;
+    };
+};

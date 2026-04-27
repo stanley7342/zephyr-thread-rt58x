@@ -416,11 +416,27 @@ target_include_directories(app PRIVATE
     ${GEN_DIR}/lighting-app
     ${CHIP_ROOT}/examples/lighting-app/lighting-common
     ${CHIP_ROOT}/examples/providers
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-    ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
-    ${RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
 )
+
+# Per-SoC platform headers. Critical: do NOT add the rt583 paths to an rt584
+# build — soc.h does `#include "mcu.h"`, and with rt583's Inc on -I the
+# preprocessor picks up rt583/mcu.h (Cortex-M3, no __FPU_PRESENT) instead of
+# rt584/mcu.h, breaking the cmsis_core_m.h FPU/MPU sanity checks in every CHIP TU.
+if(CONFIG_SOC_SERIES_RT583)
+    target_include_directories(app PRIVATE
+        ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
+        ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
+        ${RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc
+        ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
+    )
+elseif(CONFIG_SOC_SERIES_RT584)
+    target_include_directories(app PRIVATE
+        ${RT583_PLATFORM}/soc/rt584/rt584_driver/Inc
+        ${RT583_PLATFORM}/soc/rt584/rt584_system/Include
+        ${RT583_PLATFORM}/soc/rt584/rt584_crypto/Inc
+        ${RT583_PLATFORM}/hosal/rt584_hosal/Inc
+    )
+endif()
 
 # ── Application sources ──────────────────────────────────────────────────────
 target_sources(app PRIVATE
@@ -431,10 +447,20 @@ target_sources(app PRIVATE
     src/MallocWrappers.cpp
     src/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
-    # HOSAL GPIO / sysctrl (button init, pull-up, debounce, interrupt enable)
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
 )
+
+# HOSAL GPIO / sysctrl (button init, pull-up, debounce, interrupt enable)
+if(CONFIG_SOC_SERIES_RT583)
+    target_sources(app PRIVATE
+        ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
+        ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
+    )
+elseif(CONFIG_SOC_SERIES_RT584)
+    target_sources(app PRIVATE
+        ${RT583_PLATFORM}/hosal/rt584_hosal/Src/hosal_gpio.c
+        ${RT583_PLATFORM}/hosal/rt584_hosal/Src/hosal_sysctrl.c
+    )
+endif()
 
 # Redirect ALL heap allocations to our sys_heap wrapper (MallocWrappers.cpp).
 # --wrap=malloc/calloc/realloc/free covers CHIP SDK and C++ operator new/delete.
@@ -462,22 +488,33 @@ zephyr_ld_options(-Wl,--wrap=mbedtls_ecp_group_load)
 # a linker resolution bug zeroes them.  Root cause also fixed in psa_crypto.c.
 zephyr_ld_options(-Wl,--wrap=psa_key_derivation_setup)
 
-# ── BLE + OpenThread subsystems (RT583 platform) ─────────────────────────────
-if(CONFIG_BLE_RT583)
+# ── BLE + OpenThread subsystems ──────────────────────────────────────────────
+if(CONFIG_BLE_RT583 OR CONFIG_BLE_RT584)
     set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
     include(${RT583_PROJECT_DIR}/subsys/ble/CMakeLists.txt)
 endif()
 
-if(CONFIG_OPENTHREAD_RT583)
+if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
+    # subsys/openthread/CMakeLists.txt expects RAFAEL_SDK; set it here in case
+    # the BLE branch above didn't run (rt584 currently builds without BLE).
+    if(NOT DEFINED RAFAEL_SDK)
+        set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
+    endif()
     # Matter doesn't need the OT CLI — disable it to save ~37 KB flash / 7 KB BSS.
     set(OT_INCLUDE_CLI 0)
     include(${RT583_PROJECT_DIR}/subsys/openthread/CMakeLists.txt)
 endif()
 
 # comm_subsystem_drv.c — RF MCU communication (needed by both BLE and OT)
-target_sources(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
-)
+if(CONFIG_SOC_SERIES_RT583)
+    target_sources(app PRIVATE
+        ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
+    )
+elseif(CONFIG_SOC_SERIES_RT584)
+    target_sources(app PRIVATE
+        ${RT583_PLATFORM}/soc/rt584/rt584_driver/Src/comm_subsystem_drv.c
+    )
+endif()
 
 # Dummy net interface — provides an IPv6 link-local address so that Matter's
 # Server::Init can bind UDP sockets.  RT583's OT radio uses vendored lmac15p4
