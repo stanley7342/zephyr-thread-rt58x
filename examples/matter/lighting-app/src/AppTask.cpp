@@ -781,9 +781,18 @@ static void ServerInitWork(intptr_t arg)
     task.SetLightOn(task.IsLightOn());
     task.UpdateClusterState();
 
-    /* Print commissioning QR code URL and manual pairing code */
-    PrintOnboardingCodes(chip::RendezvousInformationFlags(
-        chip::RendezvousInformationFlag::kBLE));
+    /* Print commissioning QR code URL and manual pairing code only when
+     * the device is not yet commissioned. Once a fabric exists, BLE
+     * advertising is suppressed (Matter spec) and the codes are
+     * meaningless — printing them just clutters every reboot's log. */
+    if (chip::Server::GetInstance().GetFabricTable().FabricCount() == 0) {
+        PrintOnboardingCodes(chip::RendezvousInformationFlags(
+            chip::RendezvousInformationFlag::kBLE));
+    } else {
+        ChipLogProgress(AppServer,
+            "Fabric already commissioned — skipping onboarding codes "
+            "(unpair or open commissioning window to re-pair)");
+    }
 }
 
 /* ── Main event loop ────────────────────────────────────────────────────────── */
