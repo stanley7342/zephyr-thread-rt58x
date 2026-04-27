@@ -79,23 +79,32 @@ int main(void)
     }
 
     /* SG.9 Secure Storage demo: PSA ITS NV-backed boot counter.
-     * First boot prints "boot=1", second "boot=2", and so on across power
-     * cycles, proving the storage_partition NVS backing actually persists. */
+     * First boot prints "boot=1", subsequent boots monotonically increase,
+     * proving the storage_partition NVS backing actually persists.
+     *
+     * Use psa_its_get_info() to disambiguate "UID doesn't exist yet" from
+     * other errors — Zephyr's secure_storage returns -135 INVALID_ARGUMENT
+     * (not -141 DOES_NOT_EXIST) when the entry is missing in some configs,
+     * so checking via _get_info is more portable. */
     {
         uint32_t boot_count = 0;
-        size_t got = 0;
-        psa_status_t s = psa_its_get(PSA_ITS_BOOT_COUNTER_UID, 0,
-                                     sizeof(boot_count), &boot_count, &got);
-        if (s == PSA_ERROR_DOES_NOT_EXIST) {
-            boot_count = 0;
-            printk("[ITS] first boot — counter UID 0x%x not present\n",
-                   PSA_ITS_BOOT_COUNTER_UID);
-        } else if (s != PSA_SUCCESS) {
-            printk("[ITS] FAIL: psa_its_get -> %d\n", s);
-            goto its_done;
-        } else {
+        struct psa_storage_info_t info = {0};
+        psa_status_t s = psa_its_get_info(PSA_ITS_BOOT_COUNTER_UID, &info);
+
+        if (s == PSA_SUCCESS && info.size == sizeof(boot_count)) {
+            size_t got = 0;
+            s = psa_its_get(PSA_ITS_BOOT_COUNTER_UID, 0,
+                            sizeof(boot_count), &boot_count, &got);
+            if (s != PSA_SUCCESS) {
+                printk("[ITS] FAIL: psa_its_get -> %d\n", s);
+                goto its_done;
+            }
             printk("[ITS] read boot_count=%u (got %u bytes)\n",
                    (unsigned)boot_count, (unsigned)got);
+        } else {
+            printk("[ITS] first boot — UID 0x%x not present (info -> %d)\n",
+                   PSA_ITS_BOOT_COUNTER_UID, s);
+            boot_count = 0;
         }
 
         boot_count++;
