@@ -2,20 +2,25 @@
  * Copyright (c) 2025 Rafael Microelectronics
  * SPDX-License-Identifier: Apache-2.0
  *
- * IEEE 802.15.4 radio driver for the RT583.
+ * IEEE 802.15.4 radio driver for Rafael RT58x SoCs (rt583 / rt584).
+ *
+ * The driver body is SoC-agnostic — it bridges Zephyr's
+ * ieee802154_radio_api to the vendor lmac15p4 / hosal_rf APIs which are
+ * the same on both SoCs. Only the DT_DRV_COMPAT string switches per SoC
+ * because Zephyr's DEVICE_DT_INST_DEFINE keys off a single compat.
  *
  * Two modes selectable via Kconfig:
  *
- *   CONFIG_IEEE802154_RT583_FULL=n (default):
+ *   CONFIG_IEEE802154_RAFAEL_FULL=n (default):
  *     Stub driver — every API returns -ENOTSUP.  Exists only so that
  *     Zephyr's OpenThread platform radio.c can resolve
  *     DT_CHOSEN(zephyr_ieee802154).  Actual radio traffic is handled by
  *     sdk/.../openthread_port/Src/ot_radio.c which calls lmac15p4_* and
  *     overrides the otPlatRadio* family directly.
  *
- *   CONFIG_IEEE802154_RT583_FULL=y:
+ *   CONFIG_IEEE802154_RAFAEL_FULL=y:
  *     Real driver — implements ieee802154_radio_api over lmac15p4, so that
- *     Zephyr's radio.c drives the RT583 via the standard driver API.
+ *     Zephyr's radio.c drives the radio via the standard driver API.
  *     Registers a net_if (NET_DEVICE_DT_INST_DEFINE) so the L2
  *     openthread stack and socket path work.  Must be enabled together
  *     with removing ot_radio.c's otPlatRadio* overrides — both paths
@@ -27,9 +32,13 @@
 #include <zephyr/net/ieee802154_radio.h>
 #include <zephyr/init.h>
 
+#if defined(CONFIG_SOC_SERIES_RT584)
+#define DT_DRV_COMPAT rafael_rt584_ieee802154
+#else
 #define DT_DRV_COMPAT rafael_rt583_ieee802154
+#endif
 
-#ifdef CONFIG_IEEE802154_RT583_FULL
+#ifdef CONFIG_IEEE802154_RAFAEL_FULL
 
 #include <zephyr/logging/log.h>
 #include <zephyr/net/net_pkt.h>
@@ -46,7 +55,7 @@
 #include "hosal_trng.h"
 #include "flashctl.h"
 
-LOG_MODULE_REGISTER(ieee802154_rt583, CONFIG_IEEE802154_DRIVER_LOG_LEVEL);
+LOG_MODULE_REGISTER(ieee802154_rafael, CONFIG_IEEE802154_DRIVER_LOG_LEVEL);
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 #define RT583_RX_SENSITIVITY_DBM    (-101)
@@ -584,17 +593,17 @@ static struct ieee802154_radio_api rt583_radio_api = {
 #error "No Zephyr L2 selected for the RT583 ieee802154 driver"
 #endif
 
-#define IEEE802154_RT583_INIT(n) \
+#define IEEE802154_RAFAEL_INIT(n) \
 	NET_DEVICE_DT_INST_DEFINE(n, \
 				  rt583_radio_init, NULL, \
 				  &rt583_radio_data_0, NULL, \
-				  CONFIG_IEEE802154_RT583_INIT_PRIORITY, \
+				  CONFIG_IEEE802154_RAFAEL_INIT_PRIORITY, \
 				  &rt583_radio_api, \
 				  RT583_L2, \
 				  RT583_L2_CTX, \
 				  RT583_MTU);
 
-#else  /* !CONFIG_IEEE802154_RT583_FULL — stub mode */
+#else  /* !CONFIG_IEEE802154_RAFAEL_FULL — stub mode */
 
 /*
  * Stub driver retained for backwards compatibility.  Exists only to
@@ -646,15 +655,15 @@ static struct ieee802154_radio_api ieee802154_rt583_api = {
 	.stop             = ieee802154_rt583_stop,
 };
 
-#define IEEE802154_RT583_INIT(n) \
+#define IEEE802154_RAFAEL_INIT(n) \
 	DEVICE_DT_INST_DEFINE(n, \
 			      ieee802154_rt583_init, \
 			      NULL, \
 			      NULL, NULL, \
 			      POST_KERNEL, \
-			      CONFIG_IEEE802154_RT583_INIT_PRIORITY, \
+			      CONFIG_IEEE802154_RAFAEL_INIT_PRIORITY, \
 			      &ieee802154_rt583_api);
 
-#endif  /* CONFIG_IEEE802154_RT583_FULL */
+#endif  /* CONFIG_IEEE802154_RAFAEL_FULL */
 
-DT_INST_FOREACH_STATUS_OKAY(IEEE802154_RT583_INIT)
+DT_INST_FOREACH_STATUS_OKAY(IEEE802154_RAFAEL_INIT)

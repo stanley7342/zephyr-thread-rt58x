@@ -161,8 +161,8 @@ void otSysProcessDrivers(otInstance *aInstance)
 
     ot_alarmTask(sevent);       /* alarm-milli / alarm-micro event dispatch */
     ot_uartTask(sevent);        /* no-op stub in rt583_otsys.c              */
-#if defined(CONFIG_IEEE802154_RT583_FULL)
-    /* CONFIG_IEEE802154_RT583_FULL path: frames flow through Zephyr's
+#if defined(CONFIG_IEEE802154_RAFAEL_FULL)
+    /* CONFIG_IEEE802154_RAFAEL_FULL path: frames flow through Zephyr's
      * ieee802154 / OPENTHREAD_L2 stack → notify_new_rx_frame() → rx_pkt_fifo.
      * Zephyr's platformRadioProcess() is the ONLY drain for that fifo; it
      * calls openthread_handle_received_frame() which in turn calls

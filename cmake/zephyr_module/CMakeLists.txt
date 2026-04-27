@@ -97,23 +97,6 @@ if(CONFIG_SOC_SERIES_RT583)
         )
     endif()
 
-    # ── IEEE 802.15.4 stub driver (drivers__ieee802154) ───────────────────
-    # Provides DEVICE_DT_DEFINE for the rt583 ieee802154 DTS node so that
-    # Zephyr's openthread/platform/radio.c can resolve DT_CHOSEN(zephyr_ieee802154).
-    if(CONFIG_IEEE802154_RT583 AND TARGET drivers__ieee802154)
-        target_sources(drivers__ieee802154 PRIVATE
-            ${_RT583_MODULE_ROOT}/drivers/ieee802154/ieee802154_rt583.c
-        )
-        target_include_directories(drivers__ieee802154 PRIVATE
-            ${_RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-            # Real driver (CONFIG_IEEE802154_RT583_FULL) needs lmac15p4 + hosal_rf + hosal_trng
-            ${_RT583_MODULE_ROOT}/sdk/components/network/lmac15p4/Inc
-            ${_RT583_PLATFORM}/hosal/rt583_hosal/Inc
-            # Also needs rf_mcu_types (included transitively by hosal_rf.h)
-            ${_RT583_MODULE_ROOT}/sdk/components/network/rt569-rf/rt583/Inc
-        )
-    endif()
-
     # ── Flash driver (drivers__flash) ─────────────────────────────────────
     # flash_rt583.c includes <zephyr/drivers/flash.h> (Zephyr flash API).
     # flash_rt583_hal.c includes "flashctl.h" (RT583 HW API).
@@ -304,6 +287,27 @@ endif() # CONFIG_SOC_SERIES_RT584
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# IEEE 802.15.4 driver (drivers__ieee802154) — SoC-agnostic body in
+# drivers/ieee802154/ieee802154_rafael.c, gated on the matching DT compat
+# (rafael,rt5{83,84}-ieee802154). Always provides the stub mode for
+# DT_CHOSEN(zephyr_ieee802154); CONFIG_IEEE802154_RAFAEL_FULL flips it
+# into a full ieee802154_radio_api implementation backed by lmac15p4.
+# ══════════════════════════════════════════════════════════════════════════
+if(CONFIG_IEEE802154_RAFAEL AND TARGET drivers__ieee802154)
+    target_sources(drivers__ieee802154 PRIVATE
+        ${_RT583_MODULE_ROOT}/drivers/ieee802154/ieee802154_rafael.c
+    )
+    # The "full" mode pulls in lmac15p4 / hosal_rf / hosal_trng. Their
+    # SoC-correct include dirs are already exported globally via
+    # zephyr_include_directories from the SoC-specific blocks above; just
+    # add the lmac15p4 path here (same on both SoCs).
+    target_include_directories(drivers__ieee802154 PRIVATE
+        ${_RT583_MODULE_ROOT}/sdk/components/network/lmac15p4/Inc
+    )
+endif()
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # OpenThread platform integration — applies to BOTH rt583 and rt584 builds.
 # When CONFIG_OPENTHREAD_RT58{3,4}=y, our subsys/openthread/CMakeLists.txt
 # pulls the SDK OT sources into libapp.a. Zephyr's modules/lib/openthread
@@ -348,7 +352,7 @@ if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
     # only when Zephyr's L2 OT is NOT enabled (Matter build keeps L2 →
     # keeps openthread.c).
     function(_rafael_strip_ot_platform_sources)
-        if(CONFIG_IEEE802154_RT583_FULL)
+        if(CONFIG_IEEE802154_RAFAEL_FULL)
             set(_strip_regex
                 "(alarm_milli|alarm_micro|alarm_counter|entropy|misc|platform|settings|logging|crypto_psa|memory)\\.c$"
             )

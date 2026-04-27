@@ -1,0 +1,9 @@
+description: Rafael RT584 IEEE 802.15.4 radio binding.
+  Provides a DTS device node so that Zephyr's openthread/platform/radio.c
+  can resolve DT_CHOSEN(zephyr_ieee802154) at compile time. The actual
+  radio access is performed by ot_radio.c via the lmac15p4 library, or
+  by drivers/ieee802154/ieee802154_rafael.c when CONFIG_IEEE802154_RAFAEL_FULL=y.
+
+compatible: "rafael,rt584-ieee802154"
+
+include: base.yaml

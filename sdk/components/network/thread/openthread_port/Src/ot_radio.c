@@ -85,10 +85,10 @@ typedef struct _otRadio_t {
 
 /* ── Static state ────────────────────────────────────────────────────────── */
 /* All of these are only referenced by the legacy otPlatRadio* overrides and
- * the legacy ot_radioInit() path, both guarded by !CONFIG_IEEE802154_RT583_FULL.
+ * the legacy ot_radioInit() path, both guarded by !CONFIG_IEEE802154_RAFAEL_FULL.
  * When FULL=y the Zephyr ieee802154 driver owns the radio, so hide them here
  * to avoid -Wunused warnings. */
-#if !defined(CONFIG_IEEE802154_RT583_FULL)
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
 
 static otRadio_t otRadio_var;
 
@@ -153,16 +153,16 @@ static void ReverseExtAddress(otExtAddress *dst, const otExtAddress *src)
     }
 }
 
-#endif  /* !CONFIG_IEEE802154_RT583_FULL (static state + helpers) */
+#endif  /* !CONFIG_IEEE802154_RAFAEL_FULL (static state + helpers) */
 
 /* ── otPlatRadio* overrides (legacy path) ──────────────────────────────────
  *
- * When CONFIG_IEEE802154_RT583_FULL=y, Zephyr's modules/openthread/platform/
+ * When CONFIG_IEEE802154_RAFAEL_FULL=y, Zephyr's modules/openthread/platform/
  * radio.c provides otPlatRadio* via our new ieee802154 driver (lmac15p4
  * wrapped in the standard ieee802154_radio_api), so these direct overrides
  * are compiled out to avoid link conflicts.
  */
-#if !defined(CONFIG_IEEE802154_RT583_FULL)
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
 
 /* ── Radio config getters ────────────────────────────────────────────────── */
 uint32_t otPlatRadioGetBusSpeed(otInstance *aInstance)
@@ -869,10 +869,10 @@ void ot_radioTask(ot_system_event_t trxEvent)
     }
 }
 
-#endif  /* !CONFIG_IEEE802154_RT583_FULL */
+#endif  /* !CONFIG_IEEE802154_RAFAEL_FULL */
 
 /* ── ot_radioInit ────────────────────────────────────────────────────────── */
-#if !defined(CONFIG_IEEE802154_RT583_FULL)
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
 static void rafael_otp_mac_addr(uint8_t *addr)
 {
     uint8_t tmp[256];
@@ -883,7 +883,7 @@ static void rafael_otp_mac_addr(uint8_t *addr)
 
 void ot_radioInit(void)
 {
-#if defined(CONFIG_IEEE802154_RT583_FULL)
+#if defined(CONFIG_IEEE802154_RAFAEL_FULL)
     /* All radio setup (callbacks, channel, auto-ack, src-match, EUI-64
      * derivation) is done by ieee802154_rt583.c at POST_KERNEL device
      * init.  Nothing left to do here. */
@@ -948,7 +948,7 @@ void ot_radioInit(void)
     lmac15p4_auto_state_set(sAuto_State_Set);
     lmac15p4_src_match_ctrl(0, true);
     lmac15p4_src_match_short_entry(CLEAR_ALL, NULL);
-#endif  /* CONFIG_IEEE802154_RT583_FULL */
+#endif  /* CONFIG_IEEE802154_RAFAEL_FULL */
 }
 
 /* ── Address control helpers (public) ────────────────────────────────────── */

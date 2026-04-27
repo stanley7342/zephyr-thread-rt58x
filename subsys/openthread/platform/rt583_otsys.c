@@ -35,7 +35,7 @@ void otSysInit(int argc, char *argv[])
 {
     (void)argc;
     (void)argv;
-#if defined(CONFIG_IEEE802154_RT583_FULL)
+#if defined(CONFIG_IEEE802154_RAFAEL_FULL)
     /* Zephyr's modules/openthread/platform/radio.c owns the IEEE 802.15.4
      * driver handle (radio_dev / radio_api) and caches them in
      * platformRadioInit().  Since we strip platform.c from the build, we
@@ -47,9 +47,9 @@ void otSysInit(int argc, char *argv[])
 #endif
 }
 
-#if defined(CONFIG_IEEE802154_RT583_FULL)
+#if defined(CONFIG_IEEE802154_RAFAEL_FULL)
 /**
- * otPlatCryptoExportKey — stub for CONFIG_IEEE802154_RT583_FULL path.
+ * otPlatCryptoExportKey — stub for CONFIG_IEEE802154_RAFAEL_FULL path.
  *
  * Zephyr's modules/openthread/platform/radio.c calls this from
  * otPlatRadioSetMacKey() when MAC keys are passed by reference.  The real
@@ -73,7 +73,7 @@ otError otPlatCryptoExportKey(otCryptoKeyRef aKeyRef, uint8_t *aBuffer,
 #else
 /**
  * platformRadioInit / platformRadioProcess / notify_new_{rx,tx}_frame — no-op
- * stubs used only when CONFIG_IEEE802154_RT583_FULL=n.
+ * stubs used only when CONFIG_IEEE802154_RAFAEL_FULL=n.
  *
  * In the legacy path the real radio work is done by ot_radio.c directly via
  * lmac15p4 (bypassing Zephyr's ieee802154 driver / L2 net_pkt plumbing), so
@@ -81,7 +81,7 @@ otError otPlatCryptoExportKey(otCryptoKeyRef aKeyRef, uint8_t *aBuffer,
  * cmake/zephyr_module/CMakeLists.txt and these stubs satisfy remaining
  * link references from subsys/net/l2/openthread/openthread.c.
  *
- * When CONFIG_IEEE802154_RT583_FULL=y, radio.c is un-stripped and provides
+ * When CONFIG_IEEE802154_RAFAEL_FULL=y, radio.c is un-stripped and provides
  * the real implementations — these stubs must NOT be present to avoid
  * duplicate-definition errors.
  */
@@ -105,7 +105,7 @@ int notify_new_tx_frame(struct net_pkt *pkt)
     (void)pkt;
     return -1;
 }
-#endif /* !CONFIG_IEEE802154_RT583_FULL */
+#endif /* !CONFIG_IEEE802154_RAFAEL_FULL */
 
 /**
  * ot_uartTask — no-op stub for the Matter build only.

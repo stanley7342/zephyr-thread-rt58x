@@ -151,4 +151,9 @@
         compatible = "rafael,rt584-bt-hci";
         status = "disabled";
     };
+
+    ieee802154_rt584: ieee802154 {
+        compatible = "rafael,rt584-ieee802154";
+        status = "okay";
+    };
 };

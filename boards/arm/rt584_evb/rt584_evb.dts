@@ -18,6 +18,7 @@
         zephyr,code-partition   = &slot0_partition;
         zephyr,entropy          = &trng;
         zephyr,bt-hci           = &bt_hci_rt584;
+        zephyr,ieee802154       = &ieee802154_rt584;
     };
 };
 
