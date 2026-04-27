@@ -208,23 +208,12 @@ if(CONFIG_OPENTHREAD_RT584)
     target_sources(app PRIVATE
         ${RT569_FW_DIR}/Src/rt569s_fw.c
         ${RT569_FW_DIR}/Src/rt569s_init.c
-        # rf_common_init_by_fw on rt584 calls into SADC. Pull it in here
-        # together with the MP-sector reader (mpcalrftrimread / mpcaladcinit
-        # are referenced by sadc.c and rf_common_init.c).
-        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/sadc.c
-        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/wdt.c
-        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/trng.c
-        # otp.c provides rt_write_rng_enable used by trng.c.
-        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_driver/Src/otp.c
-        ${RAFAEL_SDK}/components/platform/soc/rt584/rt584_system/Src/mp_sector.c
-        # ot_entropy.c / ot_crypto.c on rt584 still call hosal_trng.
-        ${RAFAEL_SDK}/components/platform/hosal/rt584_hosal/Src/hosal_trng.c
-        # rt584-specific compat stubs:
-        #   aes_fw_init                       — RT583 API not in rt584 rt_aes.c
-        #   Tx_Power_Compensation_Init/Handler — rt584's rf_tx_comp.c is
-        #     FreeRTOS-tied; stubbed instead of porting (Phase B).
-        ${CMAKE_CURRENT_LIST_DIR}/platform/rt584_compat.c
     )
+    # SDK driver sources (sadc / mp_sector / wdt / trng / otp / hosal_trng)
+    # and rt584_compat.c are now pulled in at module level
+    # (cmake/zephyr_module/CMakeLists.txt) under
+    #   if(CONFIG_OPENTHREAD_RT584 OR CONFIG_BLE_RT584)
+    # so the BLE-only build also gets them. No duplication needed here.
 else()
     target_sources(app PRIVATE
         ${RT569_FW_DIR}/Src/rt569mp_fw.c

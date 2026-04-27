@@ -239,7 +239,17 @@ if(CONFIG_SOC_SERIES_RT584)
     # init). Pull it in unconditionally on rt584 so example CMakeLists
     # doesn't have to know.
     if(CONFIG_OPENTHREAD_RT584 OR CONFIG_BLE_RT584)
-        zephyr_sources(${_RT584_DRV_SRC}/comm_subsystem_drv.c)
+        # SDK driver sources referenced by rf_common_init.c (sadc /
+        # mp_sector / rf_tx_comp) and the rt584 stub for the FreeRTOS-tied
+        # Tx_Power_Compensation entry points + aes_fw_init. Single source
+        # of truth — no longer duplicated in subsys/openthread.
+        zephyr_sources(
+            ${_RT584_DRV_SRC}/comm_subsystem_drv.c
+            ${_RT584_DRV_SRC}/sadc.c
+            ${_RT584_DRV_SRC}/wdt.c
+            ${_RT584_SYS_SRC}/mp_sector.c
+            ${_RT583_MODULE_ROOT}/subsys/openthread/platform/rt584_compat.c
+        )
     endif()
 
     # UART driver — uart_rt584.c + hosal_uart.c wired into drivers__serial
@@ -260,10 +270,14 @@ if(CONFIG_SOC_SERIES_RT584)
     # Entropy driver (drivers__entropy) — wraps hosal_trng. Required for
     # mbedTLS PSA seed; without it psa_crypto_init() returns -148
     # (PSA_ERROR_INSUFFICIENT_ENTROPY) and Matter InitChipStack fails.
+    # trng.c provides get_random_number (called by hosal_trng.c); otp.c
+    # provides rt_write_rng_enable used by trng.c.
     if(CONFIG_ENTROPY_RT584 AND TARGET drivers__entropy)
         target_sources(drivers__entropy PRIVATE
             ${_RT583_MODULE_ROOT}/drivers/entropy/entropy_rt584.c
             ${_RT584_HOSAL_SRC}/hosal_trng.c
+            ${_RT584_DRV_SRC}/trng.c
+            ${_RT584_DRV_SRC}/otp.c
         )
         target_include_directories(drivers__entropy PRIVATE
             ${_RT583_PLATFORM}/hosal/rt584_hosal/Inc
