@@ -419,29 +419,25 @@ public:
 
 static FactoryResetOnFabricRemoved sFabricDelegate;
 
+static void RebootAfterFactoryReset(struct k_work * /*work*/)
+{
+    LOG_WRN("[BTN] Factory reset complete — rebooting");
+    sys_reboot(SYS_REBOOT_COLD);
+}
+static K_WORK_DELAYABLE_DEFINE(sFactoryResetRebootWork, RebootAfterFactoryReset);
+
 static void DoFactoryReset(intptr_t /* arg */)
 {
-    /* Direct flash_erase on the storage partition (NVS backing store,
-     * 0x001E0000 + 64 KB per rt583.dtsi).  Equivalent to OpenOCD's
-     * `flash erase_address 0x001E0000 0x10000`, but from the device.
-     * Uses Zephyr 4.x's PARTITION_* accessors — FIXED_PARTITION_* are
-     * deprecated. */
-    const struct device * flash_dev = PARTITION_DEVICE(storage_partition);
-    off_t  offset = PARTITION_OFFSET(storage_partition);
-    size_t size   = PARTITION_SIZE(storage_partition);
-
-    LOG_WRN("[BTN] Factory reset: erasing storage 0x%08lx + %u bytes",
-            (unsigned long) offset, (unsigned) size);
-
-    int rc = flash_erase(flash_dev, offset, size);
-    if (rc) {
-        LOG_ERR("[BTN] flash_erase failed: %d", rc);
-    } else {
-        LOG_WRN("[BTN] Factory reset complete — rebooting");
-    }
-
-    k_msleep(100);
-    sys_reboot(SYS_REBOOT_COLD);
+    /* Use Matter's ScheduleFactoryReset to tear down KVS / fabric table /
+     * OperationalKeystore (PSA ITS) / GroupDataProvider / ACL / session
+     * resumption coherently — its async DoFactoryReset() then settles by
+     * calling PlatformMgr().Shutdown(). On Zephyr that does NOT reboot;
+     * the platform expects the integrator to do it. Schedule a 500 ms
+     * Zephyr-side delayed work for sys_reboot — that's well after the
+     * NVS clear completes on rt583/rt584. */
+    LOG_WRN("[BTN] Factory reset: ScheduleFactoryReset");
+    chip::Server::GetInstance().ScheduleFactoryReset();
+    k_work_schedule(&sFactoryResetRebootWork, K_MSEC(500));
 }
 
 /* Called by CHIP SystemLayer timer when GPIO0 has been held for 6 s.
