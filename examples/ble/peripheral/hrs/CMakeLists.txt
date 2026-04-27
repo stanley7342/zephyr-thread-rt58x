@@ -8,28 +8,17 @@ set(SOC_ROOT     ${RT583_PROJECT_DIR})
 set(DTS_ROOT     ${RT583_PROJECT_DIR})
 set(KCONFIG_ROOT ${RT583_PROJECT_DIR}/Kconfig)
 
+# Module-level glue (cmake/zephyr_module/CMakeLists.txt) provides the
+# SoC-aware platform sources, include dirs and driver wiring.
 list(APPEND ZEPHYR_EXTRA_MODULES ${RT583_PROJECT_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(rt583_ble_hrs VERSION 1.1.1)
+project(rafael_ble_hrs VERSION 1.1.1)
 
 target_sources(app PRIVATE src/main.c)
 
-# RT583 platform include dirs
-set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
-target_include_directories(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-    ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
-)
-
-# comm_subsystem_drv.c — needed for RF MCU communication
-target_sources(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
-)
-
-# ── BLE subsystem ─────────────────────────────────────────────────────────────
-if(CONFIG_BLE_RT583)
+# BLE subsystem (SDK port) — sets up app's BLE/HOSAL/RF include paths internally.
+if(CONFIG_BLE_RT583 OR CONFIG_BLE_RT584)
     set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
     include(${RT583_PROJECT_DIR}/subsys/ble/CMakeLists.txt)
 endif()

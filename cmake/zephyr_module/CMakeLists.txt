@@ -45,11 +45,30 @@ if(CONFIG_SOC_SERIES_RT583)
         ${_RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
     )
 
+    # comm_subsystem_drv.c — referenced by OT/BLE app paths
+    # (Commsubsystem_Reg_Ctrl_Init etc.). Pull in unconditionally on
+    # rt583 OT/BLE builds so example CMakeLists doesn't need to know.
+    if(CONFIG_OPENTHREAD_RT583 OR CONFIG_BLE_RT583)
+        zephyr_sources(${_RT583_DRV_SRC}/comm_subsystem_drv.c)
+    endif()
+
     zephyr_include_directories(
         ${_RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
         ${_RT583_PLATFORM}/soc/rt583/rt583_system/Include
         ${_RT583_PLATFORM}/hosal/rt583_hosal/Inc
+        # rf_mcu_types.h needed by anything that includes hosal_rf.h or
+        # comm_subsystem_drv.h. rt583 uses Inc/, rt584 uses include/.
+        ${_RT583_MODULE_ROOT}/sdk/components/network/rt569-rf/rt583/Inc
     )
+
+    # Matter pulls in rt583_crypto headers (HW AES-128/HMAC-SHA256). Only
+    # add when CHIP is built so non-Matter examples don't get unused -I.
+    if(CONFIG_CHIP)
+        zephyr_include_directories(${_RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc)
+        zephyr_sources(
+            ${_RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
+        )
+    endif()
 
     # ── UART driver (drivers__serial) ─────────────────────────────────────
     if(CONFIG_UART_RT583)
@@ -206,7 +225,22 @@ if(CONFIG_SOC_SERIES_RT584)
         ${_RT583_PLATFORM}/soc/rt584/rt584_driver/Inc
         ${_RT583_PLATFORM}/soc/rt584/rt584_system/Include
         ${_RT583_PLATFORM}/hosal/rt584_hosal/Inc
+        # rf_mcu_types.h — rt584 uses lowercase include/.
+        ${_RT583_MODULE_ROOT}/sdk/components/network/rt569-rf/rt584/include
     )
+
+    if(CONFIG_CHIP)
+        zephyr_include_directories(${_RT583_PLATFORM}/soc/rt584/rt584_crypto/Inc)
+        zephyr_sources(${_RT584_HOSAL_SRC}/hosal_gpio.c)
+    endif()
+
+    # comm_subsystem_drv.c — only rt584 has it, and only the OT/BLE app
+    # path uses it (Commsubsystem_Reg_Ctrl_Init etc. for SRAM deep-sleep
+    # init). Pull it in unconditionally on rt584 so example CMakeLists
+    # doesn't have to know.
+    if(CONFIG_OPENTHREAD_RT584 OR CONFIG_BLE_RT584)
+        zephyr_sources(${_RT584_DRV_SRC}/comm_subsystem_drv.c)
+    endif()
 
     # UART driver — uart_rt584.c + hosal_uart.c wired into drivers__serial
     # so they pick up the right include paths.

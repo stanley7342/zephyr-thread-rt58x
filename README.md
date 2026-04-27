@@ -1,27 +1,35 @@
-# RT583-EVB — Zephyr + Matter + OpenThread
+# RT583 / RT584-EVB — Zephyr + Matter + OpenThread
 
-Zephyr RTOS port for the **Rafael Microelectronics RT583** (ARM Cortex-M3 @ 64 MHz) with a full **Matter-over-Thread** stack (commissionable lighting-app) and a standalone **OpenThread FTD CLI**.
+Zephyr RTOS port for **Rafael Microelectronics RT583** (Cortex-M3 @ 64 MHz) and **RT584** (Cortex-M33 @ 64 MHz) with a full **Matter-over-Thread** stack (commissionable lighting-app) and a standalone **OpenThread FTD CLI**. Same source tree, same examples — switch between SoCs with `-b rt583_evb` vs `-b rt584_evb`.
 
+| Item | RT583 | RT584 |
+|------|-------|-------|
+| Core | Cortex-M3 (no FPU/MPU/TrustZone) | Cortex-M33 + TrustZone + FPU |
+| Clock | 64 MHz BBPLL | 64 MHz BBPLL |
+| RAM / Flash | 144 KB / 2 MB | 256 KB / 2 MB |
+| UART0 console | GPIO16/17 | GPIO16/17 |
+| Status (2026-04-27) | Matter end-to-end ✓ | OT CLI ✓, Matter Server Listening ✓, BLE Phase B in progress |
+
+Common stack:
 | Item | Value |
 |------|-------|
-| SoC | RT583 (ARM Cortex-M3, 64 MHz BBPLL) |
-| RAM / Flash | 144 KB / 2 MB |
 | Zephyr | 4.4.0-rc1 |
-| Matter | v1.4.2 (connectedhomeip `72f238add7`) |
+| Matter | v1.4.2 (connectedhomeip `fdb31dbcb3`) |
 | OpenThread | FTD (Full Thread Device) |
 | Crypto | TF-PSA-Crypto 4.0 / mbedTLS 4.0 |
-| BLE | Zephyr host on RT583 RF MCU HCI |
-| Console | UART0 — TX: GPIO16, RX: GPIO17, **115200 8N1** |
+| BLE | Zephyr host on integrated RF MCU HCI |
+| Console | UART0 — **115200 8N1** |
 
 ---
 
 ## Highlights — what works today
 
-- ✅ **Matter commissioning over BLE-Thread** — end-to-end with chip-tool or Apple/Google ecosystems: BLE PASE → Thread attach → CASE Sigma1/2/3 → SRP register → operational.
+- ✅ **Matter commissioning over BLE-Thread on rt583** — end-to-end with chip-tool or Apple/Google ecosystems: BLE PASE → Thread attach → CASE Sigma1/2/3 → SRP register → operational.
 - ✅ **`_matter._tcp` mDNS advertise** via SRP client to the Thread Border Router.
-- ✅ **Factory reset** — 6-sec GPIO0 hold **or** `RemoveFabric` command physically erases the NVS storage partition.
+- ✅ **Factory reset** — 6-sec GPIO0 hold **or** `RemoveFabric` command tears down KVS / fabric table / OperationalKeystore via Matter's `ScheduleFactoryReset()`, then a delayed Zephyr `sys_reboot`.
 - ✅ **MCUboot** — built and flashed together with the app via one `west build --sysbuild` + `west flash` pair. Per-app modes: **Direct-XIP** (Thread CLI, BLE HRS, Blinky, Hello world) or **SINGLE_APP** (Matter lighting, because connectedhomeip's deeply-nested object paths push `ar`'s archive-path buffer past Windows' 260-char MAX_PATH on the Direct-XIP slot1 rebuild).
-- ✅ **OpenThread FTD CLI** — standalone build on the same board.
+- ✅ **OpenThread FTD CLI on rt583 + rt584** — standalone build on either board, same source tree.
+- ✅ **Single-source examples** — every example builds for both rt583_evb and rt584_evb without per-board edits; SoC-specific glue lives entirely in `cmake/zephyr_module/CMakeLists.txt` and Kconfig auto-selects.
 
 ---
 
@@ -67,8 +75,13 @@ cd zephyr-thread-rt58x
 ### Step 3 — Build + Flash
 
 ```powershell
-west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
-west flash -d build/lighting-app
+# RT583
+west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app583
+west flash -d build/lighting-app583
+
+# RT584 (same source, swap the board name)
+west build --sysbuild -p always -b rt584_evb examples/thread             -d build/thread584
+west flash -d build/thread584
 ```
 
 `--sysbuild` builds MCUboot + app in one invocation (driven by each app's
@@ -91,15 +104,23 @@ without `--sysbuild` — the legacy two-step flow has been removed.
 Every app carries its own `sysbuild.conf` (selects the MCUboot mode) and
 `sysbuild/mcuboot.{conf,overlay}` (driver bits + flash partition layout).
 One `west build --sysbuild` call configures and builds both MCUboot and the
-app into the same output tree, and one `west flash` programs both images:
+app into the same output tree, and one `west flash` programs both images.
+Swap `rt583_evb` for `rt584_evb` to target the other SoC — the example
+sources and configs are unchanged:
+
 ```powershell
-west build --sysbuild -p always -b rt583_evb examples/thread               -d build/thread
-west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app  -d build/lighting-app
-west build --sysbuild -p always -b rt583_evb examples/ble/peripheral/hrs   -d build/ble_hrs
-west build --sysbuild -p always -b rt583_evb examples/blinky               -d build/blinky
-west build --sysbuild -p always -b rt583_evb examples/hello_world          -d build/hello_world
-west build --sysbuild -p always -b rt583_evb tests/flash                   -d build/test_flash
+# Pick a board, then run any of the targets:
+$BOARD = "rt583_evb"   # or "rt584_evb"
+west build --sysbuild -p always -b $BOARD examples/thread               -d build/thread
+west build --sysbuild -p always -b $BOARD examples/matter/lighting-app  -d build/lighting-app
+west build --sysbuild -p always -b $BOARD examples/ble/peripheral/hrs   -d build/ble_hrs
+west build --sysbuild -p always -b $BOARD examples/blinky               -d build/blinky
+west build --sysbuild -p always -b $BOARD examples/hello_world          -d build/hello_world
+west build --sysbuild -p always -b rt583_evb tests/flash                -d build/test_flash  # rt583 only
 ```
+
+`tests/flash` is rt583-only (uses `CONFIG_FLASH_RT583` / `CONFIG_UART_RT583`).
+All other examples build for both SoCs without edits.
 
 ---
 
@@ -173,14 +194,22 @@ When the last fabric is removed, the device automatically factory-resets (NVS wi
 
 Press and hold **GPIO0** for 6 seconds. On release you see:
 ```
-[BTN] Factory reset triggered (6s hold reached)
+[BTN] Factory reset: ScheduleFactoryReset
+[BTN] Factory reset complete — rebooting
 ```
 
-The device calls `flash_erase()` on the storage partition (0x001E0000 + 64 KB) and reboots cold.
+The device calls `chip::Server::GetInstance().ScheduleFactoryReset()` to
+coherently tear down KVS / fabric table / OperationalKeystore (PSA ITS) /
+GroupDataProvider / ACL / session resumption, then a 500 ms-delayed Zephyr
+work item issues `sys_reboot(SYS_REBOOT_COLD)`. Earlier raw `flash_erase` on
+the storage partition left fabric metadata behind — the next commissioning
+attempt would allocate fabric index 2 and AddNOC would fail with
+InvalidPublicKey/InvalidNOC. Going through the Matter framework prevents
+that.
 
 ### Via `RemoveFabric`
 
-See Section 4 — removing the last fabric triggers the same flash-erase path automatically.
+See Section 4 — removing the last fabric triggers the same `ScheduleFactoryReset` path via a `FabricTable::Delegate` hook.
 
 ### Manual (OpenOCD)
 
@@ -309,8 +338,9 @@ zephyr-thread-rt58x/
 |----------|-----------|
 | Build everything from source (no prebuilt `.a`) | Toolchain upgrades don't break ABI |
 | Matter + OT + BLE share one RF MCU | `HOSAL_RF_MODE_MULTI_PROTOCOL` — BLE commissioning and 802.15.4 coexist |
-| ECDH bypass via `mbedtls_ecp_mul` (connectedhomeip fork patch) | TF-PSA-Crypto 4.0's `psa_raw_key_agreement` rejects valid keypairs on this build |
-| `FabricTable::Delegate` triggers NVS erase on last-fabric removal | Aligns behaviour with the GPIO0 6-sec hold |
+| ECDH bypass via `mbedtls_ecp_mul` (connectedhomeip fork patch) | TF-PSA-Crypto 4.0's `psa_raw_key_agreement` rejects valid ephemeral keypairs; `mbedtls_ecp_mul` also requires a non-NULL RNG callback in 4.0 (we wrap `psa_generate_random`) |
+| `FabricTable::Delegate` triggers `ScheduleFactoryReset` on last-fabric removal | Aligns behaviour with the GPIO0 6-sec hold; uses Matter's framework so PSA ITS / KVS / fabric metadata clear coherently |
+| RT584 IDAU re-arm in `soc.c` | MCUboot leaves IDAU peripheral attribute table half-applied; an explicit `sec_idau_ctrl = 1` rewrite makes the COMM_SUBSYSTEM secure alias actually routable, otherwise `hosal_rf_init` spins forever |
 | Shell disabled (`CONFIG_SHELL=n`) on Matter | shell TX ISR races with `printk` polling on UART0 |
 | OT log level = `NONE` on Matter | Matter's `ChipLogProgress/Error` provides all needed visibility; OT strings waste ~27 KB flash |
 

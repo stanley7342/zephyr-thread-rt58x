@@ -10,77 +10,31 @@ set(KCONFIG_ROOT ${RT583_PROJECT_DIR}/Kconfig)
 
 # Register the project root as a Zephyr module so that cmake/zephyr_module/
 # CMakeLists.txt is included at the correct point in Zephyr's build graph.
-# This contributes RT583 platform sources, UART, and flash drivers.
+# That module contributes all SoC-aware platform sources, include dirs,
+# and driver wiring — example stays SoC-agnostic.
 list(APPEND ZEPHYR_EXTRA_MODULES ${RT583_PROJECT_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(rt583_ot_ftd_cli VERSION 1.0.0)
+project(rafael_ot_ftd_cli VERSION 1.0.0)
 
 target_sources(app PRIVATE src/main.c)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
 
 # Increase OT task stack from default 4 KB to 8 KB — CLI command processing
 # (otCliInputLine → version/state/dataset handlers) can consume 3-4 KB of stack
 # on top of the base OT FTD loop frame, overflowing the 4 KB default.
 target_compile_definitions(app PRIVATE CONFIG_OPENTHREAD_TASK_SIZE=8192)
+
 if(CONFIG_OTA)
     target_sources(app PRIVATE src/ota_app.c)
-endif()
-target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
-
-# Per-SoC platform include dirs for app-level sources (OT port, main.c, etc.).
-# Platform sources themselves are provided by cmake/zephyr_module/CMakeLists.txt.
-set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
-set(OT_ROOT        ${RT583_PROJECT_DIR}/sdk/components/network/thread/openthread)
-set(OT_PORT_INC    ${RT583_PROJECT_DIR}/sdk/components/network/thread/openthread_port/Inc)
-set(LMAC_INC       ${RT583_PROJECT_DIR}/sdk/components/network/lmac15p4/Inc)
-
-if(CONFIG_OPENTHREAD_RT584)
-    set(RT_DRV_INC  ${RT583_PLATFORM}/soc/rt584/rt584_driver/Inc)
-    set(RT_SYS_INC  ${RT583_PLATFORM}/soc/rt584/rt584_system/Include)
-    set(RT_HOSAL_INC ${RT583_PLATFORM}/hosal/rt584_hosal/Inc)
-    set(RT569_RF_DIR ${RT583_PROJECT_DIR}/sdk/components/network/rt569-rf/rt584)
-    # rt584's RF header dir is lowercase `include/`, rt583 uses `Inc/`.
-    set(RT569_RF_INC ${RT569_RF_DIR}/include)
-    set(SOC_DRV_SRC ${RT583_PLATFORM}/soc/rt584/rt584_driver/Src)
-else()
-    set(RT_DRV_INC  ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc)
-    set(RT_SYS_INC  ${RT583_PLATFORM}/soc/rt583/rt583_system/Include)
-    set(RT_HOSAL_INC ${RT583_PLATFORM}/hosal/rt583_hosal/Inc)
-    set(RT569_RF_DIR ${RT583_PROJECT_DIR}/sdk/components/network/rt569-rf/rt583)
-    set(RT569_RF_INC ${RT569_RF_DIR}/Inc)
-    set(SOC_DRV_SRC ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src)
+    include(${RT583_PROJECT_DIR}/subsys/ota/CMakeLists.txt)
 endif()
 
-target_include_directories(app PRIVATE
-    ${RT_DRV_INC}
-    ${RT_SYS_INC}
-    ${RT_HOSAL_INC}
-    # RF MCU types — needed by comm_subsystem_drv.c
-    ${RT569_RF_INC}
-    # OpenThread public API — needed by main.c (<openthread/cli.h> etc.)
-    ${OT_ROOT}/include
-    # OpenThread Rafael port headers (openthread_port.h, ot_zephyr.h, …)
-    ${OT_PORT_INC}
-    # 802.15.4 LMAC headers (lmac15p4.h)
-    ${LMAC_INC}
-)
-
-# comm_subsystem_drv.c is only needed by the Thread example (not MCUboot).
-target_sources(app PRIVATE
-    ${SOC_DRV_SRC}/comm_subsystem_drv.c
-)
-
-# ── OpenThread subsystem ──────────────────────────────────────────────────────
-# RAFAEL_SDK must be set before including subsys/openthread/CMakeLists.txt
-# because it uses the variable to locate SDK sources.
+# OpenThread subsystem (SDK port) — pulls in the SDK OT core + Rafael
+# port glue. Sets up app's OT/LMAC/HOSAL include paths internally.
 if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
     set(RAFAEL_SDK ${RT583_PROJECT_DIR}/sdk)
     include(${RT583_PROJECT_DIR}/subsys/openthread/CMakeLists.txt)
-endif()
-
-# ── OTA subsystem ─────────────────────────────────────────────────────────────
-if(CONFIG_OTA)
-    include(${RT583_PROJECT_DIR}/subsys/ota/CMakeLists.txt)
 endif()
 
 # OT's bundled mbedTLS 3.6 overlaps with Zephyr's TF-PSA-Crypto 4.0 for

@@ -407,8 +407,9 @@ target_compile_options(app PRIVATE
 )
 
 # ── Include directories ──────────────────────────────────────────────────────
-set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
-
+# SoC platform/HOSAL/crypto include dirs and hosal_gpio.c are added by the
+# module-level CMakeLists (cmake/zephyr_module/CMakeLists.txt) — example only
+# adds Matter-specific paths here.
 target_include_directories(app PRIVATE
     src/include
     ${GEN_DIR}
@@ -417,26 +418,6 @@ target_include_directories(app PRIVATE
     ${CHIP_ROOT}/examples/lighting-app/lighting-common
     ${CHIP_ROOT}/examples/providers
 )
-
-# Per-SoC platform headers. Critical: do NOT add the rt583 paths to an rt584
-# build — soc.h does `#include "mcu.h"`, and with rt583's Inc on -I the
-# preprocessor picks up rt583/mcu.h (Cortex-M3, no __FPU_PRESENT) instead of
-# rt584/mcu.h, breaking the cmsis_core_m.h FPU/MPU sanity checks in every CHIP TU.
-if(CONFIG_SOC_SERIES_RT583)
-    target_include_directories(app PRIVATE
-        ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-        ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
-        ${RT583_PLATFORM}/soc/rt583/rt583_crypto/Inc
-        ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
-    )
-elseif(CONFIG_SOC_SERIES_RT584)
-    target_include_directories(app PRIVATE
-        ${RT583_PLATFORM}/soc/rt584/rt584_driver/Inc
-        ${RT583_PLATFORM}/soc/rt584/rt584_system/Include
-        ${RT583_PLATFORM}/soc/rt584/rt584_crypto/Inc
-        ${RT583_PLATFORM}/hosal/rt584_hosal/Inc
-    )
-endif()
 
 # ── Application sources ──────────────────────────────────────────────────────
 target_sources(app PRIVATE
@@ -448,19 +429,6 @@ target_sources(app PRIVATE
     src/ecp_enum_compat.c
     ${CHIP_ROOT}/examples/providers/DeviceInfoProviderImpl.cpp
 )
-
-# HOSAL GPIO / sysctrl (button init, pull-up, debounce, interrupt enable)
-if(CONFIG_SOC_SERIES_RT583)
-    target_sources(app PRIVATE
-        ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_gpio.c
-        ${RT583_PLATFORM}/hosal/rt583_hosal/Src/hosal_sysctrl.c
-    )
-elseif(CONFIG_SOC_SERIES_RT584)
-    target_sources(app PRIVATE
-        ${RT583_PLATFORM}/hosal/rt584_hosal/Src/hosal_gpio.c
-        ${RT583_PLATFORM}/hosal/rt584_hosal/Src/hosal_sysctrl.c
-    )
-endif()
 
 # Redirect ALL heap allocations to our sys_heap wrapper (MallocWrappers.cpp).
 # --wrap=malloc/calloc/realloc/free covers CHIP SDK and C++ operator new/delete.
@@ -505,16 +473,7 @@ if(CONFIG_OPENTHREAD_RT583 OR CONFIG_OPENTHREAD_RT584)
     include(${RT583_PROJECT_DIR}/subsys/openthread/CMakeLists.txt)
 endif()
 
-# comm_subsystem_drv.c — RF MCU communication (needed by both BLE and OT)
-if(CONFIG_SOC_SERIES_RT583)
-    target_sources(app PRIVATE
-        ${RT583_PLATFORM}/soc/rt583/rt583_driver/Src/comm_subsystem_drv.c
-    )
-elseif(CONFIG_SOC_SERIES_RT584)
-    target_sources(app PRIVATE
-        ${RT583_PLATFORM}/soc/rt584/rt584_driver/Src/comm_subsystem_drv.c
-    )
-endif()
+# comm_subsystem_drv.c — added by module-level CMake when OT/BLE is on.
 
 # Dummy net interface — provides an IPv6 link-local address so that Matter's
 # Server::Init can bind UDP sockets.  RT583's OT radio uses vendored lmac15p4

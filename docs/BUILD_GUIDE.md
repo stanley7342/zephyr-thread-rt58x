@@ -1,4 +1,9 @@
-# RT583-EVB Build & Flash Guide
+# RT583 / RT584-EVB Build & Flash Guide
+
+This repo supports both **RT583_evb** (Cortex-M3) and **RT584_evb**
+(Cortex-M33). Every example below builds for either board — just swap
+`-b rt583_evb` for `-b rt584_evb`. SoC-specific glue lives in
+`cmake/zephyr_module/CMakeLists.txt`; example sources are board-neutral.
 
 ## 1. First-time Setup
 
@@ -101,10 +106,16 @@ MCUboot is no longer a separate target.
 ### 4.1 One sysbuild invocation — MCUboot + app
 
 ```powershell
+# RT583
 west build --sysbuild -p always -b rt583_evb examples/matter/lighting-app -d build/lighting-app
+
+# RT584 (same source, swap board name only)
+west build --sysbuild -p always -b rt584_evb examples/thread             -d build/thread584
 ```
 
-Swap the source path for any of the targets in §3. The flags:
+Swap the source path for any of the targets in §3, or the `-b` board for
+`rt583_evb` ↔ `rt584_evb`. `tests/flash` is rt583-only; everything else
+builds for both boards. The flags:
 - `--sysbuild` enables Zephyr sysbuild; required for every target in this repo.
 - `-p always` pristine-rebuilds both images — needed whenever `prj.conf`,
   `sysbuild.conf`, Kconfig, or any DTS/overlay file changes.
@@ -198,13 +209,17 @@ ot-ctl dataset active -x
 
 ## 8. Factory Reset
 
-Three ways — all three wipe the `storage_partition` (`0x1E0000 + 64 KB`) and reboot:
+Three ways. The first two go through Matter's `ScheduleFactoryReset()`
+which tears down KVS / fabric table / OperationalKeystore (PSA ITS) /
+GroupDataProvider / ACL / session resumption coherently, then a 500 ms
+delayed Zephyr work item issues `sys_reboot(SYS_REBOOT_COLD)`. The third
+is the brute-force option for when the device is stuck.
 
 | Method | How |
 |--------|-----|
-| Hold **GPIO0** for 6 seconds | UART shows `[BTN] Factory reset triggered (6s hold reached)` on release |
-| `chip-tool operationalcredentials remove-fabric <idx> <node>` | When the last fabric is removed, the device auto-resets via a `FabricTable::Delegate` hook |
-| Manual OpenOCD (PowerShell) | see block below |
+| Hold **GPIO0** for 6 seconds | UART shows `[BTN] Factory reset: ScheduleFactoryReset` then `Factory reset complete — rebooting` |
+| `chip-tool operationalcredentials remove-fabric <idx> <node>` (or `chip-tool pairing unpair <node>`) | When the last fabric is removed, the device auto-resets via a `FabricTable::Delegate` hook → same `ScheduleFactoryReset` path |
+| Manual OpenOCD (PowerShell) | erase `storage_partition` + power-cycle; see block below |
 
 PowerShell (backtick line continuation):
 ```powershell
@@ -218,11 +233,13 @@ openocd -f interface/cmsis-dap.cfg -f target/rt583.cfg `
 
 ## 9. Flash Layout (MCUboot)
 
-RT583 has **2 MB** of on-chip flash (`0x00000000 – 0x001FFFFF`).
+Both RT583 and RT584 have **2 MB** of on-chip flash. RT584 maps it at
+`0x10000000`; RT583 at `0x00000000`. Partition offsets below are relative
+to the flash base.
 
-**Default (Thread CLI / Blinky / BLE HRS / Hello world — Direct-XIP):**
+**RT583 default (Thread CLI / Blinky / BLE HRS / Hello world — Direct-XIP):**
 ```
-Address    Size    Partition
+Offset     Size    Partition
 0x000000   64 KB   boot_partition    (MCUboot)
 0x010000  800 KB   slot0_partition   (primary app)
 0x0D8000  800 KB   slot1_partition   (Direct-XIP failover / OTA)
@@ -231,9 +248,19 @@ Address    Size    Partition
 0x1F0000   64 KB   factory_partition (reserved)
 ```
 
-**Matter lighting-app (SINGLE_APP mode, 928 KB slots via DTS overlay):**
+**RT584 default (any example — 928 KB slots, no staging):**
 ```
-Address    Size    Partition
+Offset     Size    Partition
+0x000000   64 KB   boot_partition    (MCUboot)
+0x010000  928 KB   slot0_partition
+0x0F8000  928 KB   slot1_partition   (Direct-XIP slot1)
+0x1E0000   64 KB   storage_partition (NVS / settings / PSA ITS)
+0x1F0000   64 KB   factory_partition (reserved)
+```
+
+**RT583 Matter lighting-app (SINGLE_APP mode, 928 KB slots via DTS overlay):**
+```
+Offset     Size    Partition
 0x000000   64 KB   boot_partition    (MCUboot)
 0x010000  928 KB   slot0_partition   (primary app — only slot MCUboot boots)
 0x0F8000  928 KB   slot1_partition   (defined for DT symmetry; unused in SINGLE_APP)

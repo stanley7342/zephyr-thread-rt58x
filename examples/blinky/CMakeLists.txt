@@ -13,10 +13,3 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(rt583_blinky VERSION 1.0.0)
 
 target_sources(app PRIVATE src/main.c)
-
-set(RT583_PLATFORM ${RT583_PROJECT_DIR}/sdk/components/platform)
-target_include_directories(app PRIVATE
-    ${RT583_PLATFORM}/soc/rt583/rt583_driver/Inc
-    ${RT583_PLATFORM}/soc/rt583/rt583_system/Include
-    ${RT583_PLATFORM}/hosal/rt583_hosal/Inc
-)
