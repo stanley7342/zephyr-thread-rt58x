@@ -475,15 +475,32 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 		return;
 	}
 	net_pkt_set_ieee802154_rssi_dbm(pkt, -(int8_t)rssi);
-	/* Diagnostic: lmac `snr` is not directly a Thread LQI; force max (255)
-	 * to see if MLE was rejecting the parent on link-quality grounds. */
-	net_pkt_set_ieee802154_lqi(pkt, 255);
+	/* lmac `snr` (link signal-to-noise) is in dB; map to LQI 0..255 by
+	 * clamping/scaling.  Thread MLE uses LQI to compute link cost — feeding
+	 * 255 unconditionally lies and biases mesh routing. */
+	{
+		int snr_db = (int)snr;
+		int lqi    = (snr_db < 0)   ? 0
+		           : (snr_db > 63)  ? 255
+		           : snr_db * 4;
+		net_pkt_set_ieee802154_lqi(pkt, (uint8_t)lqi);
+	}
 	/* Timestamp in nanoseconds; required by OT's MLE security layer for
 	 * Thread 1.2+ frames (Enhanced ACK / CSL).  Without a non-zero
 	 * timestamp, some MLE validations silently reject the frame. */
 	net_pkt_set_timestamp_ns(pkt, k_uptime_ticks() *
 				 (1000000000ULL / CONFIG_SYS_CLOCK_TICKS_PER_SEC));
 	net_pkt_set_ieee802154_ack_fpb(pkt, false);
+
+	/* If the frame is an ACK matching a pending TX, ieee802154_handle_ack()
+	 * consumes it (returns NET_OK) and we must NOT push it up to the L2
+	 * stack — the radio_api->tx() caller is awaiting that ACK and will be
+	 * notified separately.  Without this hook, ACK frames are delivered as
+	 * data frames and OT thinks the peer is sending stray traffic. */
+	if (ieee802154_handle_ack(data->iface, pkt) == NET_OK) {
+		net_pkt_unref(pkt);
+		return;
+	}
 
 	int rc = net_recv_data(data->iface, pkt);
 	if (rc < 0) {
