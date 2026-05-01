@@ -50,6 +50,7 @@
 #include <string.h>
 
 /* lmac15p4 and hosal from the vendor SDK */
+#include <zephyr/irq.h>
 #include "lmac15p4.h"
 #include "hosal_rf.h"
 #include "hosal_trng.h"
@@ -297,7 +298,8 @@ static int rt583_tx(const struct device *dev,
 	 *   FC byte 0: bit 3 = security enabled, bit 5 = ACK request */
 	uint8_t fc0 = (frag->len >= 1) ? frag->data[0] : 0;
 	uint8_t ack_req = (fc0 & 0x20) ? 1 : 0;
-	uint8_t sec_enabled = (fc0 & 0x08) ? 1 : 0;
+	/* sec_enabled (fc0 & 0x08) — lmac15p4 TX accepts raw frame and
+	 * applies its own MAC-layer security; bit unused here. */
 	/* MAC sequence number is byte 2 of the PSDU (after 2-byte FC). */
 	uint8_t mac_dsn = (frag->len >= 3) ? frag->data[2] : 0;
 
@@ -445,7 +447,6 @@ static void rt583_rx_done_cb(uint16_t packet_length, uint8_t *pdata,
 	} else {
 		rx_count++;
 	}
-
 	if (crc_status != 0 || packet_length < 10) {
 		return;
 	}
@@ -555,10 +556,6 @@ static int rt583_radio_init(const struct device *dev)
 {
 	struct rt583_radio_data *data = dev->data;
 
-	/* POST_KERNEL runs before AppTask → hosal_rf_init; must NOT touch
-	 * lmac15p4 here or the uninitialised RF MCU hangs the boot.  Only
-	 * populate software state; real radio setup happens on first
-	 * rt583_start() call. */
 	data->dev         = dev;
 	data->channel     = RT583_MIN_CHANNEL;
 	data->tx_power_dbm = RT583_DEFAULT_TX_POWER_DBM;
@@ -572,6 +569,27 @@ static int rt583_radio_init(const struct device *dev)
 	data->hw_pan_id     = 0;
 	memset(data->hw_mac_addr, 0xFF, sizeof(data->hw_mac_addr));
 	k_sem_init(&data->tx_done_sem, 0, 1);
+
+	/* Bring the RF MCU up here — must happen BEFORE Zephyr's NET_INIT
+	 * (prio 90) which fires openthread_init → otInstanceInitSingle → Mac
+	 * ctor → otPlatRadioSleep/Receive → radio_api->start.  In path B the
+	 * net stack starts driving the radio immediately at SYS_INIT; main()
+	 * doesn't run until after all SYS_INIT entries complete, so we cannot
+	 * rely on application code to call hosal_rf_init for us. */
+	hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
+	irq_enable(20); /* COMM_SUBSYSTEM IRQ — must be after isr cb is set */
+	lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
+	lmac15p4_phy_pib_set(CONFIG_RT583_PHY_PIB_TURNAROUND_TIMER,
+			     CONFIG_RT583_PHY_PIB_CCA_DETECT_MODE,
+			     CONFIG_RT583_PHY_PIB_CCA_THRESHOLD,
+			     CONFIG_RT583_PHY_PIB_CCA_DETECTED_TIME);
+	lmac15p4_mac_pib_set(CONFIG_RT583_MAC_PIB_UNIT_BACKOFF_PERIOD,
+			     CONFIG_RT583_MAC_PIB_ACK_WAIT_DURATION,
+			     CONFIG_RT583_MAC_PIB_MAX_BE,
+			     CONFIG_RT583_MAC_PIB_MAX_CSMACA_BACKOFFS,
+			     CONFIG_RT583_MAC_PIB_MAX_FRAME_TOTAL_WAIT_TIME,
+			     CONFIG_RT583_MAC_PIB_MAX_FRAME_RETRIES,
+			     CONFIG_RT583_MAC_PIB_MIN_BE);
 
 	return 0;
 }

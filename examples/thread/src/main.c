@@ -92,9 +92,12 @@ int main(void)
 #endif
     }
 
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
+    /* Path A: ot_radio.c owns the radio via lmac15p4 and otPlatRadio*
+     * overrides; main() must bring up the RF MCU before otrStart(). */
     printk("[RF] hosal_rf_init...");
     hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
-    irq_enable(20); /* COMM_SUBSYSTEM IRQ — must enable after hosal_rf_init sets isr callback */
+    irq_enable(20);
     printk("[RF] hosal_rf_init done");
 
     printk("[RF] lmac15p4_init...");
@@ -108,6 +111,10 @@ int main(void)
                          MAC_PIB_MAC_MAX_CSMACA_BACKOFFS,
                          MAC_PIB_MAC_MAX_FRAME_TOTAL_WAIT_TIME,
                          MAC_PIB_MAC_MAX_FRAME_RETRIES, MAC_PIB_MAC_MIN_BE);
+#else
+    /* Path B: ieee802154_rafael driver init runs at POST_KERNEL prio 80
+     * and owns hosal_rf_init / lmac15p4_init / PIB. */
+#endif
 
     otrStart();
     printk("OpenThread FTD CLI started.");

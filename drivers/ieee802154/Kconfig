@@ -22,7 +22,6 @@ config IEEE802154_RAFAEL_FULL
 	bool "Full Rafael IEEE 802.15.4 driver (replaces ot_radio.c otPlat* path)"
 	default n
 	depends on IEEE802154_RAFAEL
-	select NET_L2_IEEE802154
 	help
 	  Implements the full Zephyr ieee802154_radio_api on top of lmac15p4
 	  so that Zephyr's modules/openthread/platform/radio.c drives the

@@ -113,7 +113,18 @@ static void otrStackTask(void *p1, void *p2, void *p3)
         otPlatUartEnable();
         ot_entropy_init();
         ot_alarmInit();
+#if defined(CONFIG_IEEE802154_RAFAEL_FULL)
+        /* Path B: Zephyr's radio.c is the otPlatRadio* provider. radio_api
+         * is set by platformRadioInit (not openthread_init in our setup,
+         * since CONFIG_OPENTHREAD_SYS_INIT=n + manual otInstanceInitSingle
+         * below). Without referencing platformRadioInit somewhere, linker
+         * --gc-sections drops it → radio_api stays NULL → first
+         * otPlatRadioSleep call from OT core null-derefs at PC=0. */
+        extern void platformRadioInit(void);
+        platformRadioInit();
+#else
         ot_radioInit();
+#endif
         ot_instance = otInstanceInitSingle();
         assert(ot_instance);
 #if OPENTHREAD_ENABLE_DIAG
