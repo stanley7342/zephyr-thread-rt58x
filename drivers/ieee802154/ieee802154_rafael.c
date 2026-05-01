@@ -576,7 +576,14 @@ static int rt583_radio_init(const struct device *dev)
 	 * net stack starts driving the radio immediately at SYS_INIT; main()
 	 * doesn't run until after all SYS_INIT entries complete, so we cannot
 	 * rely on application code to call hosal_rf_init for us. */
+	/* When BLE is also enabled (Matter commissioning), the RF MCU must
+	 * run in MULTI_PROTOCOL mode so it can co-schedule BLE and 15.4.
+	 * RUCI_CMD is fine for Thread-only builds. */
+#if defined(CONFIG_BT)
+	hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
+#else
 	hosal_rf_init(HOSAL_RF_MODE_RUCI_CMD);
+#endif
 	irq_enable(20); /* COMM_SUBSYSTEM IRQ — must be after isr cb is set */
 	lmac15p4_init(LMAC15P4_2P4G_OQPSK, 0);
 	lmac15p4_phy_pib_set(CONFIG_RT583_PHY_PIB_TURNAROUND_TIMER,

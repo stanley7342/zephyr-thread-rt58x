@@ -572,6 +572,11 @@ CHIP_ERROR AppTask::Init()
     hosal_lpm_init();
     hosal_lpm_ioctrl(HOSAL_LPM_SET_POWER_LEVEL, HOSAL_LOW_POWER_LEVEL_SLEEP0);
 #endif
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
+    /* Path A: this AppTask owns RF + lmac bring-up. Path B has already
+     * done the same thing in ieee802154_rafael driver init at
+     * POST_KERNEL prio 80, so a second hosal_rf_init here would re-init
+     * (or worse, re-load firmware in a different mode) the RF MCU. */
     hosal_rf_init(HOSAL_RF_MODE_MULTI_PROTOCOL);
     k_sleep(K_MSEC(50));
 
@@ -583,6 +588,7 @@ CHIP_ERROR AppTask::Init()
     lmac15p4_init(2 /*LMAC15P4_2P4G_OQPSK*/, 0);
     lmac15p4_phy_pib_set(128, 1, 85, 128);
     lmac15p4_mac_pib_set(320, 544, 8, 10, 16896, 4, 5);
+#endif
 
 #if defined(CONFIG_BT)
     /* Send RUCI_INITIATE_BLE right after lmac15p4_init — matching Rafael

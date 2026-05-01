@@ -203,6 +203,7 @@ static int rt583_flash_erase_op(const struct device *dev, off_t offset,
 static const struct flash_parameters rt583_flash_params = {
     .write_block_size = 1,
     .erase_value = RT583_ERASE_VALUE,
+    .caps = { .no_explicit_erase = false },
 };
 
 static const struct flash_parameters *

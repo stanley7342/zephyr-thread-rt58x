@@ -3,6 +3,7 @@ config FLASH_RT583
     depends on SOC_SERIES_RT583
     select FLASH_HAS_DRIVER_ENABLED
     select FLASH_HAS_PAGE_LAYOUT
+    select FLASH_HAS_EXPLICIT_ERASE
     default y
     help
       Flash driver for Rafael RT583 internal SPI flash.
@@ -14,6 +15,7 @@ config FLASH_RT584
     depends on SOC_SERIES_RT584
     select FLASH_HAS_DRIVER_ENABLED
     select FLASH_HAS_PAGE_LAYOUT
+    select FLASH_HAS_EXPLICIT_ERASE
     default y
     help
       Flash driver for Rafael RT584 internal SPI flash (Cortex-M33).
