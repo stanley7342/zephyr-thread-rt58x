@@ -94,7 +94,12 @@ void otSysProcessDrivers(otInstance *aInstance)
     ot_alarmTask(sevent);
     otrAppProcess(sevent);
     ot_uartTask(sevent);
+#if !defined(CONFIG_IEEE802154_RAFAEL_FULL)
+    /* Path A only: ot_radio.c provides ot_radioTask. On path B Zephyr's
+     * radio.c drives the radio via ieee802154_radio_api, so this call is
+     * compiled out (ot_radioTask is also #if-guarded out in ot_radio.c). */
     ot_radioTask(sevent);
+#endif
 }
 
 /* ── OT thread entry ─────────────────────────────────────────────────────── */
