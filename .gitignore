@@ -29,3 +29,4 @@ tools/isp_cli/downloads/
 
 # Stray `b/` from early `west build -d b/l/...` experiments.
 /b/
+build_err.log
